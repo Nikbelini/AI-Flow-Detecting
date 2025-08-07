@@ -7,6 +7,29 @@ const MapComponent = () => {
   const map = useRef(null);
   const [mapError, setMapError] = useState(null);
 
+   const markers = [
+    {
+      id: 1,
+      coordinates: [37.6178, 55.7512], // Москва, Кремль
+      title: "Московский Кремль",
+      description: "Исторический центр Москвы, официальная резиденция президента России",
+      color: "#ff0000"
+    },
+    {
+      id: 2,
+      coordinates: [30.3358, 59.9342], // Санкт-Петербург, Эрмитаж
+      title: "Государственный Эрмитаж",
+      description: "Один из крупнейших художественных музеев в мире",
+      color: "#1890ff"
+    },
+    {
+      id: 3,
+      coordinates: [43.5855, 39.7231], // Сочи, Олимпийский парк
+      title: "Олимпийский парк Сочи",
+      description: "Главная площадка зимних Олимпийских игр 2014 года",
+      color: "#52c41a"
+    }
+  ];
   useEffect(() => {
     if (!mapContainer.current) {
       setMapError('Контейнер карты не найден');
@@ -45,7 +68,34 @@ const MapComponent = () => {
       map.current.on('load', () => {
         console.log('Карта успешно загружена');
         map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
+        
+      markers.forEach(marker => {
+        // Создаем элемент маркера
+        const el = document.createElement('div');
+        el.className = 'marker';
+        el.style.backgroundColor = marker.color;
+        el.style.width = '24px';
+        el.style.height = '24px';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+        el.style.cursor = 'pointer';
+        console.log(marker)
+        
+        // Создаем popup
+        const popup = new maplibregl.Popup({ offset: 25 })
+          .setHTML(`
+            <h3 style="margin: 0 0 8px 0; font-size: 16px;">${marker.title}</h3>
+            <p style="margin: 0; font-size: 14px;">${marker.description}</p>
+          `);
+
+        // Добавляем маркер на карту
+        new maplibregl.Marker(el)
+          .setLngLat(marker.coordinates)
+          .setPopup(popup)
+          .addTo(map.current);
       });
+    });
+     
 
       map.current.on('error', (e) => {
         console.error('Ошибка карты:', e.error);
