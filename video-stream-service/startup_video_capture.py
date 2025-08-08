@@ -5,17 +5,26 @@ from typing import Any
 
 import cv2
 from loguru import logger
+from ultralytics import YOLO
 
 from config import TIMEOUT, FRAMES_DIR, HLS_URLS, INTERVAL
+
+model = YOLO('yolov8n.pt')
 
 
 def process_frame(cam_id: int, frame: Any) -> None:
     """Обработать файл"""
+
     h, w = frame.shape[:2]
     logger.info(f"[cam{cam_id}] кадр {w}x{h} отправлен на обработку")
     ts = int(time.time())
+    results = model(frame, classes=[0])
+    annotated_frame = results[0].plot()
+    # Подсчёт количества людей
+    people_count = len(results[0].boxes)
+    logger.info(f"Получено кол-во людей {people_count} для [cam{cam_id}] ")
     path = os.path.join(FRAMES_DIR, f"cam{cam_id}_{ts}.jpg")
-    cv2.imwrite(path, frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    cv2.imwrite(path, annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
     logger.info(f"[cam{cam_id}] сохранён {path}")
 
 
