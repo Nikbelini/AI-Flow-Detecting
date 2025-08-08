@@ -14,4 +14,3 @@ services:
       - POSTGRES_DB=stops
       - POSTGRES_PORT=5432
 
-

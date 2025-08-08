@@ -3,6 +3,45 @@ revision = 3
 requires-python = ">=3.13"
 
 [[package]]
+name = "boto3-stubs"
+version = "1.40.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "botocore-stubs" },
+    { name = "types-s3transfer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2e/65/51ed9df8febdbf60b00239c407ee54829bd43d70112a1d66a1dcf0c65e46/boto3_stubs-1.40.5.tar.gz", hash = "sha256:6d54b9626dfa9183418ead0bd4a2877678f502da7b5877c3544b7ffed8fa4631", size = 100913, upload-time = "2025-08-07T19:45:40.758Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9f/53/4a459a378763fdc9709a295c188ef1ccf928f471b46b453e0bca84c12fa7/boto3_stubs-1.40.5-py3-none-any.whl", hash = "sha256:6057c88e0f5e8b8fb991cfac2088141428600038250bed2edddf04e981f04a61", size = 69723, upload-time = "2025-08-07T19:45:32.219Z" },
+]
+
+[package.optional-dependencies]
+full = [
+    { name = "boto3-stubs-full" },
+]
+
+[[package]]
+name = "boto3-stubs-full"
+version = "1.40.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/7b/9601faf6c361deb50c59ed75f5b4411fbc278cb581c8629a56198e516fa4/boto3_stubs_full-1.40.5.tar.gz", hash = "sha256:e22afb3155856ae11ff8688c7c66664c399fc93b904937bb57f66175e3ee0e3b", size = 8068635, upload-time = "2025-08-08T01:28:42.011Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d6/13/6faf0e8c78d1a6856f8d31f2d1e9f1bed505c1043b962976e96e0c86bfc7/boto3_stubs_full-1.40.5-py3-none-any.whl", hash = "sha256:478d9952f6c9df5471bb97f5612a08dc8900039199e479d30557cfed5f39c7c3", size = 12467389, upload-time = "2025-08-08T01:28:38.781Z" },
+]
+
+[[package]]
+name = "botocore-stubs"
+version = "1.38.46"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "types-awscrt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/05/45/27cabc7c3022dcb12de5098cc646b374065f5e72fae13600ff1756f365ee/botocore_stubs-1.38.46.tar.gz", hash = "sha256:a04e69766ab8bae338911c1897492f88d05cd489cd75f06e6eb4f135f9da8c7b", size = 42299, upload-time = "2025-06-29T22:58:24.765Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cc/84/06490071e26bab22ac79a684e98445df118adcf80c58c33ba5af184030f2/botocore_stubs-1.38.46-py3-none-any.whl", hash = "sha256:cc21d9a7dd994bdd90872db4664d817c4719b51cda8004fd507a4bf65b085a75", size = 66083, upload-time = "2025-06-29T22:58:22.234Z" },
+]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -70,18 +109,49 @@ wheels = [
 ]
 
 [[package]]
+name = "python-dotenv"
+version = "1.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f6/b0/4bc07ccd3572a2f9df7e6782f52b0c6c90dcbb803ac4a167702d7d0dfe1e/python_dotenv-1.1.1.tar.gz", hash = "sha256:a8a6399716257f45be6a007360200409fce5cda2661e3dec71d23dc15f6189ab", size = 41978, upload-time = "2025-06-24T04:21:07.341Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5f/ed/539768cf28c661b5b068d66d96a2f155c4971a5d55684a514c1a0e0dec2f/python_dotenv-1.1.1-py3-none-any.whl", hash = "sha256:31f23644fe2602f88ff55e1f5c79ba497e01224ee7737937930c448e4d0e24dc", size = 20556, upload-time = "2025-06-24T04:21:06.073Z" },
+]
+
+[[package]]
+name = "types-awscrt"
+version = "0.27.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/09/dd/9dc12092b88b95b88ef161c856619c1ef1f52bec1248273abe43ba56f123/types_awscrt-0.27.5.tar.gz", hash = "sha256:8eefe50d1709520663b77d3643a772c35ace3d8acfcb296f857627622c84cb4c", size = 16953, upload-time = "2025-07-31T02:03:20.284Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/fc/259979fadf4c6b0ff8a025d61a7d47e2868b4e9e429983c3ee58fdc9d106/types_awscrt-0.27.5-py3-none-any.whl", hash = "sha256:99ee40e787dfb92ae93a5c956251a03b847de3ac532552f7e06dd5eb6e0fd02f", size = 39627, upload-time = "2025-07-31T02:03:19.168Z" },
+]
+
+[[package]]
+name = "types-s3transfer"
+version = "0.13.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/42/c1/45038f259d6741c252801044e184fec4dbaeff939a58f6160d7c32bf4975/types_s3transfer-0.13.0.tar.gz", hash = "sha256:203dadcb9865c2f68fb44bc0440e1dc05b79197ba4a641c0976c26c9af75ef52", size = 14175, upload-time = "2025-05-28T02:16:07.614Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c8/5d/6bbe4bf6a79fb727945291aef88b5ecbdba857a603f1bbcf1a6be0d3f442/types_s3transfer-0.13.0-py3-none-any.whl", hash = "sha256:79c8375cbf48a64bff7654c02df1ec4b20d74f8c5672fc13e382f593ca5565b3", size = 19588, upload-time = "2025-05-28T02:16:06.709Z" },
+]
+
+[[package]]
 name = "video-stream-service"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "boto3-stubs", extra = ["full"] },
     { name = "loguru" },
     { name = "opencv-python" },
+    { name = "python-dotenv" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3-stubs", extras = ["full"], specifier = ">=1.40.5" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "opencv-python", specifier = ">=4.12.0.88" },
+    { name = "python-dotenv", specifier = ">=1.1.1" },
 ]
 
 [[package]]
