@@ -6,13 +6,7 @@ from typing import Any
 import cv2
 from loguru import logger
 
-HLS_URLS = [
-    "https://restreamer.vms.evo73.ru/918335436b92ac26/stream.m3u8",
-]
-INTERVAL = 60
-TIMEOUT = 8
-SAVE_DIR = os.path.join(os.path.dirname(__file__), "frames")
-os.makedirs(SAVE_DIR, exist_ok=True)
+from config import TIMEOUT, FRAMES_DIR, HLS_URLS, INTERVAL
 
 
 def process_frame(cam_id: int, frame: Any) -> None:
@@ -20,7 +14,7 @@ def process_frame(cam_id: int, frame: Any) -> None:
     h, w = frame.shape[:2]
     logger.info(f"[cam{cam_id}] кадр {w}x{h} отправлен на обработку")
     ts = int(time.time())
-    path = os.path.join(SAVE_DIR, f"cam{cam_id}_{ts}.jpg")
+    path = os.path.join(FRAMES_DIR, f"cam{cam_id}_{ts}.jpg")
     cv2.imwrite(path, frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
     logger.info(f"[cam{cam_id}] сохранён {path}")
 
@@ -44,7 +38,7 @@ def grab_frame(cam_id: int, url: str) -> dict:
     return {"cam": cam_id, "frame": frame}
 
 
-def main() -> None:
+def startup() -> None:
     with ThreadPoolExecutor(max_workers=len(HLS_URLS)) as pool:
         logger.info("Старт цикла опроса камер")
         while True:
@@ -74,6 +68,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     try:
-        main()
+        startup()
     except KeyboardInterrupt:
         logger.info("Остановлено пользователем")
