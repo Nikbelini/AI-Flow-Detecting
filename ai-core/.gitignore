@@ -160,6 +160,11 @@ ENV/
 env.bak/
 venv.bak/
 
+# Data
+.data
+data/
+/data
+
 # Spyder project settings
 .spyderproject
 .spyproject
