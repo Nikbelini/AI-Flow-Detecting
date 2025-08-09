@@ -97,7 +97,7 @@ const MapComponent = () => {
                         .setHTML(`
                             <div class="popup-card">
                             <div class="popup-header">
-                                <h3>${marker.adress || marker.title || 'Точка доступа'}</h3>
+                                <h3>Остановка</h3>
                             </div>
                             <div class="popup-body">
                                 <div class="popup-row">
