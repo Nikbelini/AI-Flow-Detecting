@@ -1,33 +1,46 @@
 import React, { useRef, useEffect, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-
+import './MapComponent.css'; 
 const MapComponent = () => {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const [mapError, setMapError] = useState(null);
 
+  const loadToColor = (load) => {
+    if (load <= 3) return "green";
+    if (load <= 7)  return "yellow";
+    return "red";
+}
+
+
    const markers = [
     {
       id: 1,
-      coordinates: [37.6178, 55.7512], // Москва, Кремль
-      title: "Московский Кремль",
-      description: "Исторический центр Москвы, официальная резиденция президента России",
-      color: "#ff0000"
+      url: "http: //example" ,
+      coordinates: [37.6178, 55.7512], 
+      adress: "Остановка",
+      count: 5,
+      velocity: 5,
+      load: 10,
     },
     {
       id: 2,
-      coordinates: [30.3358, 59.9342], // Санкт-Петербург, Эрмитаж
-      title: "Государственный Эрмитаж",
-      description: "Один из крупнейших художественных музеев в мире",
-      color: "#1890ff"
+      coordinates: [30.3358, 59.9342], 
+      url: "http: //example" ,
+      adress: "Государственный Эрмитаж",
+      count: 5,
+      velocity: 5,
+      load: 5,
     },
     {
       id: 3,
-      coordinates: [43.5855, 39.7231], // Сочи, Олимпийский парк
+      url: "http: //example" ,
+      coordinates: [43.5855, 39.7231], 
       title: "Олимпийский парк Сочи",
-      description: "Главная площадка зимних Олимпийских игр 2014 года",
-      color: "#52c41a"
+      count: 5,
+      velocity: 5,
+      load: 1,
     }
   ];
   useEffect(() => {
@@ -70,26 +83,61 @@ const MapComponent = () => {
         map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
         
       markers.forEach(marker => {
-        // Создаем элемент маркера
         const el = document.createElement('div');
         el.className = 'marker';
-        el.style.backgroundColor = marker.color;
-        el.style.width = '24px';
-        el.style.height = '24px';
-        el.style.borderRadius = '50%';
-        el.style.border = '2px solid white';
+        el.style.backgroundColor = loadToColor(marker.load);
         el.style.cursor = 'pointer';
-        console.log(marker)
+        el.style.setProperty('--marker-color', loadToColor(marker.load));
+       
+        el.innerHTML = `<div class="marker-inner" style = "color: ${loadToColor(marker.load)}"> ${marker.load} </div>`
+       
         
         // Создаем popup
-        const popup = new maplibregl.Popup({ offset: 25 })
-          .setHTML(`
-            <h3 style="margin: 0 0 8px 0; font-size: 16px;">${marker.title}</h3>
-            <p style="margin: 0; font-size: 14px;">${marker.description}</p>
-          `);
+       const popup = new maplibregl.Popup({ offset: 25, className: 'custom-popup' })
+  .setHTML(`
+    <div class="popup-card">
+      <div class="popup-header">
+        <h3>${marker.adress || marker.title || 'Точка доступа'}</h3>
+      </div>
+      <div class="popup-body">
+        <div class="popup-row">
+          <div class="popup-icon">📍</div>
+          <div class="popup-address">${marker.adress || 'Адрес не указан'}</div>
+        </div>
+        
+        ${marker.url ? `
+        <div class="popup-row">
+          <div class="popup-icon">🔗</div>
+          <a href="${marker.url}" target="_blank" class="popup-url">${marker.url}</a>
+        </div>
+        ` : ''}
+        
+        <div class="popup-metrics">
+          <div class="metric-item">
+            <div class="metric-icon">👥</div>
+            <div class="metric-value">${marker.count}</div>
+            <div class="metric-label">посетителей</div>
+          </div>
+          
+          <div class="metric-item">
+            <div class="metric-icon">⚡</div>
+            <div class="metric-value">${marker.velocity}</div>
+            <div class="metric-label">скорость</div>
+          </div>
+        </div>
+      </div>
+      <div class="popup-footer">
+        <div class="load-indicator">
+          <div class="load-dot" style="background: ${loadToColor(marker.load)};"></div>
+          <span class="load-text">Нагрузка: ${marker.load}/10</span>
+        </div>
+       
+      </div>
+    </div>
+  `);
 
         // Добавляем маркер на карту
-        new maplibregl.Marker(el)
+        new maplibregl.Marker({ element: el, anchor: 'bottom'})
           .setLngLat(marker.coordinates)
           .setPopup(popup)
           .addTo(map.current);
