@@ -9,6 +9,4 @@ import lombok.RequiredArgsConstructor;
 @Data
 public class StopStatsUpdateRequest {
     private Integer count;
-    private Integer velocity;
-    private Integer load;
 }

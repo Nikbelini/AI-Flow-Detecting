@@ -10,4 +10,6 @@ import lombok.RequiredArgsConstructor;
 public class CityResponse {
     private Long id;
     private String name;
+    private Double lat;
+    private Double lng;
 }

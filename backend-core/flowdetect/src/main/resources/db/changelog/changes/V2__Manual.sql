@@ -1,6 +1,6 @@
 -- Добавление Ульяновска
-INSERT INTO cities (name) VALUES
-                              ('Ульяновск');
+INSERT INTO cities (name, lat, lng) VALUES
+                              ('Ульяновск', 54.3, 48.3);
 
 -- Добавление тестовых остановок
 INSERT INTO stops (url, address, count, velocity, load, city_id, lat, lng) VALUES
