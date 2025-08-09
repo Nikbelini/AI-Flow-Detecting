@@ -4,6 +4,7 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import ru.slivkiai.flowdetect.domain.StopHistoryRequest;
 import ru.slivkiai.flowdetect.domain.StopRequest;
 import ru.slivkiai.flowdetect.domain.StopResponse;
@@ -17,6 +18,7 @@ import ru.slivkiai.flowdetect.repository.StopHistoryRepository;
 import ru.slivkiai.flowdetect.repository.StopRepository;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -54,34 +56,29 @@ public class StopServiceImpl implements StopService {
     }
 
     @Override
+    @Transactional
     public StopResponse createStop(StopRequest request) {
         CityEntity city = cityRepository.findById(request.getCityId())
                 .orElseThrow(() -> new EntityNotFoundException("City not found"));
 
-        //TODO Map
-        StopEntity stop = new StopEntity();
-        stop.setUrl(request.getUrl());
-        stop.setAddress(request.getAddress());
-        stop.setCount(request.getCount());
-        stop.setVelocity(request.getVelocity());
-        stop.setLoad(request.getLoad());
-        stop.setLat(BigDecimal.valueOf(request.getLat()));
-        stop.setLng(BigDecimal.valueOf(request.getLng()));
-        stop.setCity(city);
+        StopEntity stop = StopEntity.builder()
+                .url(request.getUrl())
+                .address(request.getAddress())
+                .count(request.getCount())
+                .velocity(request.getVelocity())
+                .load(request.getLoad())
+                .lat(BigDecimal.valueOf(request.getLat()))
+                .lng(BigDecimal.valueOf(request.getLng()))
+                .city(city)
+                .build();
 
         StopEntity savedStop = stopRepository.save(stop);
 
-        //TODO Map
-        StopResponse stopResponse = new StopResponse();
-        stopResponse.setUrl(savedStop.getUrl());
-        stopResponse.setAddress(savedStop.getAddress());
-        stopResponse.setCount(savedStop.getCount());
-        stopResponse.setVelocity(savedStop.getVelocity());
-        stopResponse.setLoad(savedStop.getLoad());
-        stopResponse.setLat(savedStop.getLat().doubleValue());
-        stopResponse.setLng(savedStop.getLng().doubleValue());
+        // Создаём две идентичные записи в истории (с текущим временем и минуту назад)
+        createHistoryRecord(savedStop, request.getCount(), request.getVelocity(), request.getLoad());
+        createHistoryRecord(savedStop, request.getCount(), request.getVelocity(), request.getLoad());
 
-        return stopResponse;
+        return mapToResponse(savedStop);
     }
 
     @Override
@@ -90,64 +87,75 @@ public class StopServiceImpl implements StopService {
     }
 
     @Override
+    @Transactional
     public StopResponse updateStopStats(Long id, StopStatsUpdateRequest request) {
         StopEntity stop = stopRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Stop not found"));
 
-        // Добавьте логирование для проверки
-        log.info("Ищем историю для адреса: '{}'", stop.getAddress());
-        List<StopHistoryEntity> records = stopHistoryRepository.findTop2ByAddressOrderByDatetimeDesc(stop.getAddress());
-        log.info("Найдено записей: {}", records.size());
-
+        // Получаем последние 2 записи в истории
         List<StopHistoryEntity> lastRecords = stopHistoryRepository.findTop2ByAddressOrderByDatetimeDesc(stop.getAddress());
 
         if (lastRecords.size() < 2) {
-            throw new IllegalStateException("Недостаточно данных для расчёта (нужно минимум 2 записи)");
+            // Если записей недостаточно, создаём новые с текущими данными
+            createHistoryRecord(stop, request.getCount(), 0, 0);
+            createHistoryRecord(stop, request.getCount(), 0, 0);
+            lastRecords = stopHistoryRepository.findTop2ByAddressOrderByDatetimeDesc(stop.getAddress());
         }
 
-        StopHistoryEntity currentRecord = lastRecords.get(0);
+        StopHistoryEntity lastRecord = lastRecords.get(0);
         StopHistoryEntity previousRecord = lastRecords.get(1);
 
-        // Расчёт показателей
-        int currentPeople = currentRecord.getCount();
-        int previousPeople = previousRecord.getCount();
-        long timeDeltaSec = ChronoUnit.SECONDS.between(
-                previousRecord.getDatetime(),
-                currentRecord.getDatetime()
-        );
+        // Расчёт новых показателей
+        int newCount = request.getCount();
+        int oldCount = previousRecord.getCount();
+        long timeDiff = ChronoUnit.SECONDS.between(previousRecord.getDatetime(), lastRecord.getDatetime());
 
-        // 1. Загруженность (load_score)
-        int maxCapacity = 50; // Можно брать из настроек остановки
-        double loadScore = Math.min((currentPeople / (double) maxCapacity) * 10, 10);
+        double velocity = timeDiff > 0 ?
+                ((newCount - oldCount) / (double) timeDiff) * 60 : 0;
 
-        // 2. Скорость изменения (velocity)
-        double velocity = 0;
-        if (timeDeltaSec > 0) {
-            velocity = ((currentPeople - previousPeople) / (double) timeDeltaSec) * 60;
-        }
+        int maxCapacity = 50; // Можно вынести в конфиг или в сущность Stop
+        double loadScore = Math.min((newCount / (double) maxCapacity) * 10, 10);
 
-        // Игнорируем шум (колебания менее 5 человек)
-        if (Math.abs(currentPeople - previousPeople) < 5) {
+        // Игнорируем незначительные колебания
+        if (Math.abs(newCount - oldCount) < 5) {
             velocity = 0;
         }
 
         // Обновляем остановку
-        stop.setCount(currentPeople);
+        stop.setCount(newCount);
         stop.setVelocity((int) velocity);
         stop.setLoad((int) loadScore);
-
         StopEntity updatedStop = stopRepository.save(stop);
 
-        // TODO map
+        // Добавляем новую запись в историю
+        createHistoryRecord(updatedStop, newCount, velocity, loadScore);
+
+        return mapToResponse(updatedStop);
+    }
+
+    private StopResponse mapToResponse(StopEntity stop) {
         return StopResponse.builder()
-                .url(updatedStop.getUrl())
-                .address(updatedStop.getAddress())
-                .count(updatedStop.getCount())
-                .velocity(updatedStop.getVelocity())
-                .load(updatedStop.getLoad())
-                .lat(updatedStop.getLat().doubleValue())
-                .lng(updatedStop.getLng().doubleValue())
+                .url(stop.getUrl())
+                .address(stop.getAddress())
+                .count(stop.getCount())
+                .velocity(stop.getVelocity())
+                .load(stop.getLoad())
+                .lat(stop.getLat().doubleValue())
+                .lng(stop.getLng().doubleValue())
                 .build();
+    }
+
+    private void createHistoryRecord(StopEntity stop, int count, double velocity, double load) {
+        StopHistoryEntity history = StopHistoryEntity.builder()
+                .city(stop.getCity())
+                .address(stop.getAddress())
+                .count(count)
+                .velocity((int) velocity)
+                .load((int) load)
+                .datetime(LocalDateTime.now())
+                .build();
+
+        stopHistoryRepository.save(history);
     }
 
     @Override
