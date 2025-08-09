@@ -59,8 +59,8 @@
 }
 /* Стили для popup */
 .maplibregl-popup {
-  animation: fadeInUp 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform, opacity;
+  animation: none !important;
+  transition: none !important;
 }
 
 @keyframes fadeInUp {
