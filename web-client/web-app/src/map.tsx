@@ -137,7 +137,7 @@ const MapComponent = () => {
                         `);
 
                     // Добавляем маркер на карту
-                    new maplibregl.Marker({ element: el, anchor: 'bottom' })
+                    new maplibregl.Marker({ element: el, anchor: 'bottom-left' })
                         .setLngLat(marker.coordinates)
                         .setPopup(popup)
                         .addTo(map.current);
