@@ -1,0 +1,4 @@
+databaseChangeLog:
+  - includeAll:
+      path: db/changelog/changes/  # Путь к папке с миграциями (относительно classpath)
+      relativeToChangelogFile: false  # Искать относительно classpath, а не файла
