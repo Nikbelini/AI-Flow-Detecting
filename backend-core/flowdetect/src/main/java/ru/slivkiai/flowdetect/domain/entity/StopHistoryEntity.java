@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.sql.Timestamp;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "stops_history")
@@ -33,5 +34,5 @@ public class StopHistoryEntity {
     private Integer load;
 
     @Column(nullable = false, updatable = false)
-    private Timestamp datetime;
+    private LocalDateTime datetime;
 }
