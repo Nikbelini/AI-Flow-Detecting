@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  video-stream-service:
+    container_name: video-stream-service
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: bash -c "uv run startup_video_capture.py"
+    volumes:
+      - type: bind
+        source: .
+        target: /code
+        bind:
+          propagation: rprivate
+      - /code/.venv
+    restart: on-failure
+
