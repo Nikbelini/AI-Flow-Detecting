@@ -1,8 +1,8 @@
+import {baseUrl} from './env'
+
 export const getMarkers = async () => {
-    const base = import.meta.env.VITE_API_URL;
-    if (!base) throw new Error('VITE_API_URL is not set in .env')
     try {
-        const response = await fetch(`${base}/stops`);
+        const response = await fetch(`${baseUrl}/stops`);
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
