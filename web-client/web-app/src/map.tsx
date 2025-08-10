@@ -6,6 +6,7 @@ import './MapComponent.css';
 const MapComponent = ({ markers = [], selectedMarker }) => {
     const mapContainer = useRef(null);
     const map = useRef(null);
+    const markersRef = useRef([]); // Ссылка на маркеры для доступа в других эффектах
 
     useEffect(() => {
         if (!mapContainer.current) return;
@@ -38,7 +39,9 @@ const MapComponent = ({ markers = [], selectedMarker }) => {
             zoom: 10
         });
 
-        // Добавление маркеров и контролов
+        // Создаем массив для хранения маркеров
+        const markersInstances = [];
+
         map.current.on('load', () => {
             map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
 
@@ -53,12 +56,17 @@ const MapComponent = ({ markers = [], selectedMarker }) => {
                 const popup = new maplibregl.Popup({ offset: 25, className: 'custom-popup' })
                     .setHTML(createPopupContent(marker));
 
-                new maplibregl.Marker({ element: el, anchor: 'bottom-left' })
+                const markerInstance = new maplibregl.Marker({ element: el, anchor: 'bottom-left' })
                     .setLngLat(marker.coordinates)
                     .setPopup(popup)
                     .addTo(map.current);
+
+                markersInstances.push(markerInstance);
             });
         });
+
+        // Сохраняем маркеры в ref
+        markersRef.current = markersInstances;
 
         return () => {
             if (map.current) map.current.remove();
@@ -68,14 +76,27 @@ const MapComponent = ({ markers = [], selectedMarker }) => {
     // Эффект для перемещения карты при выборе маркера
     useEffect(() => {
         if (selectedMarker && map.current) {
+            // Закрываем все открытые popup
+            markersRef.current.forEach(marker => {
+                if (marker.getPopup().isOpen()) {
+                    marker.togglePopup();
+                }
+            });
+
+            // Перемещаем карту к выбранному маркеру
             map.current.flyTo({
                 center: selectedMarker.coordinates,
                 zoom: 15,
                 essential: true
             });
+
+         
+            
+            
         }
     }, [selectedMarker]);
 
+    // Остальной код остается без изменений
     const loadToColor = (load) => {
         if (load <= 3) return "green";
         if (load <= 7) return "yellow";
