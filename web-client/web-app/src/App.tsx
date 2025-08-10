@@ -1,40 +1,41 @@
-import MapComponent from './map.tsx';
-import { useState, useEffect } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState, useEffect } from 'react';
+import './App.css';
 import HeaderComponent from './header.tsx';
+import MapComponent from './map.tsx';
 import { getMarkers } from './GetMarkes.ts';
 
 function App() {
   const [searchValue, setSearchValue] = useState('');
   const [markers, setMarkers] = useState([]);
+  const [selectedMarker, setSelectedMarker] = useState(null);
 
   useEffect(() => {
-      // Загружаем маркеры асинхронно
-      const fetchMarkers = async () => {
-          try {
-              const data = await getMarkers();
-              setMarkers(data);
-          } catch (error) {
-              console.error('Ошибка загрузки маркеров:', error);
-              setMapError('Не удалось загрузить маркеры');
-          }
-      };
+    const fetchMarkers = async () => {
+      try {
+        const data = await getMarkers();
+        setMarkers(data);
+      } catch (error) {
+        console.error('Ошибка загрузки маркеров:', error);
+      }
+    };
 
-      fetchMarkers();
+    fetchMarkers();
   }, []);
+
+  const handleMarkerSelect = (marker) => {
+    setSelectedMarker(marker);
+  };
 
   return (
     <>
-      <HeaderComponent onSearchInputChange={setSearchValue} markers={markers} />
-
-      <MapComponent markers={markers}>
-
-      </MapComponent>
-
+      <HeaderComponent 
+        onSearchInputChange={setSearchValue} 
+        markers={markers} 
+        onMarkerSelect={handleMarkerSelect}
+      />
+      <MapComponent markers={markers} selectedMarker={selectedMarker} />
     </>
-  )
+  );
 }
 
-export default App
+export default App;

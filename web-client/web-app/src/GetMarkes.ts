@@ -1,31 +1,21 @@
 export const getMarkers = async () => {
-    return [
-        {
-            id: 1,
-            url: "http: //example",
-            coordinates: [37.6178, 55.7512],
-            adress: "Остановка",
-            count: 5,
-            velocity: 5,
-            load: 10,
-        },
-        {
-            id: 2,
-            coordinates: [30.3358, 59.9342],
-            url: "http: //example",
-            adress: "Государственный Эрмитаж",
-            count: 5,
-            velocity: 5,
-            load: 5,
-        },
-        {
-            id: 3,
-            url: "http: //example",
-            coordinates: [43.5855, 39.7231],
-            title: "Олимпийский парк Сочи",
-            count: 5,
-            velocity: 5,
-            load: 1,
+    const base = import.meta.env.VITE_API_URL;
+    if (!base) throw new Error('VITE_API_URL is not set in .env')
+    try {
+        const response = await fetch(`${base}/stops`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
-    ];
-}
+        
+        const data = await response.json();
+        data.forEach(element => {
+            element.coordinates = [element.lat, element.lng]
+        });
+        return data;
+    } catch (error) {
+        console.error('Error fetching markers:', error);
+        // You might want to return an empty array or handle the error differently
+        return [];
+    }
+};
