@@ -2,6 +2,10 @@ version: "3.8"
 
 services:
   video-stream-service:
+    dns:
+    - 8.8.8.8  # Google DNS
+    - 1.1.1.1  # Cloudflare DNS
+    - 4.4.4.4  # HZ
     container_name: video-stream-service
     build:
       context: .
