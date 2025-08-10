@@ -9,5 +9,4 @@ public class FlowdetectApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(FlowdetectApplication.class, args);
 	}
-
 }
