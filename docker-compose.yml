@@ -3,7 +3,7 @@ version: '3.8'
 services:
   postgres:
     image: postgres:latest
-    container_name: flowdetect-postgres
+    container_name: postgres
     environment:
       POSTGRES_DB: stops
       POSTGRES_USER: postgres
@@ -33,8 +33,6 @@ services:
       - "8080:8080"
     volumes:
       - ./backend-core/flowdetect/logs:/app/logs
-    networks:
-      - main-network
 
   video-stream-service:
     dns:
@@ -44,19 +42,18 @@ services:
     container_name: video-stream-service
     depends_on:
       flowdetect-app:
-        condition: service_healthy
+        condition: service_started
     build:
       context: ./video-stream-service
-    entrypoint: bash -c "uv run startup_video_capture.py"
+    entrypoint: bash -c "uv run ./video-stream-service/startup_video_capture.py"
     volumes:
-      - ./video-stream-service:/code
+      - type: bind
+        source: .
+        target: /code
+        bind:
+          propagation: rprivate
+      - /code/.venv
     restart: on-failure
-    networks:
-      - main-network
 
 volumes:
   postgres_data:
-
-networks:
-  main-network:
-    driver: bridge

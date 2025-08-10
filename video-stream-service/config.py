@@ -11,9 +11,9 @@ HLS_URLS = [
 INTERVAL = 30
 TIMEOUT = 8
 FRAMES_DIR = os.path.join(os.path.dirname(__file__), "frames")
-os.makedirs(FRAMES_DIR, exist_ok=True)
+# os.makedirs(FRAMES_DIR, exist_ok=True)
 
-FLOW_DETECTION_URL = "http://localhost:8080"
+FLOW_DETECTION_URL = "http://flowdetect-app:8080"
 FLOW_DETECTION_INTEGRATION_IS_ENABLED = True
 PEOPLE_DETECTION_IS_ENABLED = True
 FRAME_SAVE_IS_ENABLED = True
