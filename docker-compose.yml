@@ -55,5 +55,15 @@ services:
       - /code/.venv
     restart: on-failure
 
+  frontend:
+    build:
+      context: ./web-client
+    container_name: frontend
+    ports:
+      - "5173:5173"  # Порт Vite по умолчанию
+    environment:
+      - NODE_ENV=development
+      - VITE_HOST=0.0.0.0
+
 volumes:
   postgres_data:

@@ -6,4 +6,7 @@ class StopsUrlSchema(BaseModel):
     url: str
 
 
+class StopsUrlsResponse(BaseModel):
+    stops: list[StopsUrlSchema]
+
 stop_urls_adapter = TypeAdapter(list[StopsUrlSchema])

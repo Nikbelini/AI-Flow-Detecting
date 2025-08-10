@@ -8,9 +8,10 @@ export const getMarkers = async () => {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        const data = await response.json();
+        const d = await response.json();
+        const data = d.stops;
         data.forEach(element => {
-            element.coordinates = [element.lat, element.lng]
+            element.coordinates = [element.lng, element.lat]
         });
         return data;
     } catch (error) {

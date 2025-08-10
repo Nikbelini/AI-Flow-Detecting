@@ -112,7 +112,7 @@ const MapComponent = ({ markers = [], selectedMarker }) => {
                 <div class="popup-body">
                     <div class="popup-row">
                         <div class="popup-icon">📍</div>
-                        <div class="popup-address">${marker.adress || 'Адрес не указан'}</div>
+                        <div class="popup-address">${marker.address || 'Адрес не указан'}</div>
                     </div>
                     ${marker.url ? `
                     <div class="popup-row">

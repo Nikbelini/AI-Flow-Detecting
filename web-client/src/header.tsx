@@ -16,7 +16,7 @@ const HeaderComponent = ({ onSearchInputChange, markers, onMarkerSelect }) => {
             setFilteredMarkers([]);
         } else {
             const filtered = markers.filter(marker => 
-                marker.adress.toLowerCase().includes(value.toLowerCase())
+                marker.address.toLowerCase().includes(value.toLowerCase())
             );
             setFilteredMarkers(filtered);
         }
@@ -26,7 +26,7 @@ const HeaderComponent = ({ onSearchInputChange, markers, onMarkerSelect }) => {
         if (onMarkerSelect) {
             onMarkerSelect(marker);
         }
-        setSearchValue(marker.adress);
+        setSearchValue(marker.address);
         setFilteredMarkers([]);
     };
     
@@ -68,7 +68,7 @@ const HeaderComponent = ({ onSearchInputChange, markers, onMarkerSelect }) => {
                                 className="search-result-button"
                                 onClick={() => handleMarkerClick(marker)}
                             >
-                                {marker.adress}
+                                {marker.address}
                             </button>
                         ))}
                     </div>
