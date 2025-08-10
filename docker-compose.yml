@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:latest
+    container_name: flowdetect-postgres
+    environment:
+      POSTGRES_DB: stops
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  flowdetect-app:
+    build:
+      context: ./backend-core/flowdetect
+    container_name: flowdetect-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/stops
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend-core/flowdetect/logs:/app/logs
+    networks:
+      - main-network
+
+  video-stream-service:
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+      - 4.4.4.4
+    container_name: video-stream-service
+    depends_on:
+      flowdetect-app:
+        condition: service_healthy
+    build:
+      context: ./video-stream-service
+    entrypoint: bash -c "uv run startup_video_capture.py"
+    volumes:
+      - ./video-stream-service:/code
+    restart: on-failure
+    networks:
+      - main-network
+
+volumes:
+  postgres_data:
+
+networks:
+  main-network:
+    driver: bridge
