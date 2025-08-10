@@ -39,45 +39,85 @@
 }
 
 .map-header {
-  padding: 12px;
-  background-color: #81b095; /* Красивый синий цвет для шапки */
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    padding: 12px;
+    background-color: #81b095; /* Красивый зеленый цвет для шапки */
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.search-wrapper {
+    position: relative;
+    max-width: 600px;
+    margin: 0 auto;
 }
 
 .search-container {
-  position: relative;
-  display: flex;
-  align-items: center;
-  max-width: 600px;
-  margin: 0 auto;
+    position: relative;
+    display: flex;
+    align-items: center;
 }
 
 .search-icon {
-  position: absolute;
-  left: 16px;
-  color: #7a8fb3;
-  z-index: 2;
+    position: absolute;
+    left: 16px;
+    color: #7a8fb3;
+    z-index: 2;
 }
 
 .map-header-search {
-  width: 100%;
-  padding: 12px 20px 12px 48px;
-  font-size: 16px;
-  border: none;
-  border-radius: 30px;
-  background-color: #f8f9fa;
-  color: #333;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+    width: 100%;
+    padding: 12px 20px 12px 48px;
+    font-size: 16px;
+    border: none;
+    border-radius: 30px;
+    background-color: #f8f9fa;
+    color: #333;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
 }
 
 .map-header-search::placeholder {
-  color: #a0a8b8;
+    color: #a0a8b8;
 }
 
 .map-header-search:focus {
-  outline: none;
-  background-color: white;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transform: translateY(-1px);
+    outline: none;
+    background-color: white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.search-results-container {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 8px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.search-result-button {
+    display: block;
+    width: 100%;
+    padding: 12px 20px;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+    transition: background-color 0.2s;
+    font-size: 15px;
+    color: #333;
+}
+
+.search-result-button:hover {
+    background-color: #f5f9f7;
+}
+
+.search-result-button:last-child {
+    border-bottom: none;
 }

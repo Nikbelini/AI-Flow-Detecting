@@ -22,7 +22,7 @@ export const getMarkers = async () => {
             id: 3,
             url: "http: //example",
             coordinates: [43.5855, 39.7231],
-            title: "Олимпийский парк Сочи",
+            adress: "Олимпийский парк Сочи",
             count: 5,
             velocity: 5,
             load: 1,
