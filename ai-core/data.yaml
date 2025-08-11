@@ -1,0 +1,10 @@
+nc: 5
+names:
+ - human
+ - bus stop
+ - road signs
+ - window
+ - columns
+path: dataset/train_1
+train: images
+val: images
