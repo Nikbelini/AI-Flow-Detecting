@@ -1,4 +1,5 @@
 import React from 'react';
+import HlsPlayer from './HlsPlayer';
 
 const PopupContent = ({ marker }) => {
     const loadToColor = (load) => {
@@ -20,8 +21,8 @@ const PopupContent = ({ marker }) => {
                 {marker.url && (
                     <div className="popup-row">
                         <div className="popup-icon">🔗</div>
-                        <a href={marker.url} target="_blank" rel="noopener noreferrer" className="popup-url">
-                            {marker.url}
+                        <a href={'/bus-stop?src=' + marker.url} target="_blank" rel="noopener noreferrer" className="popup-url">
+                            Показать видео
                         </a>
                     </div>
                 )}

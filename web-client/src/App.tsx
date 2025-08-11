@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './App.css';
 import HeaderComponent from './header.tsx';
 import MapComponent from './map.tsx';
 import { getMarkers } from './GetMarkes.ts';
-import HlsPlayer from './HlsPlayer.tsx';
+import BusStop from './BusStop.tsx';
 
 function App() {
   const [searchValue, setSearchValue] = useState('');
@@ -45,20 +46,27 @@ function App() {
   };
 
   return (
-    <>
-      <HeaderComponent 
-        onSearchInputChange={setSearchValue} 
-        markers={markers} 
-        onMarkerSelect={handleMarkerSelect}
-      />
-      <MapComponent 
-        markers={markers} 
-        selectedMarker={selectedMarker}
-        initialCenter={mapState.center}
-        initialZoom={mapState.zoom}
-        onMapMove={handleMapMove}
-      />
-    </>
+    <Router>
+      <Routes>
+        <Route path="/bus-stop" element={<BusStop />} />
+        <Route path="/" element={
+          <>
+            <HeaderComponent 
+              onSearchInputChange={setSearchValue} 
+              markers={markers} 
+              onMarkerSelect={handleMarkerSelect}
+            />
+            <MapComponent 
+              markers={markers} 
+              selectedMarker={selectedMarker}
+              initialCenter={mapState.center}
+              initialZoom={mapState.zoom}
+              onMapMove={handleMapMove}
+            />
+          </>
+        } />
+      </Routes>
+    </Router>
   );
 }
 
