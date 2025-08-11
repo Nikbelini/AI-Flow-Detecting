@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './MapComponent.css';
@@ -6,8 +6,14 @@ import './MapComponent.css';
 const MapComponent = ({ markers = [], selectedMarker }) => {
     const mapContainer = useRef(null);
     const map = useRef(null);
-    const markersRef = useRef([]); // Ссылка на маркеры для доступа в других эффектах
+    const markersRef = useRef([]);
+    const [mapState, setMapState] = useState({
+        center: [48.2412, 54.1851],
+        zoom: 10
+    });
+    const [openedPopupMarkerId, setOpenedPopupMarkerId] = useState(null);
 
+    // Инициализация карты
     useEffect(() => {
         if (!mapContainer.current) return;
 
@@ -35,68 +41,98 @@ const MapComponent = ({ markers = [], selectedMarker }) => {
                     maxzoom: 22
                 }]
             },
-            center: [48.2412, 54.1851],
-            zoom: 10
+            center: mapState.center,
+            zoom: mapState.zoom
         });
 
-        // Создаем массив для хранения маркеров
-        const markersInstances = [];
-
-        map.current.on('load', () => {
-            map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
-
-            markers.forEach(marker => {
-                const el = document.createElement('div');
-                el.className = 'marker';
-                el.style.backgroundColor = loadToColor(marker.load);
-                el.style.cursor = 'pointer';
-                el.style.setProperty('--marker-color', loadToColor(marker.load));
-                el.innerHTML = `<div class="marker-inner" style="color: ${loadToColor(marker.load)}">${marker.load}</div>`;
-
-                const popup = new maplibregl.Popup({ offset: 25, className: 'custom-popup' })
-                    .setHTML(createPopupContent(marker));
-
-                const markerInstance = new maplibregl.Marker({ element: el, anchor: 'bottom-left' })
-                    .setLngLat(marker.coordinates)
-                    .setPopup(popup)
-                    .addTo(map.current);
-
-                markersInstances.push(markerInstance);
-            });
+        map.current.on('moveend', () => {
+            if (map.current) {
+                setMapState({
+                    center: map.current.getCenter().toArray(),
+                    zoom: map.current.getZoom()
+                });
+            }
         });
-
-        // Сохраняем маркеры в ref
-        markersRef.current = markersInstances;
 
         return () => {
             if (map.current) map.current.remove();
         };
+    }, []);
+
+    // Обновление маркеров
+    useEffect(() => {
+        if (!map.current) return;
+
+        // Запоминаем какой popup был открыт перед обновлением
+        const previouslyOpenedMarker = markersRef.current.find(m => 
+            m.getPopup()?.isOpen()
+        );
+        const openedMarkerId = previouslyOpenedMarker?.getLngLat().toString();
+
+        // Удаляем старые маркеры
+        markersRef.current.forEach(marker => marker.remove());
+        markersRef.current = [];
+
+        // Добавляем новые маркеры
+        const markersInstances = markers.map(marker => {
+            const el = document.createElement('div');
+            el.className = 'marker';
+            el.style.backgroundColor = loadToColor(marker.load);
+            el.style.cursor = 'pointer';
+            el.style.setProperty('--marker-color', loadToColor(marker.load));
+                el.innerHTML = `<div class="marker-inner" style="color: ${loadToColor(marker.load)}">${marker.load}</div>`;
+
+            const popup = new maplibregl.Popup({ offset: 25, className: 'custom-popup' })
+                .setHTML(createPopupContent(marker));
+
+            const markerInstance = new maplibregl.Marker({ element: el, anchor: 'bottom-left' })
+                .setLngLat(marker.coordinates)
+                .setPopup(popup)
+                .addTo(map.current);
+
+            // Открываем popup если это тот же маркер, что был открыт до обновления
+            if (openedMarkerId === markerInstance.getLngLat().toString()) {
+                markerInstance.togglePopup();
+            }
+
+            return markerInstance;
+        });
+
+        markersRef.current = markersInstances;
     }, [markers]);
 
-    // Эффект для перемещения карты при выборе маркера
+    // Перемещение к выбранному маркеру
     useEffect(() => {
         if (selectedMarker && map.current) {
-            // Закрываем все открытые popup
-            markersRef.current.forEach(marker => {
-                if (marker.getPopup().isOpen()) {
-                    marker.togglePopup();
+            // Находим соответствующий маркер
+            const targetMarker = markersRef.current.find(m => 
+                m.getLngLat().toString() === selectedMarker.coordinates.toString()
+            );
+
+            if (targetMarker) {
+                // Закрываем все другие popup
+                markersRef.current.forEach(marker => {
+                    if (marker !== targetMarker && marker.getPopup().isOpen()) {
+                        marker.togglePopup();
+                    }
+                });
+
+                // Открываем popup выбранного маркера
+                if (!targetMarker.getPopup().isOpen()) {
+                    targetMarker.togglePopup();
                 }
-            });
 
-            // Перемещаем карту к выбранному маркеру
-            map.current.flyTo({
-                center: selectedMarker.coordinates,
-                zoom: 15,
-                essential: true
-            });
-
-         
-            
-            
+                // Перемещаем карту
+                map.current.flyTo({
+                    center: selectedMarker.coordinates,
+                    zoom: 15,
+                    essential: true
+                });
+            }
         }
     }, [selectedMarker]);
 
-    // Остальной код остается без изменений
+    // Остальные функции без изменений
     const loadToColor = (load) => {
         if (load <= 3) return "green";
         if (load <= 7) return "yellow";
