@@ -1,0 +1,341 @@
+.marker {
+    width: 28px;
+    height: 28px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(210, 27, 27, 0.3);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: linear-gradient(135deg, currentColor, #61020266);
+    border: none;
+    color: #fff;
+    transform: translate(-50%, -50%);
+    /* Центрирование */
+}
+
+.marker::before {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: currentColor;
+    transform: rotate(45deg);
+    z-index: 0;
+    opacity: 0.8;
+}
+
+.marker-inner {
+    /* Убрано transform: rotate(45deg) */
+    font-weight: bold;
+    font-size: 14px;
+    color: white;
+    text-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.8),
+        0 -1px 1px rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    position: relative;
+    font-family: Arial, sans-serif;
+    letter-spacing: 0.5px;
+    filter: brightness(0.9);
+}
+
+.marker:hover {
+    transform: rotate(-45deg) scale(1.2);
+    z-index: 100;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}
+
+.marker:hover .marker-inner {
+    font-size: 16px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+}
+
+/* Стили для popup */
+.maplibregl-popup {
+    animation: none !important;
+    transition: none !important;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.maplibregl-popup-content {
+    border-radius: 12px !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important;
+    padding: 0 !important;
+    overflow: hidden;
+    font-family: 'Segoe UI', Roboto, sans-serif;
+}
+
+.maplibregl-popup-tip {
+    display: none;
+}
+
+/* Обновленные стили для кнопки закрытия */
+.maplibregl-popup-close-button {
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0;
+    /* Скрываем текст */
+    color: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    z-index: 1;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(2px);
+}
+
+/* Создаем крестик с помощью псевдоэлементов */
+.maplibregl-popup-close-button::before,
+.maplibregl-popup-close-button::after {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 2px;
+    background-color: #666;
+    border-radius: 1px;
+    transition: all 0.3s ease;
+}
+
+.maplibregl-popup-close-button::before {
+    transform: rotate(45deg);
+}
+
+.maplibregl-popup-close-button::after {
+    transform: rotate(-45deg);
+}
+
+/* Эффекты при наведении */
+.maplibregl-popup-close-button:hover {
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.maplibregl-popup-close-button:hover::before,
+.maplibregl-popup-close-button:hover::after {
+    background-color: #333;
+    width: 16px;
+}
+
+.maplibregl-popup-close-button:hover::before {
+    transform: rotate(135deg);
+}
+
+.maplibregl-popup-close-button:hover::after {
+    transform: rotate(45deg);
+}
+
+/* Эффект при нажатии */
+.maplibregl-popup-close-button:active {
+    transform: scale(0.9);
+}
+
+.maplibregl-popup-close-button:hover {
+    background: #f0f0f0;
+    color: #333;
+    transform: rotate(90deg);
+}
+
+/* Кастомные стили контента */
+.popup-card {
+    position: relative;
+    max-width: 280px;
+}
+
+.popup-header {
+    padding: 16px;
+    background: linear-gradient(135deg, #84ac95, #78b291);
+    color: white;
+    position: relative;
+}
+
+.popup-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.popup-body {
+    padding: 16px;
+    background: white;
+}
+
+.popup-row {
+    display: flex;
+    margin-bottom: 12px;
+    align-items: center;
+}
+
+.popup-row:last-child {
+    margin-bottom: 0;
+}
+
+.popup-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 10px;
+    color: #6e8efb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.popup-label {
+    font-size: 13px;
+    color: #666;
+    margin-right: 8px;
+    min-width: 60px;
+}
+
+.popup-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+}
+
+.popup-url {
+    color: #4a6cf7;
+    text-decoration: none;
+    word-break: break-all;
+    transition: color 0.2s;
+}
+
+.popup-url:hover {
+    color: #3a5bd9;
+    text-decoration: underline;
+}
+
+.popup-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #f9f9f9;
+    border-top: 1px solid #eee;
+}
+
+.load-indicator {
+    display: flex;
+    align-items: center;
+}
+
+.load-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+.load-text {
+    font-size: 13px;
+    color: #666;
+}
+
+/* Улучшенные стили адреса */
+.popup-address {
+    font-size: 14px;
+    line-height: 1.4;
+    color: #333;
+    flex: 1;
+}
+
+/* Стили для метрик */
+.popup-metrics {
+    display: flex;
+    gap: 15px;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #f0f0f0;
+    justify-content: center;
+}
+
+.metric-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.metric-icon {
+    font-size: 18px;
+    margin-bottom: 4px;
+}
+
+.metric-value {
+    font-weight: 600;
+    font-size: 16px;
+    color: #4a6cf7;
+}
+
+.metric-label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Адаптивные улучшения */
+@media (max-width: 400px) {
+    .popup-card {
+        max-width: 240px;
+    }
+
+    .popup-header h3 {
+        font-size: 15px;
+    }
+
+    .popup-address {
+        font-size: 13px;
+    }
+}
+
+.map-marker {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: translate(-50%, -50%);
+    /* Центрирование */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    border: 2px solid white;
+}
+
+.map-marker .marker-value {
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+/* Убедитесь, что маркеры поверх карты */
+.maplibregl-marker {
+    position: absolute;
+}

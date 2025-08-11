@@ -1,0 +1,56 @@
+{
+    "stops": {
+        "stops": [
+            {
+                "url": "https://restreamer.vms.evo73.ru/918335436b92ac26/stream.m3u8",
+                "address": "г.Ульяновск, ул.Гончарова 19",
+                "count": 55,
+                "velocity": 8,
+                "load": 8,
+                "cityId": 1,
+                "lat": 54.318226,
+                "lng": 48.396496
+            },
+            {
+                "url": "https://restreamer.vms.evo73.ru/dfc58bea11e072b4/stream.m3u8",
+                "address": "г.Ульяновск, ул. Юности 2",
+                "count": 3,
+                "velocity": 3,
+                "load": 4,
+                "cityId": 1,
+                "lat": 54.353780,
+                "lng": 48.363624
+            },
+            {
+                "url": "http://example",
+                "lat": 37.6178,
+                "lng": 55.7512,
+                "address": "Остановка",
+                "count": 5,
+                "velocity": 5,
+                "load": 10,
+                "cityId": 1
+            },
+            {
+                "lat": 30.3358,
+                "lng": 59.9342,
+                "url": "http://example",
+                "address": "Государственный Эрмитаж",
+                "count": 5,
+                "velocity": 5,
+                "load": 5,
+                "cityId": 1
+            },
+            {
+                "url": "http://example",
+                "lng": 39.7231,
+                "lat": 43.5855,
+                "address": "Олимпийский парк Сочи",
+                "count": 5,
+                "velocity": 5,
+                "load": 1,
+                "cityId": 1
+            }
+        ]
+    }
+}
