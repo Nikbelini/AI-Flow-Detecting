@@ -1,34 +1,36 @@
 {
-    "stops": [
-        {
-            "url": "http://example",
-            "lat": 37.6178,
-            "lng": 55.7512,
-            "address": "Остановка",
-            "count": 5,
-            "velocity": 5,
-            "load": 10,
-            "cityId": 1
-        },
-        {
-            "lat": 30.3358,
-            "lng": 59.9342,
-            "url": "http://example",
-            "address": "Государственный Эрмитаж",
-            "count": 5,
-            "velocity": 5,
-            "load": 5,
-            "cityId": 1
-        },
-        {
-            "url": "http://example",
-            "lng": 39.7231,
-            "lat": 43.5855,
-            "address": "Олимпийский парк Сочи",
-            "count": 5,
-            "velocity": 5,
-            "load": 1,
-            "cityId": 1
-        }
-    ]
+    "stops": {
+        "stops": [
+            {
+                "url": "http://example",
+                "lat": 37.6178,
+                "lng": 55.7512,
+                "address": "Остановка",
+                "count": 5,
+                "velocity": 5,
+                "load": 10,
+                "cityId": 1
+            },
+            {
+                "lat": 30.3358,
+                "lng": 59.9342,
+                "url": "http://example",
+                "address": "Государственный Эрмитаж",
+                "count": 5,
+                "velocity": 5,
+                "load": 5,
+                "cityId": 1
+            },
+            {
+                "url": "http://example",
+                "lng": 39.7231,
+                "lat": 43.5855,
+                "address": "Олимпийский парк Сочи",
+                "count": 5,
+                "velocity": 5,
+                "load": 1,
+                "cityId": 1
+            }
+        ]
+    }
 }

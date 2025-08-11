@@ -40,7 +40,7 @@
 
 .map-header {
     padding: 12px;
-    background-color: #81b095; /* Красивый зеленый цвет для шапки */
+    background: linear-gradient(135deg, #84ac95, #78b291); /* Красивый зеленый цвет для шапки */
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
