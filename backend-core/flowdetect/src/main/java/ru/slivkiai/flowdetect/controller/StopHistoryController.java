@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.slivkiai.flowdetect.domain.StopHistoryRequest;
 import ru.slivkiai.flowdetect.domain.StopHistoryResponse;
 
+import java.io.IOException;
+
 @RestController
 @RequestMapping("/stops/history")
 @Tag(name = "Stop History", description = "API for stop history records")
@@ -28,6 +30,6 @@ public interface StopHistoryController {
     @Operation(summary = "Get load chart for last 12 hours")
     @ApiResponse(responseCode = "200", description = "Chart generated successfully",
             content = @Content(mediaType = "text/plain"))
-    ResponseEntity<String> getLoadChart(
-            @PathVariable String address);
+    ResponseEntity<byte[]> getLoadChart(
+            @PathVariable String address) throws IOException;
 }

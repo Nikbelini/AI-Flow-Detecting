@@ -28,7 +28,7 @@ public class ChartService {
 
     private final StopHistoryRepository stopHistoryRepository;
 
-    public String generateLoadChartForLast12Hours(String address) throws IOException {
+    public byte[] generateLoadChartForLast12Hours(String address) throws IOException {
         // Получаем данные за последние 12 часов
         LocalDateTime endTime = LocalDateTime.now();
         LocalDateTime startTime = endTime.minusHours(12);
@@ -89,6 +89,6 @@ public class ChartService {
         byte[] chartBytes = outputStream.toByteArray();
 
         // Возвращаем base64 строку изображения
-        return Base64.getEncoder().encodeToString(chartBytes);
+        return chartBytes;
     }
 }
