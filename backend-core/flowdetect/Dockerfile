@@ -1,33 +1,30 @@
 # Стадия сборки
-FROM eclipse-temurin:21-jdk-jammy as builder
+FROM maven:3.8.8-eclipse-temurin-21 AS builder
 
-WORKDIR /workspace/app
+WORKDIR /app
 
-# 1. Копируем только файлы, необходимые для загрузки зависимостей
-COPY mvnw .
-COPY .mvn/ .mvn
+# 1. Копируем только POM файл сначала (для кеширования зависимостей)
 COPY pom.xml .
-
-# 2. Скачиваем зависимости (кешируемый слой)
-RUN ./mvnw dependency:go-offline -B
+# 2. Скачиваем все зависимости (отдельный кешируемый слой)
+RUN mvn dependency:go-offline -B
 
 # 3. Копируем исходный код
-COPY src src
+COPY src ./src
 
-# 4. Собираем JAR (кешируется до изменения кода)
-RUN ./mvnw clean package -DskipTests -Dmaven.test.skip=true
+# 4. Собираем приложение (без тестов)
+RUN mvn clean package -DskipTests -Dmaven.test.skip=true
 
 # Финальная стадия
 FROM eclipse-temurin:21-jre-jammy
 
 WORKDIR /app
 
-# 1. Копируем собранный JAR из стадии builder
-COPY --from=builder /workspace/app/target/*.jar app.jar
+# Копируем собранный JAR
+COPY --from=builder /app/target/*.jar app.jar
 
-# 2. Оптимизация для контейнеризации
+# Оптимизация для контейнеров
 ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75"
 EXPOSE 8080
 
-# 3. Запуск с параметрами для production
-ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} -jar /app/app.jar"]
+# Запуск приложения
+ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} -jar app.jar"]
