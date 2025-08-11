@@ -1,10 +1,10 @@
 nc: 5
 names:
- - human
- - bus stop
- - road signs
- - window
- - columns
-path: dataset/train_1
-train: images
-val: images
+- human
+- bus stop
+- road signs
+- window
+- columns
+path: dataset
+train: train_2\obj_Train_data
+val: train_1\obj_train_data
