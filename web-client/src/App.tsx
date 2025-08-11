@@ -3,6 +3,7 @@ import './App.css';
 import HeaderComponent from './header.tsx';
 import MapComponent from './map.tsx';
 import { getMarkers } from './GetMarkes.ts';
+import HlsPlayer from './HlsPlayer.tsx';
 
 function App() {
   const [searchValue, setSearchValue] = useState('');
