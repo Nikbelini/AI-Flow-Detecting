@@ -4,7 +4,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import cv2
-# import torch
 from httpx import HTTPError
 from loguru import logger
 from ultralytics import YOLO
@@ -22,8 +21,7 @@ from config import (
     FRAME_SAVE_IS_ENABLED,
 )
 
-model = YOLO("yolov8n.pt")
-# device = torch.device("cpu")
+model = YOLO("best.pt")
 flow_detection_client = FlowDetectClient(url=FLOW_DETECTION_URL)
 
 

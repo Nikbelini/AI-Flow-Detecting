@@ -1,5 +1,10 @@
-train: ../data/train/images
-val: ../data/val/images
-
-nc: 1
-names: ['person']
+nc: 5
+names:
+- human
+- bus stop
+- road signs
+- window
+- columns
+path: dataset
+train: train_split
+val: val_split
