@@ -22,7 +22,7 @@ from config import (
     FRAME_SAVE_IS_ENABLED,
 )
 
-model = YOLO("yolov8n.pt")
+model = YOLO("best.pt")
 # device = torch.device("cpu")
 flow_detection_client = FlowDetectClient(url=FLOW_DETECTION_URL)
 
