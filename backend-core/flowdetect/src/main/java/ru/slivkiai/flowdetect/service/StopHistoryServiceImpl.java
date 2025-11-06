@@ -25,11 +25,13 @@ public class StopHistoryServiceImpl implements StopHistoryService {
     @Override
     @Transactional
     public StopHistoryResponse createHistoryRecord(StopHistoryRequest request) {
-        log.debug("Creating history record with request: {}", request);
+        log.info("📝 Creating history record with request: {}", request);
 
         // Получаем город
         var city = cityRepository.findById(request.getCityId())
                 .orElseThrow(EntityNotFoundException::new);
+
+        log.info("🏙️ Found city: {} (ID: {})", city.getName(), city.getId());
 
         // Сохраняем историческую запись
         StopHistoryEntity history = StopHistoryEntity.builder()
@@ -42,12 +44,15 @@ public class StopHistoryServiceImpl implements StopHistoryService {
                 .build();
 
         StopHistoryEntity savedHistory = stopHistoryRepository.save(history);
+        log.info("💾 Successfully saved history record. ID: {}", savedHistory.getId());
 
         // Асинхронно получаем и сохраняем погодные данные
         try {
+            log.info("🌤️ Starting weather data fetch for city: {}", city.getName());
             weatherService.fetchAndSaveCurrentWeather(city);
+            log.info("✅ Weather data fetch initiated");
         } catch (Exception e) {
-            log.warn("Failed to fetch weather data, but history record was saved", e);
+            log.error("❌ Failed to fetch weather data, but history record was saved", e);
         }
 
         // Формируем ответ

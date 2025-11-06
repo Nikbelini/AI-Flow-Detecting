@@ -30,6 +30,7 @@ public class StopServiceImpl implements StopService {
     private final StopRepository stopRepository;
     private final CityRepository cityRepository;
     private final StopHistoryRepository stopHistoryRepository;
+    private final StopHistoryService stopHistoryService; // Добавляем сервис истории
 
     @Override
     public List<StopResponse> getAllStops() {
@@ -74,9 +75,9 @@ public class StopServiceImpl implements StopService {
 
         StopEntity savedStop = stopRepository.save(stop);
 
-        // Создаём две идентичные записи в истории (с текущим временем и минуту назад)
-        createHistoryRecord(savedStop, request.getCount(), request.getVelocity(), request.getLoad());
-        createHistoryRecord(savedStop, request.getCount(), request.getVelocity(), request.getLoad());
+        // Используем сервис истории вместо приватного метода
+        createHistoryRecordViaService(savedStop, request.getCount(), request.getVelocity(), request.getLoad());
+        createHistoryRecordViaService(savedStop, request.getCount(), request.getVelocity(), request.getLoad());
 
         return mapToResponse(savedStop);
     }
@@ -97,8 +98,8 @@ public class StopServiceImpl implements StopService {
 
         if (lastRecords.size() < 2) {
             // Если записей недостаточно, создаём новые с текущими данными
-            createHistoryRecord(stop, request.getCount(), 0, 0);
-            createHistoryRecord(stop, request.getCount(), 0, 0);
+            createHistoryRecordViaService(stop, request.getCount(), 0, 0);
+            createHistoryRecordViaService(stop, request.getCount(), 0, 0);
             lastRecords = stopHistoryRepository.findTop2ByAddressOrderByDatetimeDesc(stop.getAddress());
         }
 
@@ -127,8 +128,11 @@ public class StopServiceImpl implements StopService {
         stop.setLoad((int) loadScore);
         StopEntity updatedStop = stopRepository.save(stop);
 
-        // Добавляем новую запись в историю
-        createHistoryRecord(updatedStop, newCount, velocity, loadScore);
+        // Добавляем новую запись в историю ЧЕРЕЗ СЕРВИС (чтобы сохранилась погода)
+        createHistoryRecordViaService(updatedStop, newCount, velocity, loadScore);
+
+        log.info("🔄 Updated stop stats - ID: {}, Count: {}, Velocity: {}, Load: {}",
+                id, newCount, velocity, loadScore);
 
         return mapToResponse(updatedStop);
     }
@@ -145,6 +149,23 @@ public class StopServiceImpl implements StopService {
                 .build();
     }
 
+    /**
+     * Используем сервис истории вместо прямого сохранения
+     * Это гарантирует, что погодные данные также будут сохранены
+     */
+    private void createHistoryRecordViaService(StopEntity stop, double count, double velocity, double load) {
+        StopHistoryRequest historyRequest = StopHistoryRequest.builder()
+                .cityId(stop.getCity().getId())
+                .address(stop.getAddress())
+                .count((int) count)
+                .velocity((int) velocity)
+                .load((int) load)
+                .build();
+
+        stopHistoryService.createHistoryRecord(historyRequest);
+    }
+
+    // Старый метод оставляем для обратной совместимости, но не используем для обновлений
     private void createHistoryRecord(StopEntity stop, int count, double velocity, double load) {
         StopHistoryEntity history = StopHistoryEntity.builder()
                 .city(stop.getCity())
