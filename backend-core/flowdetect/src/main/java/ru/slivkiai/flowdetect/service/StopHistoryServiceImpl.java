@@ -4,6 +4,7 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import ru.slivkiai.flowdetect.domain.StopHistoryRequest;
 import ru.slivkiai.flowdetect.domain.StopHistoryResponse;
 import ru.slivkiai.flowdetect.domain.entity.StopHistoryEntity;
@@ -19,37 +20,49 @@ public class StopHistoryServiceImpl implements StopHistoryService {
 
     private final StopHistoryRepository stopHistoryRepository;
     private final CityRepository cityRepository;
+    private final WeatherService weatherService;
 
     @Override
+    @Transactional
     public StopHistoryResponse createHistoryRecord(StopHistoryRequest request) {
+        log.info("📝 Creating history record with request: {}", request);
 
-        log.debug("Creating history record with request: {}", request);
+        // Получаем город
+        var city = cityRepository.findById(request.getCityId())
+                .orElseThrow(EntityNotFoundException::new);
 
-        StopHistoryEntity history = new StopHistoryEntity();
+        log.info("🏙️ Found city: {} (ID: {})", city.getName(), city.getId());
 
-        //TODO map
-        history.setDatetime(LocalDateTime.now());
-        history.setCount(request.getCount());
-        history.setVelocity(request.getVelocity());
-        history.setLoad(request.getLoad());
-        history.setAddress(request.getAddress());
-
-        var city = cityRepository.findById(request.getCityId());
-
-        history.setCity(city.orElseThrow(EntityNotFoundException::new));
+        // Сохраняем историческую запись
+        StopHistoryEntity history = StopHistoryEntity.builder()
+                .datetime(LocalDateTime.now())
+                .count(request.getCount())
+                .velocity(request.getVelocity())
+                .load(request.getLoad())
+                .address(request.getAddress())
+                .city(city)
+                .build();
 
         StopHistoryEntity savedHistory = stopHistoryRepository.save(history);
+        log.info("💾 Successfully saved history record. ID: {}", savedHistory.getId());
 
-        StopHistoryResponse historyResponse = new StopHistoryResponse();
+        // Асинхронно получаем и сохраняем погодные данные
+        try {
+            log.info("🌤️ Starting weather data fetch for city: {}", city.getName());
+            weatherService.fetchAndSaveCurrentWeather(city);
+            log.info("✅ Weather data fetch initiated");
+        } catch (Exception e) {
+            log.error("❌ Failed to fetch weather data, but history record was saved", e);
+        }
 
-        //TODO map
-        historyResponse.setId(savedHistory.getId());
-        historyResponse.setDatetime(savedHistory.getDatetime());
-        historyResponse.setLoad(savedHistory.getLoad());
-        historyResponse.setVelocity(savedHistory.getVelocity());
-        historyResponse.setCount(savedHistory.getCount());
-        historyResponse.setCityId(savedHistory.getCity().getId());
-
-        return historyResponse;
+        // Формируем ответ
+        return StopHistoryResponse.builder()
+                .id(savedHistory.getId())
+                .datetime(savedHistory.getDatetime())
+                .load(savedHistory.getLoad())
+                .velocity(savedHistory.getVelocity())
+                .count(savedHistory.getCount())
+                .cityId(savedHistory.getCity().getId())
+                .build();
     }
 }
