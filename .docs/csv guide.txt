@@ -1,0 +1,57 @@
+1. Создаем SQL файл для экспорта
+Сначала создадим файл export_dataset.sql в корне проекта:
+
+sql
+-- export_dataset.sql
+COPY (
+    SELECT 
+        sh.datetime as timestamp,
+        sh.address,
+        sh.count as passenger_count,
+        sh.velocity,
+        sh.load,
+        c.name as city_name,
+        EXTRACT(HOUR FROM sh.datetime) as hour_of_day,
+        EXTRACT(DOW FROM sh.datetime) as day_of_week,
+        EXTRACT(MONTH FROM sh.datetime) as month,
+        w.temperature,
+        w.precipitation,
+        w.weather_code,
+        CASE 
+            WHEN e.is_holiday THEN true
+            ELSE false
+        END as is_holiday,
+        CASE 
+            WHEN e.has_special_event THEN true
+            ELSE false
+        END as has_special_event
+    FROM stops_history sh
+    LEFT JOIN cities c ON sh.city_id = c.id
+    LEFT JOIN weather_data w ON w.city_id = c.id 
+        AND DATE(w.datetime) = DATE(sh.datetime)
+        AND EXTRACT(HOUR FROM w.datetime) = EXTRACT(HOUR FROM sh.datetime)
+    LEFT JOIN events e ON e.city_id = c.id 
+        AND e.event_date = DATE(sh.datetime)
+    ORDER BY sh.datetime, sh.address
+) TO '/tmp/passenger_flow_dataset.csv' WITH CSV HEADER DELIMITER ',';
+2. Выполняем команды в терминале
+Откройте терминал в папке с вашим проектом и выполняйте команды по порядку:
+
+Шаг 1: Проверяем, что контейнеры работают
+bash
+docker-compose ps
+Должны увидеть статус Up для postgres и flowdetect-app.
+
+Шаг 2: Копируем SQL файл в контейнер PostgreSQL
+bash
+docker cp export_dataset.sql postgres:/tmp/export_dataset.sql
+Шаг 3: Выполняем SQL для экспорта данных
+bash
+docker exec -i postgres psql -U postgres -d stops -f /tmp/export_dataset.sql
+Шаг 4: Копируем полученный CSV файл на хост
+bash
+# Создаем папку для датасетов если её нет
+mkdir -p datasets
+
+# Копируем CSV из контейнера
+docker cp postgres:/tmp/passenger_flow_dataset.csv ./datasets/
