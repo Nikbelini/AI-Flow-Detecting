@@ -247,7 +247,7 @@ class PassengerFlowPredictor:
         return X_nn, X_fuzzy, timestamps
     
     def forecast(self, historical_data: List[Dict], forecast_hours: int = 6):
-        """Прогнозирование на несколько часов вперед"""
+        """Прогнозирование на несколько часов вперед с обновлением временных признаков"""
         if not self.is_loaded:
             raise ValueError("Модель не загружена")
         
@@ -255,12 +255,15 @@ class PassengerFlowPredictor:
             # Предобработка данных
             processed_data = self.preprocess_data(historical_data)
             
-            # Подготовка последовательностей
+            # Подготовка начальной последовательности
             X_nn, X_fuzzy, timestamps = self.prepare_sequences(processed_data)
             
             # Прогнозирование
             predictions = []
             last_timestamp = pd.to_datetime(timestamps[-1])
+            
+            # Сохраняем исходные данные для обновления
+            current_sequence_data = processed_data.tail(24).copy()
             
             for i in range(forecast_hours):
                 # Предсказание
@@ -270,14 +273,74 @@ class PassengerFlowPredictor:
                 
                 predictions.append({
                     'timestamp': forecast_time.isoformat(),
-                    'predicted_passenger_count': max(0, float(pred_passenger[0][0])),  # Не отрицательные значения
-                    'predicted_load': max(0, min(10, float(pred_load[0][0]))),  # Ограничение 0-10
+                    'predicted_passenger_count': max(0, float(pred_passenger[0][0])),
+                    'predicted_load': max(0, min(10, float(pred_load[0][0]))),
                     'forecast_hour': i + 1
                 })
+                
+                # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем данные для следующего прогноза
+                if i < forecast_hours - 1:
+                    # Создаем новую строку с обновленными временными признаками
+                    new_row = self._create_next_timestep(
+                        current_sequence_data, 
+                        forecast_time,
+                        float(pred_passenger[0][0]),
+                        float(pred_load[0][0])
+                    )
+                    
+                    # Обновляем последовательность (убираем самую старую, добавляем новую)
+                    current_sequence_data = pd.concat([
+                        current_sequence_data.iloc[1:], 
+                        new_row
+                    ], ignore_index=True)
+                    
+                    # Переподготавливаем последовательности с обновленными данными
+                    X_nn, X_fuzzy, _ = self.prepare_sequences(current_sequence_data)
             
-            logger.info(f"📈 Создано {len(predictions)} прогнозов")
+            logger.info(f"📈 Создано {len(predictions)} ДИНАМИЧЕСКИХ прогнозов")
             return predictions
-            
+        
         except Exception as e:
             logger.error(f"❌ Ошибка прогнозирования: {e}")
             raise
+
+    def _create_next_timestep(self, current_data: pd.DataFrame, next_time: datetime, 
+                            predicted_passengers: float, predicted_load: float) -> pd.DataFrame:
+        """Создание следующего временного шага с обновленными признаками"""
+        
+        # Берем последнюю строку как шаблон
+        last_row = current_data.iloc[-1:].copy()
+        
+        # Обновляем timestamp
+        last_row['timestamp'] = next_time
+        
+        # Обновляем временные признаки
+        last_row['hour_of_day'] = next_time.hour
+        last_row['day_of_week'] = next_time.dayofweek
+        last_row['month'] = next_time.month
+        
+        # Обновляем тригонометрические признаки
+        last_row['hour_sin'] = np.sin(2 * np.pi * next_time.hour / 24)
+        last_row['hour_cos'] = np.cos(2 * np.pi * next_time.hour / 24)
+        last_row['day_sin'] = np.sin(2 * np.pi * next_time.dayofweek / 7)
+        last_row['day_cos'] = np.cos(2 * np.pi * next_time.dayofweek / 7)
+        last_row['month_sin'] = np.sin(2 * np.pi * next_time.month / 12)
+        last_row['month_cos'] = np.cos(2 * np.pi * next_time.month / 12)
+        
+        # ОБНОВЛЕНО: Правильное обновление бинарных признаков
+        last_row['is_weekend'] = int(next_time.dayofweek >= 5)  # Просто int(), без .astype()
+        last_row['is_morning'] = int((next_time.hour >= 7) & (next_time.hour <= 10))
+        last_row['is_evening'] = int((next_time.hour >= 17) & (next_time.hour <= 20))
+        last_row['is_night'] = int((next_time.hour >= 22) | (next_time.hour <= 5))
+        
+        # Обновляем целевые переменные (используем предсказанные значения)
+        last_row['passenger_count'] = predicted_passengers
+        last_row['load'] = predicted_load
+        
+        # Для velocity можно использовать разницу с предыдущим значением
+        prev_passengers = current_data.iloc[-1]['passenger_count']
+        last_row['velocity'] = predicted_passengers - prev_passengers
+        
+        print(f"🕐 Создан временной шаг для {next_time}: {predicted_passengers:.1f} пассажиров")
+        
+        return last_row
