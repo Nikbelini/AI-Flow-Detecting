@@ -4,7 +4,7 @@ import pickle
 import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import LSTM, Dense, Input, Concatenate, Dropout
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import logging
 from typing import List, Dict, Any, Optional
 import os
@@ -12,9 +12,10 @@ import os
 logger = logging.getLogger(__name__)
 
 class PassengerFlowPredictor:
-    def __init__(self, model_weights_path: str, preprocessor_path: str):
+    def __init__(self, model_weights_path: str, preprocessor_path: str, timezone_offset: int = 4):
         self.model_weights_path = model_weights_path
         self.preprocessor_path = preprocessor_path
+        self.timezone_offset = timezone_offset  # GMT+4 по умолчанию
         self.model = None
         self.preprocessor_data = None
         self.is_loaded = False
@@ -47,7 +48,7 @@ class PassengerFlowPredictor:
             logger.info("✅ Веса модели загружены")
             
             self.is_loaded = True
-            logger.info("🎉 Модель успешно инициализирована")
+            logger.info(f"🎉 Модель успешно инициализирована (часовой пояс: GMT+{self.timezone_offset})")
             return True
             
         except Exception as e:
@@ -56,6 +57,139 @@ class PassengerFlowPredictor:
             logger.error(traceback.format_exc())
             self.is_loaded = False
             return False
+
+    def _convert_to_timezone(self, dt: datetime) -> datetime:
+        """Конвертирует время в нужный часовой пояс"""
+        # Создаем временную зону GMT+4
+        tz = timezone(timedelta(hours=self.timezone_offset))
+        if dt.tzinfo is None:
+            # Если время наивное, предполагаем что оно уже в нужном поясе
+            return dt.replace(tzinfo=tz)
+        else:
+            # Конвертируем в нужный пояс
+            return dt.astimezone(tz)
+
+    def preprocess_data(self, data: List[Dict]) -> pd.DataFrame:
+        """Предобработка входных данных с учетом часового пояса"""
+        try:
+            df = pd.DataFrame(data)
+            logger.info(f"📊 Загружено {len(df)} записей для предобработки")
+            logger.info(f"🌍 Используется часовой пояс: GMT+{self.timezone_offset}")
+            
+            # Конвертация времени с учетом часового пояса
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            
+            # Применяем часовой пояс ко всем временным меткам
+            df['timestamp'] = df['timestamp'].apply(self._convert_to_timezone)
+            
+            # Создание временных признаков (уже с правильным часовым поясом)
+            df['hour_of_day'] = df['timestamp'].dt.hour
+            df['day_of_week'] = df['timestamp'].dt.dayofweek
+            df['month'] = df['timestamp'].dt.month
+            
+            # Тригонометрические признаки
+            df['hour_sin'] = np.sin(2 * np.pi * df['hour_of_day']/24)
+            df['hour_cos'] = np.cos(2 * np.pi * df['hour_of_day']/24)
+            df['day_sin'] = np.sin(2 * np.pi * df['day_of_week']/7)
+            df['day_cos'] = np.cos(2 * np.pi * df['day_of_week']/7)
+            df['month_sin'] = np.sin(2 * np.pi * df['month']/12)
+            df['month_cos'] = np.cos(2 * np.pi * df['month']/12)
+            
+            # Дополнительные временные признаки
+            df['is_weekend'] = (df['day_of_week'] >= 5).astype(int)
+            df['is_morning'] = ((df['hour_of_day'] >= 7) & (df['hour_of_day'] <= 10)).astype(int)
+            df['is_evening'] = ((df['hour_of_day'] >= 17) & (df['hour_of_day'] <= 20)).astype(int)
+            df['is_night'] = ((df['hour_of_day'] >= 22) | (df['hour_of_day'] <= 5)).astype(int)
+            
+            # Заполнение пропущенных значений по умолчанию
+            default_values = {
+                'temperature': 20.0,
+                'precipitation': 0.0,
+                'velocity': 0.0,
+                'weather_code': 1,
+                'day_type': 'normal_day',
+                'event_type': 'NO_EVENTS'
+            }
+            
+            for feature, default in default_values.items():
+                if feature in df.columns:
+                    df[feature] = df[feature].fillna(default)
+                else:
+                    df[feature] = default
+            
+            # Нормализация числовых признаков (если есть скейлеры)
+            if self.preprocessor_data and 'scalers' in self.preprocessor_data:
+                numerical_features = ['temperature', 'precipitation', 'velocity']
+                for feature in numerical_features:
+                    if feature in df.columns and feature in self.preprocessor_data['scalers']:
+                        scaler = self.preprocessor_data['scalers'][feature]
+                        df[feature] = scaler.transform(df[[feature]])
+            
+            # Кодирование категориальных признаков (если есть энкодеры)
+            if self.preprocessor_data and 'label_encoders' in self.preprocessor_data:
+                categorical_features = ['day_type', 'event_type', 'weather_code']
+                for feature in categorical_features:
+                    if feature in df.columns and feature in self.preprocessor_data['label_encoders']:
+                        encoder = self.preprocessor_data['label_encoders'][feature]
+                        # Обрабатываем новые значения
+                        unique_vals = df[feature].unique()
+                        for val in unique_vals:
+                            if val not in encoder.classes_:
+                                # Для новых значений используем кодировку по умолчанию
+                                df[feature] = df[feature].replace(val, encoder.classes_[0])
+                        df[feature] = encoder.transform(df[feature])
+            
+            logger.info("✅ Данные успешно предобработаны")
+            return df
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка предобработки данных: {e}")
+            raise
+
+    def _create_next_timestep(self, current_data: pd.DataFrame, next_time: datetime, 
+                            predicted_passengers: float, predicted_load: float) -> pd.DataFrame:
+        """Создание следующего временного шага с обновленными признаками"""
+        
+        # Берем последнюю строку как шаблон
+        last_row = current_data.iloc[-1:].copy()
+        
+        # Конвертируем время в правильный часовой пояс
+        next_time_tz = self._convert_to_timezone(next_time)
+        
+        # Обновляем timestamp
+        last_row['timestamp'] = next_time_tz
+        
+        # Обновляем временные признаки
+        last_row['hour_of_day'] = next_time_tz.hour
+        last_row['day_of_week'] = next_time_tz.dayofweek
+        last_row['month'] = next_time_tz.month
+        
+        # Обновляем тригонометрические признаки
+        last_row['hour_sin'] = np.sin(2 * np.pi * next_time_tz.hour / 24)
+        last_row['hour_cos'] = np.cos(2 * np.pi * next_time_tz.hour / 24)
+        last_row['day_sin'] = np.sin(2 * np.pi * next_time_tz.dayofweek / 7)
+        last_row['day_cos'] = np.cos(2 * np.pi * next_time_tz.dayofweek / 7)
+        last_row['month_sin'] = np.sin(2 * np.pi * next_time_tz.month / 12)
+        last_row['month_cos'] = np.cos(2 * np.pi * next_time_tz.month / 12)
+        
+        # ОБНОВЛЕНО: Правильное обновление бинарных признаков
+        last_row['is_weekend'] = int(next_time_tz.dayofweek >= 5)
+        last_row['is_morning'] = int((next_time_tz.hour >= 7) & (next_time_tz.hour <= 10))
+        last_row['is_evening'] = int((next_time_tz.hour >= 17) & (next_time_tz.hour <= 20))
+        last_row['is_night'] = int((next_time_tz.hour >= 22) | (next_time_tz.hour <= 5))
+        
+        # Обновляем целевые переменные (используем предсказанные значения)
+        last_row['passenger_count'] = predicted_passengers
+        last_row['load'] = predicted_load
+        
+        # Для velocity можно использовать разницу с предыдущим значением
+        prev_passengers = current_data.iloc[-1]['passenger_count']
+        last_row['velocity'] = predicted_passengers - prev_passengers
+        
+        print(f"🕐 Создан временной шаг для {next_time_tz}: {predicted_passengers:.1f} пассажиров")
+        
+        return last_row
+
     
     def _create_model_architecture(self):
         """Создание ТОЧНОЙ архитектуры модели как при обучении"""

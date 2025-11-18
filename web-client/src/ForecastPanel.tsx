@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {baseUrl} from './env'
 
 // Интерфейс для данных с сервера (snake_case)
@@ -38,13 +38,29 @@ interface ForecastPanelProps {
         velocity: number;
     };
     onClose: () => void;
+    isOpen: boolean;
+    onToggle: (isOpen: boolean) => void;
+    forecastState: any;
+    onForecastDataUpdate: (data: any) => void;
 }
 
-const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClose }) => {
-    const [forecast, setForecast] = useState<ForecastResponse | null>(null);
+const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({ 
+    address, 
+    stopData, 
+    onClose, 
+    isOpen,
+    onToggle,
+    forecastState,
+    onForecastDataUpdate
+}) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [autoRefresh, setAutoRefresh] = useState(false);
+    
+    const { forecastData, autoRefresh, showMiniChart } = forecastState;
+    const fetchCountRef = useRef(0);
+    const isMountedRef = useRef(true);
+
+    console.log('🎯 ForecastPanel render for:', address, 'fetchCount:', fetchCountRef.current);
 
     // Функция для преобразования данных с сервера
     const transformForecastData = (data: any): ForecastResponse => {
@@ -62,15 +78,16 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
         };
     };
 
-    const fetchForecast = async () => {
-        if (!address) return;
+    const fetchForecast = useCallback(async () => {
+        if (!address || !isMountedRef.current) return;
+        
+        fetchCountRef.current++;
+        console.log('🔄 Fetching forecast for address:', address, 'fetch #:', fetchCountRef.current);
         
         setLoading(true);
         setError(null);
         
         try {
-            console.log('🔄 Fetching forecast for address:', address);
-            
             const response = await fetch(`${baseUrl}/forecast`, {
                 method: 'POST',
                 headers: {
@@ -91,33 +108,57 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
             }
 
             const rawData = await response.json();
-            console.log('✅ Raw forecast data received:', rawData);
+            console.log('✅ Raw forecast data received for:', address);
+            
+            if (!isMountedRef.current) return;
             
             // Преобразуем данные с сервера в нужный формат
             const forecastData = transformForecastData(rawData);
-            console.log('🔄 Transformed forecast data:', forecastData);
-            
-            setForecast(forecastData);
+            onForecastDataUpdate(forecastData);
         } catch (err) {
+            if (!isMountedRef.current) return;
             const errorMessage = err instanceof Error ? err.message : 'Неизвестная ошибка';
             console.error('❌ Forecast error:', err);
             setError(errorMessage);
         } finally {
-            setLoading(false);
+            if (isMountedRef.current) {
+                setLoading(false);
+            }
         }
-    };
+    }, [address, onForecastDataUpdate]);
 
+    // Автообновление
     useEffect(() => {
         if (autoRefresh) {
+            console.log('⏰ Starting auto-refresh for:', address);
             const interval = setInterval(fetchForecast, 5 * 60 * 1000);
-            return () => clearInterval(interval);
+            return () => {
+                console.log('⏰ Stopping auto-refresh for:', address);
+                clearInterval(interval);
+            };
         }
-    }, [autoRefresh, address]);
+    }, [autoRefresh, address, fetchForecast]);
 
+    // Первоначальная загрузка
     useEffect(() => {
-        console.log('🎯 Initial forecast load for address:', address);
-        fetchForecast();
-    }, [address]);
+        isMountedRef.current = true;
+        
+        // Загружаем прогноз только если его еще нет или данные устарели
+        const shouldFetch = !forecastData || 
+                           Date.now() - new Date(forecastData.generatedAt).getTime() > 2 * 60 * 1000; // 2 минуты
+        
+        if (shouldFetch) {
+            console.log('🎯 Initial forecast load for address:', address);
+            fetchForecast();
+        } else {
+            console.log('🎯 Using cached forecast for:', address);
+        }
+
+        return () => {
+            console.log('🧹 Cleaning up ForecastPanel for:', address);
+            isMountedRef.current = false;
+        };
+    }, [address, fetchForecast, forecastData]);
 
     const loadToColor = (load: number): string => {
         if (load <= 3) return "#27ae60"; // зеленый
@@ -145,6 +186,93 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
             minute: '2-digit'
         });
     };
+
+    // Мини-график для компактного отображения
+    const MiniForecastChart = React.memo(({ forecasts }: { forecasts: ForecastData[] }) => {
+        const maxPassengers = Math.max(...forecasts.map(f => f.predictedPassengerCount));
+        const minPassengers = Math.min(...forecasts.map(f => f.predictedPassengerCount));
+        const range = maxPassengers - minPassengers || 1;
+
+        return (
+            <div className="mini-chart" style={{
+                background: '#f8f9fa',
+                padding: '12px',
+                borderRadius: '8px',
+                marginBottom: '12px'
+            }}>
+                <div className="mini-chart-header" style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '8px'
+                }}>
+                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#333' }}>
+                        📊 Мини-график
+                    </span>
+                </div>
+                
+                <div className="chart-container" style={{
+                    height: '40px',
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    gap: '4px',
+                    padding: '4px 0'
+                }}>
+                    {forecasts.map((item, index) => {
+                        const height = ((item.predictedPassengerCount - minPassengers) / range) * 30 + 10;
+                        return (
+                            <div 
+                                key={index}
+                                className="chart-bar"
+                                style={{
+                                    flex: 1,
+                                    height: `${height}px`,
+                                    background: loadToColor(item.predictedLoad),
+                                    borderRadius: '2px',
+                                    position: 'relative',
+                                    minWidth: '8px'
+                                }}
+                                title={`+${item.forecastHour}ч: ${Math.round(item.predictedPassengerCount)} чел.`}
+                            >
+                                <div className="bar-label" style={{
+                                    position: 'absolute',
+                                    top: '-18px',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    fontSize: '10px',
+                                    color: '#666',
+                                    whiteSpace: 'nowrap'
+                                }}>
+                                    +{item.forecastHour}ч
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    });
+
+    if (!isOpen) {
+        return (
+            <div className="forecast-panel-collapsed" style={{ 
+                background: 'white', 
+                borderRadius: '8px', 
+                padding: '12px', 
+                margin: '8px 0',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                border: '1px solid #e0e0e0',
+                cursor: 'pointer'
+            }} onClick={() => onToggle(true)}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: '600', color: '#333' }}>🔮 Прогноз</span>
+                    <span style={{ fontSize: '12px', color: '#666' }}>
+                        {forecastData ? `Обновлено: ${new Date(forecastData.generatedAt).toLocaleTimeString('ru-RU')}` : 'Нажмите чтобы развернуть'}
+                    </span>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="forecast-panel" style={{ 
@@ -193,18 +321,19 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
                             border: 'none',
                             padding: '8px 12px',
                             borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '14px'
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                            fontSize: '14px',
+                            opacity: loading ? 0.6 : 1
                         }}
                     >
                         {loading ? '🔄' : '🔄'}
                     </button>
                     <button 
-                        className={`forecast-btn auto-refresh-btn ${autoRefresh ? 'active' : ''}`}
-                        onClick={() => setAutoRefresh(!autoRefresh)}
-                        title="Автообновление каждые 5 минут"
+                        className="forecast-btn close-btn"
+                        onClick={() => onToggle(false)}
+                        title="Свернуть панель прогноза"
                         style={{
-                            background: autoRefresh ? '#28a745' : '#6c757d',
+                            background: '#6c757d',
                             color: 'white',
                             border: 'none',
                             padding: '8px 12px',
@@ -213,7 +342,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
                             fontSize: '14px'
                         }}
                     >
-                        ⏰
+                        ▲
                     </button>
                     <button 
                         className="forecast-btn close-btn"
@@ -265,7 +394,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
                 </div>
             )}
 
-            {loading && !forecast && (
+            {loading && !forecastData && (
                 <div className="forecast-loading" style={{
                     textAlign: 'center',
                     padding: '20px',
@@ -284,8 +413,11 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
                 </div>
             )}
 
-            {forecast && (
+            {forecastData && (
                 <>
+                    {/* Мини-график */}
+                    <MiniForecastChart forecasts={forecastData.forecasts} />
+
                     {/* Текущее состояние */}
                     <div className="current-stats" style={{
                         background: '#f8f9fa',
@@ -339,7 +471,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
                             📅 Прогноз по часам:
                         </h4>
                         <div className="forecast-list">
-                            {forecast.forecasts.map((item, index) => (
+                            {forecastData.forecasts.map((item: ForecastData, index: number) => (
                                 <div key={index} className="forecast-item" style={{
                                     display: 'flex',
                                     alignItems: 'center',
@@ -431,7 +563,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
                     </div>
 
                     {/* Метрики качества */}
-                    {forecast.metrics && (
+                    {forecastData.metrics && (
                         <div className="metrics-section" style={{ marginBottom: '20px' }}>
                             <h4 style={{ 
                                 margin: '0 0 12px 0', 
@@ -464,7 +596,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
                                         fontWeight: 'bold',
                                         color: '#007bff'
                                     }}>
-                                        ±{forecast.metrics.passenger_mae?.toFixed(1) || '?'} чел.
+                                        ±{forecastData.metrics.passenger_mae?.toFixed(1) || '?'} чел.
                                     </div>
                                 </div>
                                 <div className="metric-card" style={{
@@ -485,7 +617,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
                                         fontWeight: 'bold',
                                         color: '#007bff'
                                     }}>
-                                        ±{forecast.metrics.load_mae?.toFixed(1) || '?'}/10
+                                        ±{forecastData.metrics.load_mae?.toFixed(1) || '?'}/10
                                     </div>
                                 </div>
                             </div>
@@ -493,7 +625,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
                     )}
 
                     {/* График */}
-                    {forecast.plotHtml && (
+                    {forecastData.plotHtml && (
                         <div className="chart-section" style={{ marginBottom: '20px' }}>
                             <h4 style={{ 
                                 margin: '0 0 12px 0', 
@@ -505,7 +637,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
                             </h4>
                             <div 
                                 className="forecast-chart"
-                                dangerouslySetInnerHTML={{ __html: forecast.plotHtml }} 
+                                dangerouslySetInnerHTML={{ __html: forecastData.plotHtml }} 
                             />
                         </div>
                     )}
@@ -523,7 +655,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
                             marginBottom: '4px'
                         }}>
                             <span className="timestamp">
-                                Обновлено: {new Date(forecast.generatedAt).toLocaleTimeString('ru-RU')}
+                                Обновлено: {new Date(forecastData.generatedAt).toLocaleTimeString('ru-RU')}
                             </span>
                             {autoRefresh && <span className="auto-refresh-indicator">🔄 авто</span>}
                         </div>
@@ -543,6 +675,6 @@ const ForecastPanel: React.FC<ForecastPanelProps> = ({ address, stopData, onClos
             `}</style>
         </div>
     );
-};
+});
 
 export default ForecastPanel;
