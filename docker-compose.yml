@@ -29,10 +29,33 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/stops
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
+      ML_FORECAST_SERVICE_URL: http://load-forecast-service:8082
     ports:
       - "8080:8080"
     volumes:
       - ./backend-core/flowdetect/logs:/app/logs
+
+  load-forecast-service:
+    build:
+      context: ./load-forecast-service
+      dockerfile: Dockerfile
+    container_name: load-forecast-service
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./load-forecast-service/logs:/app/logs
+      - ./load-forecast-service/models:/app/models
+    environment:
+      - PYTHONPATH=/app
+      - MODEL_WEIGHTS_PATH=/app/models/best_powerful_model.weights.h5
+      - PREPROCESSOR_PATH=/app/models/preprocessor.pkl
+      - TF_ENABLE_ONEDNN_OPTS=0  # Отключаем oneDNN для стабильности
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
 
   video-stream-service:
     dns:
@@ -64,6 +87,9 @@ services:
     environment:
       - NODE_ENV=development
       - VITE_HOST=0.0.0.0
+      - VITE_API_URL=http://localhost:8080
+    depends_on:
+      - flowdetect-app
 
 volumes:
   postgres_data:
