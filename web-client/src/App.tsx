@@ -1,73 +1,33 @@
-import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import './App.css';
-import HeaderComponent from './header.tsx';
-import MapComponent from './map.tsx';
-import { getMarkers } from './GetMarkes.ts';
-import BusStop from './BusStop.tsx';
+import { Navigate, Route, Routes } from "react-router-dom";
+import { Container } from "react-bootstrap";;
+import ProtectedRoute from "./utils/ProtectedRoute.tsx";
+// import LoginPage from "./pages/Login.tsx";
+import { AuthProvider } from './context/AuthContext';
 
-function App() {
-  const [searchValue, setSearchValue] = useState('');
-  const [markers, setMarkers] = useState([]);
-  const [selectedMarker, setSelectedMarker] = useState(null);
-  const [mapState, setMapState] = useState({
-    center: [55.751244, 37.618423], // Москва по умолчанию
-    zoom: 10
-  });
+const App = () => {
+    return (
+        <Container className="p-3" fluid>
+            <AuthProvider>
+                {/* <Header /> */}
+                <Routes>
+                  {/* Защищённые руты */}
+                    <Route element={<ProtectedRoute />}>
+                        {/* <Route index element={<ProductPage />} />
+                        <Route path="/products" element={<ProductPage />} />
+                        <Route path="/products/catalog" element={<ProductCatalogPage />} />
+                        <Route path="/components" element={<ComponentCatalogPage />} /> */}
+                    </Route>
 
-  useEffect(() => {
-    const fetchMarkers = async () => {
-      try {
-        const data = await getMarkers();
-        setMarkers(data);
-      } catch (error) {
-        console.error('Ошибка загрузки маркеров:', error);
-      }
-    };
+                    {/* Если зайдут на несуществующий путь — редирект на главную */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
 
-    // Первоначальная загрузка
-    fetchMarkers();
-
-    // Интервал для обновления
-    const intervalId = setInterval(fetchMarkers, 12000);
-
-    return () => clearInterval(intervalId);
-  }, []);
-
-  const handleMarkerSelect = (marker) => {
-    setSelectedMarker(marker);
-  };
-
-  const handleMapMove = (newCenter, newZoom) => {
-    setMapState({
-      center: newCenter,
-      zoom: newZoom
-    });
-  };
-
-  return (
-    <Router>
-      <Routes>
-        <Route path="/bus-stop" element={<BusStop />} />
-        <Route path="/" element={
-          <>
-            <HeaderComponent 
-              onSearchInputChange={setSearchValue} 
-              markers={markers} 
-              onMarkerSelect={handleMarkerSelect}
-            />
-            <MapComponent 
-              markers={markers} 
-              selectedMarker={selectedMarker}
-              initialCenter={mapState.center}
-              initialZoom={mapState.zoom}
-              onMapMove={handleMapMove}
-            />
-          </>
-        } />
-      </Routes>
-    </Router>
-  );
-}
+                    {/* Аутентификация */}
+                    {/* <Route path="/login" element={<LoginPage />} /> */}
+                    {/* <Route path="/unauthorized" element={<UnauthorizedPage />} /> */}
+                </Routes>
+            </AuthProvider>
+        </Container>
+    );
+};
 
 export default App;
