@@ -1,25 +1,56 @@
 // src/App.tsx
 import { Navigate, Route, Routes } from "react-router-dom";
-import { Container } from "react-bootstrap";
+import { Container, Row, Col } from "react-bootstrap";
 // import ProtectedRoute from "./utils/ProtectedRoute.tsx";
 // import { AuthProvider } from './context/AuthContext'; // Пока отключаем
+
+// Компоненты страниц
+import NavigationHeader from './components/NavigationHeader';
 import MapComponent from './pages/Map/Map';
+import AnalyticsPage from './pages/AnalyticsPage';
+import SimulationPage from './pages/SimulationPage';
+import ScenariosPage from './pages/ScenariosPage';
 
 const App = () => {
     return (
-        <Container className="p-3" fluid>
-            {/* Пока без авторизации */}
-            {/* <AuthProvider> */}
-                <Routes>
-                    {/* Публичные роуты - пока без защиты */}
-                    <Route path="/" element={<MapComponent />} />
-                    <Route path="/map" element={<MapComponent />} />
+        <div className="App">
+            {/* Навигационная панель */}
+            <NavigationHeader />
+            
+            {/* Основной контейнер с горизонтальной компоновкой */}
+            <Container fluid className="p-0">
+                <Row className="g-0">
+                    {/* Боковая панель (если нужна) */}
+                    {/* <Col md={2} className="bg-light border-end">
+                        <Sidebar />
+                    </Col> */}
                     
-                    {/* Редирект для несуществующих путей */}
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-            {/* </AuthProvider> */}
-        </Container>
+                    {/* Основное содержимое */}
+                    <Col className="p-3">
+                        {/* Пока без авторизации */}
+                        {/* <AuthProvider> */}
+                            <Routes>
+                                {/* Публичные роуты - пока без защиты */}
+                                
+                                {/* Главная страница - переадресация на карту */}
+                                <Route path="/" element={<Navigate to="/map" replace />} />
+                                
+                                {/* Карта в реальном времени (существующий функционал) */}
+                                <Route path="/map" element={<MapComponent />} />
+                                
+                                {/* Новые страницы для аналитики */}
+                                <Route path="/analytics" element={<AnalyticsPage />} />
+                                <Route path="/simulation" element={<SimulationPage />} />
+                                <Route path="/scenarios" element={<ScenariosPage />} />
+                                
+                                {/* Редирект для несуществующих путей */}
+                                <Route path="*" element={<Navigate to="/map" replace />} />
+                            </Routes>
+                        {/* </AuthProvider> */}
+                    </Col>
+                </Row>
+            </Container>
+        </div>
     );
 };
 
