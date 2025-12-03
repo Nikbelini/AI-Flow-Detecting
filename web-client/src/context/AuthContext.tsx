@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+// src/context/AuthContext.tsx
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { User, UserRoles } from "../utils/types/user";
 import { getCurrentUser, login as apiLogin, logout as apiLogout } from "../api/endpoints/auth";
 
@@ -7,6 +8,7 @@ type AuthContextType = {
     login: (username: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
     isLoading: boolean;
+    checkAuth: () => Promise<void>; // Добавляем метод для ручной проверки
 };
 
 const isValidRole = (role: string): role is UserRoles => {
@@ -17,56 +19,22 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
 
-    useEffect(() => {
-        const fetchUser = async () => {
-            try {
-                const userData = await getCurrentUser();
-                
-                if (!userData.role) {
-                    setUser(null);
-                    return;
-                }
-
-                if (!isValidRole(userData.role)) {
-                    setUser(null);
-                    return;
-                }
-
-                const safeUser: User = {
-                    id: userData.id,
-                    email: userData.email,
-                    fullName: userData.fullName,
-                    role: userData.role,
-                };
-
-                setUser(safeUser);
-            } catch (err) {
-                console.warn('Не удалось загрузить пользователя:', err);
-                setUser(null);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchUser();
-    }, []);
-
-    const login = async (username: string, password: string) => {
+    // Метод для ручной проверки авторизации
+    const checkAuth = async () => {
+        setIsLoading(true);
         try {
-            await apiLogin(username, password);
-            
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
             const userData = await getCurrentUser();
-
+            
             if (!userData.role) {
-                throw new Error('Отсутствует роль в ответе');
+                setUser(null);
+                return;
             }
 
             if (!isValidRole(userData.role)) {
-                throw new Error('Недопустимая роль');
+                setUser(null);
+                return;
             }
 
             const safeUser: User = {
@@ -77,8 +45,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             };
 
             setUser(safeUser);
-            
+        } catch (err) {
+            console.warn('Не удалось загрузить пользователя:', err);
+            setUser(null);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const login = async (username: string, password: string) => {
+        setIsLoading(true);
+        try {
+            await apiLogin(username, password);
+            await checkAuth(); // Проверяем после успешного логина
         } catch (err: any) {         
+            setIsLoading(false);
             if (err.response?.status === 401) {
                 throw new Error('Неверный логин или пароль');
             } else if (err.message) {
@@ -100,7 +81,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+        <AuthContext.Provider value={{ 
+            user, 
+            login, 
+            logout, 
+            isLoading,
+            checkAuth 
+        }}>
             {children}
         </AuthContext.Provider>
     );
