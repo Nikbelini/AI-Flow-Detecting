@@ -3,5 +3,13 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: true,  // Запрещаем автоматический выбор порта
+    watch: {
+    usePolling: true  // Нужно для работы в Docker (особенно на Windows/Mac)
+    }
+  },
   plugins: [react()],
 })

@@ -1,35 +1,44 @@
+// src/pages/Map/Map.tsx
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './MapComponent.css';
 import PopupContent from './PopupContent';
+import { getMarkers } from '../../api/markersApi'; // Только getMarkers
 
+// Определяем интерфейс здесь, если не экспортируется
 interface Marker {
-    id: number;
-    address: string;
-    url?: string;
-    count: number;
-    velocity: number;
-    load: number;
-    lat: number;
-    lng: number;
+  id: number;
+  address: string;
+  url?: string;
+  count: number;
+  velocity: number;
+  load: number;
+  lat: number;
+  lng: number;
+  coordinates?: [number, number];
 }
 
 interface ForecastState {
-    showForecast: boolean;
-    isForecastOpen: boolean;
-    forecastData: any;
-    autoRefresh: boolean;
-    showMiniChart: boolean;
+  showForecast: boolean;
+  isForecastOpen: boolean;
+  forecastData: any;
+  autoRefresh: boolean;
+  showMiniChart: boolean;
 }
 
 interface MapComponentProps {
-    markers?: Marker[];
-    selectedMarker?: Marker;
+  markers?: Marker[];
+  selectedMarker?: Marker;
+  onMarkersLoad?: (markers: Marker[]) => void;
 }
 
-const MapComponent: React.FC<MapComponentProps> = ({ markers = [], selectedMarker }) => {
+const MapComponent: React.FC<MapComponentProps> = ({ 
+    markers: externalMarkers, 
+    selectedMarker,
+    onMarkersLoad 
+}) => {
     const mapContainer = useRef(null);
     const map = useRef(null);
     const markersRef = useRef([]);
@@ -38,9 +47,48 @@ const MapComponent: React.FC<MapComponentProps> = ({ markers = [], selectedMarke
         center: [48.2412, 54.1851],
         zoom: 10
     });
+    
+    // Локальное состояние для маркеров, если не переданы извне
+    const [localMarkers, setLocalMarkers] = useState<Marker[]>([]);
+    const [loading, setLoading] = useState(!externalMarkers);
+    const [error, setError] = useState<string | null>(null);
+
+    // Используем либо внешние маркеры, либо локальные
+    const markers = externalMarkers || localMarkers;
 
     // Состояние прогнозов для каждого маркера
     const [forecastsState, setForecastsState] = useState<Map<string, ForecastState>>(new Map());
+
+    // Загрузка маркеров при монтировании, если не переданы извне
+    useEffect(() => {
+        if (!externalMarkers) {
+            fetchMarkers();
+            
+            // Автообновление каждые 30 секунд
+            const intervalId = setInterval(fetchMarkers, 30000);
+            return () => clearInterval(intervalId);
+        }
+    }, [externalMarkers]);
+
+    const fetchMarkers = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const fetchedMarkers = await getMarkers();
+            setLocalMarkers(fetchedMarkers);
+            
+            // Уведомляем родительский компонент
+            if (onMarkersLoad) {
+                onMarkersLoad(fetchedMarkers);
+            }
+        } catch (err) {
+            console.error('Failed to fetch markers:', err);
+            setError('Не удалось загрузить данные остановок');
+            // Можно использовать fallback данные
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // Инициализация карты
     useEffect(() => {
@@ -117,9 +165,9 @@ const MapComponent: React.FC<MapComponentProps> = ({ markers = [], selectedMarke
         };
     }, [forecastsState]);
 
-    // Обновление маркеров
+    // Обновление маркеров на карте
     useEffect(() => {
-        if (!map.current) return;
+        if (!map.current || loading) return;
 
         console.log('🔄 Updating markers, total:', markers.length);
 
@@ -145,10 +193,11 @@ const MapComponent: React.FC<MapComponentProps> = ({ markers = [], selectedMarke
         const markersInstances = markers.map(marker => {
             const el = document.createElement('div');
             el.className = 'marker';
-            el.style.backgroundColor = loadToColor(marker.load);
+            const color = loadToColor(marker.load);
+            el.style.backgroundColor = color;
             el.style.cursor = 'pointer';
-            el.style.setProperty('--marker-color', loadToColor(marker.load));
-            el.innerHTML = `<div class="marker-inner" style="color: ${loadToColor(marker.load)}">${marker.load}</div>`;
+            el.style.setProperty('--marker-color', color);
+            el.innerHTML = `<div class="marker-inner" style="color: ${color}">${marker.load}</div>`;
 
             // Создаем контейнер для React-компонента
             const popupContainer = document.createElement('div');
@@ -188,10 +237,12 @@ const MapComponent: React.FC<MapComponentProps> = ({ markers = [], selectedMarke
         });
 
         markersRef.current = markersInstances;
-    }, [markers, getForecastState, updateForecastState]);
+    }, [markers, loading, getForecastState, updateForecastState]);
 
     // Обновляем popup при изменении состояния прогноза
     useEffect(() => {
+        if (!markers.length) return;
+        
         console.log('🔄 Forecast state updated, updating popups');
         
         markersRef.current.forEach(markerInstance => {
@@ -202,10 +253,6 @@ const MapComponent: React.FC<MapComponentProps> = ({ markers = [], selectedMarke
                     const forecastState = getForecastState(address);
                     const marker = markers.find(m => m.address === address);
                     if (marker) {
-                        // Создаем новый контейнер
-                        const newContainer = document.createElement('div');
-                        const popup = markerInstance.getPopup();
-                        
                         root.render(
                             <PopupContent 
                                 marker={marker}
@@ -221,7 +268,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ markers = [], selectedMarke
 
     // Перемещение к выбранному маркеру
     useEffect(() => {
-        if (selectedMarker && map.current) {
+        if (selectedMarker && map.current && markers.length > 0) {
             // Находим соответствующий маркер
             const targetMarker = markersRef.current.find(m => 
                 m._address === selectedMarker.address
@@ -248,23 +295,51 @@ const MapComponent: React.FC<MapComponentProps> = ({ markers = [], selectedMarke
                 });
             }
         }
-    }, [selectedMarker]);
+    }, [selectedMarker, markers]);
 
     const loadToColor = (load: number): string => {
-        if (load <= 3) return "green";
-        if (load <= 7) return "yellow";
-        return "red";
+        if (load <= 3) return "#10b981"; // green
+        if (load <= 7) return "#f59e0b"; // yellow
+        return "#ef4444"; // red
     };
     
     return (
         <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
+            {/* Индикатор загрузки */}
+            {loading && (
+                <div className="map-loading-overlay">
+                    <div className="spinner"></div>
+                    <p>Загрузка остановок...</p>
+                </div>
+            )}
+            
+            {/* Сообщение об ошибке */}
+            {error && (
+                <div className="map-error-overlay">
+                    <div className="error-message">⚠️ {error}</div>
+                    <button className="retry-btn" onClick={fetchMarkers}>
+                        Повторить
+                    </button>
+                </div>
+            )}
+            
+            {/* Информация о загруженных маркерах */}
+            {!loading && markers.length > 0 && (
+                <div className="map-stats-overlay">
+                    <div className="stats-badge">
+                    🚏 {markers.length} остановок
+                    </div>
+                </div>
+            )}
+            
             <div
                 ref={mapContainer}
                 style={{
                     width: '100vw',
                     height: '100vh',
                     borderRadius: '8px',
-                    border: '1px solid #ccc'
+                    border: '1px solid #ccc',
+                    opacity: loading ? 0.7 : 1
                 }}
             />
         </div>
