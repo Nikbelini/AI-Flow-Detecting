@@ -1,6 +1,7 @@
 // src/pages/Map/ModalContent.tsx
 import React, { useState, useEffect } from 'react';
 import './ModalContent.css';
+import ForecastPanel from './ForecastPanel';
 
 interface Marker {
   id: number;
@@ -13,21 +14,34 @@ interface Marker {
   lng: number;
 }
 
+interface ForecastState {
+  showForecast: boolean;
+  isForecastOpen: boolean;
+  forecastData: any;
+  autoRefresh: boolean;
+  showMiniChart: boolean;
+}
+
 interface ModalContentProps {
   marker: Marker;
   isOpen: boolean;
   onClose: () => void;
-  onForecastClick?: () => void;
 }
 
 const ModalContent: React.FC<ModalContentProps> = ({ 
   marker, 
   isOpen, 
-  onClose,
-  onForecastClick 
+  onClose 
 }) => {
-  const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'stream'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'stream' | 'forecast'>('info');
   const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [forecastState, setForecastState] = useState<ForecastState>({
+    showForecast: false,
+    isForecastOpen: false,
+    forecastData: null,
+    autoRefresh: true,
+    showMiniChart: true
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -58,6 +72,21 @@ const ModalContent: React.FC<ModalContentProps> = ({
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const handleForecastStateChange = (updates: Partial<ForecastState>) => {
+    setForecastState(prev => ({ ...prev, ...updates }));
+    if (updates.isForecastOpen !== undefined) {
+      setActiveTab(updates.isForecastOpen ? 'forecast' : 'info');
+    }
+  };
+
+  const handleOpenForecast = () => {
+    handleForecastStateChange({ 
+      showForecast: true, 
+      isForecastOpen: true 
+    });
+    setActiveTab('forecast');
   };
 
   if (!isOpen) return null;
@@ -105,7 +134,6 @@ const ModalContent: React.FC<ModalContentProps> = ({
               className="icon-btn" 
               title="Развернуть на весь экран"
               onClick={() => {
-                // Логика для полноэкранного режима
                 if (document.fullscreenElement) {
                   document.exitFullscreen();
                 } else {
@@ -141,13 +169,23 @@ const ModalContent: React.FC<ModalContentProps> = ({
             <span className="tab-icon">📊</span>
             <span className="tab-text">Статистика</span>
           </button>
+          <button 
+            className={`tab-btn ${activeTab === 'forecast' ? 'active' : ''}`}
+            onClick={handleOpenForecast}
+          >
+            <span className="tab-icon">🔮</span>
+            <span className="tab-text">Прогноз</span>
+            {forecastState.forecastData && (
+              <span className="tab-badge">🔄</span>
+            )}
+          </button>
           {marker.url && (
             <button 
               className={`tab-btn ${activeTab === 'stream' ? 'active' : ''}`}
               onClick={() => setActiveTab('stream')}
             >
               <span className="tab-icon">🎥</span>
-              <span className="tab-text">Прямая трансляция</span>
+              <span className="tab-text">Трансляция</span>
             </button>
           )}
         </div>
@@ -221,16 +259,16 @@ const ModalContent: React.FC<ModalContentProps> = ({
                 </div>
               </div>
 
-              {/* Прогноз */}
-              <div className="forecast-section">
+              {/* Быстрый прогноз */}
+              <div className="forecast-preview-section">
                 <div className="section-header">
                   <h3>
                     <span className="section-icon">🔮</span>
-                    Прогноз на 1 час
+                    Быстрый прогноз
                   </h3>
                   <button 
                     className="forecast-btn"
-                    onClick={onForecastClick}
+                    onClick={handleOpenForecast}
                   >
                     <span className="btn-icon">📈</span>
                     Подробный прогноз
@@ -363,6 +401,25 @@ const ModalContent: React.FC<ModalContentProps> = ({
             </div>
           )}
 
+          {/* Прогноз */}
+          {activeTab === 'forecast' && (
+            <div className="tab-content forecast-tab">
+              <ForecastPanel
+                address={marker.address}
+                stopData={{
+                  count: marker.count,
+                  load: marker.load,
+                  velocity: marker.velocity
+                }}
+                onClose={() => handleForecastStateChange({ isForecastOpen: false })}
+                isOpen={forecastState.isForecastOpen}
+                onToggle={(isOpen) => handleForecastStateChange({ isForecastOpen: isOpen })}
+                forecastState={forecastState}
+                onForecastDataUpdate={(data) => handleForecastStateChange({ forecastData: data })}
+              />
+            </div>
+          )}
+
           {/* Прямая трансляция */}
           {activeTab === 'stream' && marker.url && (
             <div className="tab-content stream-tab">
@@ -434,9 +491,14 @@ const ModalContent: React.FC<ModalContentProps> = ({
         {/* Modal Footer */}
         <div className="modal-footer">
           <div className="footer-actions">
-            <button className="action-btn primary" onClick={onForecastClick}>
+            <button 
+              className={`action-btn ${activeTab === 'forecast' ? 'secondary' : 'primary'}`}
+              onClick={handleOpenForecast}
+            >
               <span className="btn-icon">📊</span>
-              <span className="btn-text">Полный прогноз</span>
+              <span className="btn-text">
+                {activeTab === 'forecast' ? 'Скрыть прогноз' : 'Полный прогноз'}
+              </span>
             </button>
             <button className="action-btn secondary">
               <span className="btn-icon">📈</span>
