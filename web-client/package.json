@@ -13,6 +13,7 @@
     "axios": "^1.13.2",
     "hls": "^0.0.1",
     "hls.js": "^1.6.15",
+    "lucide-react": "^0.555.0",
     "maplibre-gl": "^5.14.0",
     "react": "^19.2.0",
     "react-bootstrap": "^2.10.10",
