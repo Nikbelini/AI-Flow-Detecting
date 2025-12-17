@@ -1,4 +1,3 @@
-// src/context/AuthContext.tsx
 import { createContext, useContext, useState, type ReactNode } from "react";
 import type { User, UserRoles } from "../utils/types/user";
 import { getCurrentUser, login as apiLogin, logout as apiLogout } from "../api/endpoints/auth";

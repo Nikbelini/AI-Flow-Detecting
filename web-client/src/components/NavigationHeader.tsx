@@ -1,4 +1,3 @@
-// src/components/NavigationHeader.tsx
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -53,7 +52,7 @@ const NavigationHeader: React.FC = () => {
   const navItems = [
     { key: 'map', label: 'Карта', color: 'primary', badge: 'LIVE' },
     { key: 'analytics', label: 'Аналитика', color: 'info', badge: 'Новое' },
-    { key: 'scenarios', label: 'Сценарии', color: 'warning' },
+    { key: 'login', label: 'Логин', color: 'warning' },
     { key: 'simulation', label: 'Симулятор', color: 'danger' }
   ];
 
@@ -70,7 +69,7 @@ const NavigationHeader: React.FC = () => {
                 <span className="ai-badge">AI</span>
               </div>
               <div className="logo-text">
-                <span className="logo-title">TransitFlow</span>
+                <span className="logo-title">FlowDetect</span>
                 <span className="logo-subtitle">Система анализа пассажиропотоков</span>
               </div>
             </Link>
@@ -124,8 +123,7 @@ const NavigationHeader: React.FC = () => {
                 <PersonCircle size={28} className="text-primary" />
               </div>
               <div className="profile-info">
-                <div className="profile-name">Аналитик</div>
-                <div className="profile-role">Уровень: Профессионал</div>
+                <div className="profile-name">Пассажир / Водитель</div>
               </div>
             </div>
 

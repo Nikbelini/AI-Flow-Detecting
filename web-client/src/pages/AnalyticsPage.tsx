@@ -18,9 +18,9 @@ const AnalyticsPage: React.FC = () => {
 
   const tools = [
     { icon: '📊', title: 'Генератор отчетов', desc: 'Автоматические отчеты PDF/Excel' },
-    { icon: '🎯', title: 'Прогноз на завтра', desc: 'Автоматический расчет' },
-    { icon: '🔍', title: 'Детектор аномалий', desc: 'Выявить отклонения от нормы' },
-    { icon: '📈', title: 'Анализ трендов', desc: 'Сравнение периодов' },
+    { icon: '🎯', title: 'Статистика (диаграммы, графики)', desc: 'Отображение' },
+    { icon: '🔍', title: 'Просмотр маршрутов', desc: 'Более быстрый маршрут' },
+    { icon: '📈', title: 'Оптимизационное решение', desc: 'Решение оптимизации' },
     { icon: '🔄', title: 'Калибровка модели', desc: 'Обновить коэффициенты' },
     { icon: '💾', title: 'Экспорт данных', desc: 'CSV, JSON, API' }
   ];
@@ -153,7 +153,7 @@ const AnalyticsPage: React.FC = () => {
           </div>
           <div className="card-footer">
             <Link to="/simulation" className="simulation-button">
-              🎮 Запустить симуляцию
+              🎮 Запустить обучение модели
             </Link>
           </div>
         </div>

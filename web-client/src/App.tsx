@@ -1,8 +1,7 @@
-// src/App.tsx
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Container, Row, Col } from "react-bootstrap";
 // import ProtectedRoute from "./utils/ProtectedRoute.tsx";
-// import { AuthProvider } from './context/AuthContext'; // Пока отключаем
+import { AuthProvider } from './context/AuthContext'; // Пока отключаем
 
 // Компоненты страниц
 import NavigationHeader from './components/NavigationHeader';
@@ -10,6 +9,8 @@ import MapComponent from './pages/Map/Map';
 import AnalyticsPage from './pages/AnalyticsPage';
 import SimulationPage from './pages/SimulationPage';
 import ScenariosPage from './pages/ScenariosPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from "./pages/RegisterPage";
 
 const App = () => {
     return (
@@ -28,7 +29,7 @@ const App = () => {
                     {/* Основное содержимое */}
                     <Col className="p-3">
                         {/* Пока без авторизации */}
-                        {/* <AuthProvider> */}
+                        <AuthProvider>
                             <Routes>
                                 {/* Публичные роуты - пока без защиты */}
                                 
@@ -39,6 +40,9 @@ const App = () => {
                                 <Route path="/map" element={<MapComponent />} />
                                 
                                 {/* Новые страницы для аналитики */}
+                                <Route path="/login" element={<LoginPage />} />
+                                <Route path="/registration" element={<RegisterPage />} />
+
                                 <Route path="/analytics" element={<AnalyticsPage />} />
                                 <Route path="/simulation" element={<SimulationPage />} />
                                 <Route path="/scenarios" element={<ScenariosPage />} />
@@ -46,7 +50,7 @@ const App = () => {
                                 {/* Редирект для несуществующих путей */}
                                 <Route path="*" element={<Navigate to="/map" replace />} />
                             </Routes>
-                        {/* </AuthProvider> */}
+                        </AuthProvider>
                     </Col>
                 </Row>
             </Container>

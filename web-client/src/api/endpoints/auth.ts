@@ -8,3 +8,6 @@ export const getCurrentUser = () =>
 
 export const logout = () =>
     Api.post('/auth/logout').then(res => res.data);
+
+export const register = () =>
+    Api.post('/auth/register').then(res => res.data)

@@ -647,19 +647,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
                     </button>
                 </div>
                 
-                {/* Бейдж с количеством маркеров */}
-                {/*{!loading && markers.length > 0 && (
-                    <div className="map-stats-badge">
-                        <div className="stats-content">
-                            <span className="stats-icon">🚏</span>
-                            <span className="stats-text">{filteredMarkers.length}/{markers.length} остановок</span>
-                            {selectedFilters.length > 0 && (
-                                <span className="filter-indicator">{selectedFilters.length} фильтр(а)</span>
-                            )}
-                        </div>
-                    </div>
-                )}*/}
-                
                 <div
                     ref={mapContainer}
                     className="map-container"
