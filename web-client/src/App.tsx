@@ -1,73 +1,61 @@
-import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import './App.css';
-import HeaderComponent from './header.tsx';
-import MapComponent from './map.tsx';
-import { getMarkers } from './GetMarkes.ts';
-import BusStop from './BusStop.tsx';
+import { Navigate, Route, Routes } from "react-router-dom";
+import { Container, Row, Col } from "react-bootstrap";
+// import ProtectedRoute from "./utils/ProtectedRoute.tsx";
+import { AuthProvider } from './context/AuthContext'; // Пока отключаем
 
-function App() {
-  const [searchValue, setSearchValue] = useState('');
-  const [markers, setMarkers] = useState([]);
-  const [selectedMarker, setSelectedMarker] = useState(null);
-  const [mapState, setMapState] = useState({
-    center: [55.751244, 37.618423], // Москва по умолчанию
-    zoom: 10
-  });
+// Компоненты страниц
+import NavigationHeader from './components/NavigationHeader';
+import MapComponent from './pages/Map/Map';
+import AnalyticsPage from './pages/AnalyticsPage';
+import SimulationPage from './pages/SimulationPage';
+import ScenariosPage from './pages/ScenariosPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from "./pages/RegisterPage";
 
-  useEffect(() => {
-    const fetchMarkers = async () => {
-      try {
-        const data = await getMarkers();
-        setMarkers(data);
-      } catch (error) {
-        console.error('Ошибка загрузки маркеров:', error);
-      }
-    };
+const App = () => {
+    return (
+        <div className="App">
+            {/* Навигационная панель */}
+            <NavigationHeader />
+            
+            {/* Основной контейнер с горизонтальной компоновкой */}
+            <Container fluid className="p-0">
+                <Row className="g-0">
+                    {/* Боковая панель (если нужна) */}
+                    {/* <Col md={2} className="bg-light border-end">
+                        <Sidebar />
+                    </Col> */}
+                    
+                    {/* Основное содержимое */}
+                    <Col className="p-3">
+                        {/* Пока без авторизации */}
+                        <AuthProvider>
+                            <Routes>
+                                {/* Публичные роуты - пока без защиты */}
+                                
+                                {/* Главная страница - переадресация на карту */}
+                                <Route path="/" element={<Navigate to="/map" replace />} />
+                                
+                                {/* Карта в реальном времени (существующий функционал) */}
+                                <Route path="/map" element={<MapComponent />} />
+                                
+                                {/* Новые страницы для аналитики */}
+                                <Route path="/login" element={<LoginPage />} />
+                                <Route path="/registration" element={<RegisterPage />} />
 
-    // Первоначальная загрузка
-    fetchMarkers();
-
-    // Интервал для обновления
-    const intervalId = setInterval(fetchMarkers, 12000);
-
-    return () => clearInterval(intervalId);
-  }, []);
-
-  const handleMarkerSelect = (marker) => {
-    setSelectedMarker(marker);
-  };
-
-  const handleMapMove = (newCenter, newZoom) => {
-    setMapState({
-      center: newCenter,
-      zoom: newZoom
-    });
-  };
-
-  return (
-    <Router>
-      <Routes>
-        <Route path="/bus-stop" element={<BusStop />} />
-        <Route path="/" element={
-          <>
-            <HeaderComponent 
-              onSearchInputChange={setSearchValue} 
-              markers={markers} 
-              onMarkerSelect={handleMarkerSelect}
-            />
-            <MapComponent 
-              markers={markers} 
-              selectedMarker={selectedMarker}
-              initialCenter={mapState.center}
-              initialZoom={mapState.zoom}
-              onMapMove={handleMapMove}
-            />
-          </>
-        } />
-      </Routes>
-    </Router>
-  );
-}
+                                <Route path="/analytics" element={<AnalyticsPage />} />
+                                <Route path="/simulation" element={<SimulationPage />} />
+                                <Route path="/scenarios" element={<ScenariosPage />} />
+                                
+                                {/* Редирект для несуществующих путей */}
+                                <Route path="*" element={<Navigate to="/map" replace />} />
+                            </Routes>
+                        </AuthProvider>
+                    </Col>
+                </Row>
+            </Container>
+        </div>
+    );
+};
 
 export default App;
