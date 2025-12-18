@@ -2,7 +2,7 @@ nc: 5
 names:
 - human
 - bus stop
-- road signs
+- мsigns
 - window
 - columns
 path: dataset

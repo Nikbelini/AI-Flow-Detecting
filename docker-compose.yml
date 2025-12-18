@@ -57,6 +57,26 @@ services:
       retries: 3
     restart: unless-stopped
 
+  passenger-flow-predicted:
+    build:
+      context: ./passenger-flow-predicted
+      dockerfile: Dockerfile
+    container_name: passenger-flow-predicted
+    ports:
+      - "8083:8083"
+    environment:
+      DB_URL: postgresql://postgres:postgres@postgres:5432/stops
+    depends_on:
+      - postgres
+    volumes:
+      - ./models:/app/result/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
   video-stream-service:
     dns:
       - 8.8.8.8
