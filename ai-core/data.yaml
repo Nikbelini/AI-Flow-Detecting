@@ -1,10 +1,6 @@
-nc: 5
+nc: 1
 names:
 - human
-- bus stop
-- мsigns
-- window
-- columns
 path: dataset
 train: train_split
 val: val_split
