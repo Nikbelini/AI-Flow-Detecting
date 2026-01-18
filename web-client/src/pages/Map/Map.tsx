@@ -7,10 +7,12 @@ import ModalContent from './ModalContent';
 import { getMarkers } from '../../api/markersApi';
 import { 
   Clock, Filter, Layers, RefreshCw, Zap, BarChart, 
-  MapPin, Maximize2, Minimize2, Settings, X 
+  MapPin, Maximize2, Minimize2, Settings, X,
+  Route as RouteIcon // Переименовываем Route из lucide-react
 } from 'lucide-react';
 
-interface Marker {
+// Обновляем интерфейс, чтобы избежать конфликта имен
+interface MarkerData {
   id: number;
   address: string;
   url?: string;
@@ -31,22 +33,38 @@ interface ForecastState {
 }
 
 interface MapComponentProps {
-  markers?: Marker[];
-  selectedMarker?: Marker;
-  onMarkersLoad?: (markers: Marker[]) => void;
+  markers?: MarkerData[];
+  selectedMarker?: MarkerData;
+  onMarkersLoad?: (markers: MarkerData[]) => void;
+  onMapClick?: (lat: number, lng: number) => void;
+  onMarkerClick?: (marker: MarkerData) => void;
+  isCreatingStop?: boolean;
+  isCreatingRoute?: boolean;
+  selectedStops?: number[];
+  tempStopLocation?: {lat: number, lng: number} | null;
+  routeCoordinates?: [number, number][];
 }
 
 const MapComponent: React.FC<MapComponentProps> = ({ 
     markers: externalMarkers, 
     selectedMarker,
-    onMarkersLoad 
+    onMarkersLoad,
+    onMapClick,
+    onMarkerClick,
+    isCreatingStop = false,
+    isCreatingRoute = false,
+    selectedStops = [],
+    tempStopLocation,
+    routeCoordinates = []
 }) => {
     const mapContainer = useRef(null);
     const map = useRef<maplibregl.Map | null>(null);
     const markersRef = useRef<maplibregl.Marker[]>([]);
+    const tempMarkerRef = useRef<maplibregl.Marker | null>(null);
+    const routeLineRef = useRef<maplibregl.Layer | null>(null);
     
     // Состояния UI
-    const [localMarkers, setLocalMarkers] = useState<Marker[]>([]);
+    const [localMarkers, setLocalMarkers] = useState<MarkerData[]>([]);
     const [loading, setLoading] = useState(!externalMarkers);
     const [error, setError] = useState<string | null>(null);
     const [autoRefresh, setAutoRefresh] = useState(true);
@@ -62,7 +80,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
     });
     
     // Модальное окно
-    const [selectedModalMarker, setSelectedModalMarker] = useState<Marker | null>(null);
+    const [selectedModalMarker, setSelectedModalMarker] = useState<MarkerData | null>(null);
     const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
     const [forecastsState, setForecastsState] = useState<Map<string, ForecastState>>(new Map());
 
@@ -109,7 +127,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         }
     };
 
-    const updateMapStats = (markers: Marker[]) => {
+    const updateMapStats = (markers: MarkerData[]) => {
       const total = markers.length;
       const avgLoad = total > 0 ? Math.round(markers.reduce((sum, m) => sum + m.load, 0) / total) : 0;
       const maxLoad = Math.max(...markers.map(m => m.load), 0);
@@ -161,10 +179,21 @@ const MapComponent: React.FC<MapComponentProps> = ({
             unit: 'metric'
         }));
 
+        // Добавляем обработчик клика на карту
+        map.current.on('click', (e) => {
+          if (onMapClick && isCreatingStop) {
+            const { lng, lat } = e.lngLat;
+            onMapClick(lat, lng);
+          }
+        });
+
         return () => {
             if (map.current) {
                 map.current.remove();
                 markersRef.current.forEach(marker => marker.remove());
+                if (tempMarkerRef.current) {
+                  tempMarkerRef.current.remove();
+                }
             }
         };
     }, []);
@@ -185,9 +214,17 @@ const MapComponent: React.FC<MapComponentProps> = ({
         });
     }, []);
 
-    // Обработчик клика на маркер - ТОЛЬКО модальное окно
-    const handleMarkerClick = (marker: Marker) => {
-        console.log('Marker clicked:', marker.address);
+    // Обработчик клика на маркер - с учетом режима создания маршрута
+    const handleMarkerClick = (marker: MarkerData) => {
+        if (isCreatingRoute && onMarkerClick) {
+            // В режиме создания маршрута передаем клик в родительский компонент
+            console.log('Creating route: marker clicked:', marker.address);
+            onMarkerClick(marker);
+            return;
+        }
+        
+        // Стандартное поведение - открыть модалку
+        console.log('Standard click: marker clicked:', marker.address);
         setSelectedModalMarker(marker);
         
         // Плавно приближаем карту к маркеру (опционально)
@@ -210,46 +247,62 @@ const MapComponent: React.FC<MapComponentProps> = ({
     });
 
     // Создание кастомного маркера БЕЗ попапа
-    const createCustomMarker = (marker: Marker): HTMLDivElement => {
+    const createCustomMarker = (marker: MarkerData): HTMLDivElement => {
         const el = document.createElement('div');
         el.className = 'custom-marker';
+        
+        // Определяем состояние маркера
+        const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
         const color = loadToColor(marker.load);
         const size = getMarkerSize(marker.load);
+        const selectedIndex = isSelected ? selectedStops.indexOf(marker.id) + 1 : 0;
         
         // Базовые стили
         el.style.width = `${size}px`;
         el.style.height = `${size}px`;
-        el.style.backgroundColor = color;
+        el.style.backgroundColor = isSelected ? '#3B82F6' : color; // Синий для выбранных
         el.style.cursor = 'pointer';
-        el.style.border = '3px solid white';
+        el.style.border = isSelected ? '3px solid #2563EB' : '3px solid white';
         el.style.borderRadius = '50%';
-        el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+        el.style.boxShadow = isSelected 
+          ? '0 4px 12px rgba(37, 99, 235, 0.5)' 
+          : '0 4px 12px rgba(0,0,0,0.3)';
         el.style.display = 'flex';
         el.style.alignItems = 'center';
         el.style.justifyContent = 'center';
         el.style.transition = 'all 0.3s ease';
-        el.style.zIndex = '10';
+        el.style.zIndex = isSelected ? '100' : '10';
         el.style.position = 'relative';
-        el.style.transformOrigin = 'center center'; // Фиксируем точку трансформации
+        el.style.transformOrigin = 'center center';
 
-        // Внешний контур для анимации
-        const pulse = document.createElement('div');
-        pulse.className = 'marker-pulse';
-        pulse.style.position = 'absolute';
-        pulse.style.top = '0';
-        pulse.style.left = '0';
-        pulse.style.right = '0';
-        pulse.style.bottom = '0';
-        pulse.style.borderRadius = '50%';
-        pulse.style.border = `2px solid ${color}`;
-        pulse.style.opacity = '0.5';
-        pulse.style.animation = 'pulse 2s infinite';
-        el.appendChild(pulse);
+        // Пульсация для выбранных маркеров
+        if (isSelected) {
+          const pulse = document.createElement('div');
+          pulse.className = 'marker-pulse-selected';
+          pulse.style.position = 'absolute';
+          pulse.style.top = '-6px';
+          pulse.style.left = '-6px';
+          pulse.style.right = '-6px';
+          pulse.style.bottom = '-6px';
+          pulse.style.borderRadius = '50%';
+          pulse.style.border = '2px solid #3B82F6';
+          pulse.style.opacity = '0.5';
+          pulse.style.animation = 'pulse 1.5s infinite';
+          el.appendChild(pulse);
+        }
 
         // Создаем текстовое содержимое
         const text = document.createElement('div');
         text.className = 'marker-text';
-        text.textContent = marker.load.toString();
+        
+        if (isSelected && selectedIndex > 0) {
+          // Показываем номер порядка для выбранных остановок
+          text.textContent = selectedIndex.toString();
+        } else {
+          // Показываем загрузку для обычных остановок
+          text.textContent = marker.load.toString();
+        }
+        
         text.style.color = 'white';
         text.style.fontWeight = 'bold';
         text.style.fontSize = size > 40 ? '14px' : '12px';
@@ -261,28 +314,35 @@ const MapComponent: React.FC<MapComponentProps> = ({
         // Всплывающая подсказка (будет через CSS псевдоэлемент)
         el.setAttribute('data-address', marker.address);
         el.setAttribute('data-load', marker.load.toString());
+        el.setAttribute('data-selected', isSelected.toString());
 
         return el;
     };
 
     // Добавление обработчиков к маркеру
-    const addMarkerEventListeners = (markerElement: HTMLDivElement, marker: Marker) => {
+    const addMarkerEventListeners = (markerElement: HTMLDivElement, marker: MarkerData) => {
         const handleClick = (e: MouseEvent) => {
             e.stopPropagation();
             e.preventDefault();
+            console.log('Marker element clicked, isCreatingRoute:', isCreatingRoute);
             handleMarkerClick(marker);
         };
 
         const handleMouseEnter = () => {
-            // Не двигаем маркер, только меняем тень и добавляем класс
-            markerElement.style.boxShadow = '0 6px 20px rgba(0,0,0,0.4)';
+            // Подсветка при наведении
+            markerElement.style.boxShadow = isCreatingRoute 
+              ? '0 6px 20px rgba(0,0,0,0.4)'
+              : '0 6px 20px rgba(0,0,0,0.4)';
             markerElement.style.zIndex = '100';
             markerElement.classList.add('marker-hover');
         };
 
         const handleMouseLeave = () => {
-            markerElement.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
-            markerElement.style.zIndex = '10';
+            const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
+            markerElement.style.boxShadow = isSelected 
+              ? '0 4px 12px rgba(37, 99, 235, 0.5)' 
+              : '0 4px 12px rgba(0,0,0,0.3)';
+            markerElement.style.zIndex = isSelected ? '100' : '10';
             markerElement.classList.remove('marker-hover');
         };
 
@@ -314,6 +374,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
         if (!map.current || loading) return;
 
         console.log('🔄 Updating markers, total:', filteredMarkers.length);
+        console.log('Selected stops for route:', selectedStops);
+        console.log('Is creating route:', isCreatingRoute);
 
         // Удаляем старые маркеры
         markersRef.current.forEach((markerInstance, index) => {
@@ -344,14 +406,141 @@ const MapComponent: React.FC<MapComponentProps> = ({
         });
 
         markersRef.current = markersInstances;
-    }, [filteredMarkers, loading]);
+    }, [filteredMarkers, loading, isCreatingRoute, selectedStops]);
+
+    // Временный маркер для создания остановки
+    useEffect(() => {
+      if (!map.current) return;
+      
+      // Удаляем старый временный маркер
+      if (tempMarkerRef.current) {
+        tempMarkerRef.current.remove();
+        tempMarkerRef.current = null;
+      }
+      
+      // Добавляем новый временный маркер если есть координаты
+      if (tempStopLocation && isCreatingStop) {
+        const tempMarkerEl = document.createElement('div');
+        tempMarkerEl.className = 'temp-marker';
+        tempMarkerEl.innerHTML = `
+          <div class="temp-marker-pulse"></div>
+          <div class="temp-marker-center"></div>
+        `;
+        
+        tempMarkerRef.current = new maplibregl.Marker({
+          element: tempMarkerEl,
+          anchor: 'center'
+        })
+          .setLngLat([tempStopLocation.lng, tempStopLocation.lat])
+          .addTo(map.current);
+      }
+    }, [tempStopLocation, isCreatingStop]);
+
+    // Отрисовка линии маршрута
+    useEffect(() => {
+      if (!map.current) return;
+      
+      // Удаляем старую линию если есть
+      if (routeLineRef.current) {
+        if (map.current.getLayer('route-line')) {
+          map.current.removeLayer('route-line');
+        }
+        if (map.current.getLayer('route-line-dash')) {
+          map.current.removeLayer('route-line-dash');
+        }
+        if (map.current.getSource('route-line')) {
+          map.current.removeSource('route-line');
+        }
+        routeLineRef.current = null;
+      }
+      
+      // Добавляем новую линию если есть координаты
+      if (routeCoordinates.length >= 2 && isCreatingRoute) {
+        console.log('Drawing route line with coordinates:', routeCoordinates);
+        
+        // Добавляем источник данных
+        map.current.addSource('route-line', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: routeCoordinates
+            },
+            properties: {}
+          }
+        });
+        
+        // Добавляем слой линии
+        map.current.addLayer({
+          id: 'route-line',
+          type: 'line',
+          source: 'route-line',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#3B82F6',
+            'line-width': 4,
+            'line-opacity': 0.8
+          }
+        });
+        
+        // Добавляем пунктирную линию для эффекта
+        map.current.addLayer({
+          id: 'route-line-dash',
+          type: 'line',
+          source: 'route-line',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#60A5FA',
+            'line-width': 2,
+            'line-dasharray': [2, 2],
+            'line-opacity': 0.6
+          }
+        });
+        
+        routeLineRef.current = map.current.getLayer('route-line');
+        
+        // Подсвечиваем выбранные остановки
+        highlightSelectedStops();
+      }
+    }, [routeCoordinates, isCreatingRoute]);
+
+    // Подсветка выбранных остановок
+    const highlightSelectedStops = () => {
+      if (!map.current || !isCreatingRoute || selectedStops.length === 0) return;
+      
+      // Анимируем выбранные маркеры
+      selectedStops.forEach((stopId, index) => {
+        const marker = markersRef.current.find(m => {
+          const element = m.getElement() as HTMLDivElement;
+          return element && element.getAttribute('data-address')?.includes(stopId.toString());
+        });
+        
+        if (marker) {
+          const element = marker.getElement() as HTMLDivElement;
+          element.style.animation = 'bounce 0.5s ease';
+          setTimeout(() => {
+            element.style.animation = '';
+          }, 500);
+        }
+      });
+    };
 
     // Эффект для выбранного маркера извне
     useEffect(() => {
         if (selectedMarker && map.current && markers.length > 0) {
             const marker = markers.find(m => m.address === selectedMarker.address);
             if (marker) {
-                setSelectedModalMarker(marker);
+                // Если мы не в режиме создания маршрута, открываем модалку
+                if (!isCreatingRoute) {
+                  setSelectedModalMarker(marker);
+                }
                 map.current.flyTo({
                     center: [marker.lng, marker.lat],
                     zoom: 15,
@@ -360,7 +549,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
                 });
             }
         }
-    }, [selectedMarker, markers]);
+    }, [selectedMarker, markers, isCreatingRoute]);
 
     const loadToColor = (load: number): string => {
         if (load <= 3) return "#10b981";
@@ -410,6 +599,31 @@ const MapComponent: React.FC<MapComponentProps> = ({
         return () => window.removeEventListener('keydown', handleEscape);
     }, [selectedModalMarker]);
 
+    // Изменение курсора в режиме создания
+    useEffect(() => {
+      if (map.current && mapContainer.current) {
+        const container = mapContainer.current as HTMLElement;
+        if (isCreatingStop) {
+          container.style.cursor = 'crosshair';
+        } else if (isCreatingRoute) {
+          container.style.cursor = 'pointer';
+        } else {
+          container.style.cursor = 'grab';
+        }
+      }
+    }, [isCreatingStop, isCreatingRoute]);
+
+    // Информация о режиме создания
+    const getCreationInfo = () => {
+      if (isCreatingStop) {
+        return 'Режим создания остановки: кликните на карте чтобы выбрать местоположение';
+      }
+      if (isCreatingRoute) {
+        return `Режим создания маршрута: кликните на остановки чтобы добавить их в маршрут (${selectedStops.length} выбрано)`;
+      }
+      return '';
+    };
+
     return (
         <div className="map-page">
             {/* Боковая панель управления */}
@@ -432,6 +646,28 @@ const MapComponent: React.FC<MapComponentProps> = ({
                                 <Minimize2 size={20} />
                             </button>
                         </div>
+
+                        {/* Информация о режиме создания */}
+                        {(isCreatingStop || isCreatingRoute) && (
+                          <div className="creation-mode-info">
+                            <div className="mode-indicator">
+                              {isCreatingStop ? (
+                                <>
+                                  <MapPin size={18} />
+                                  <span>Режим создания остановки</span>
+                                </>
+                              ) : (
+                                <>
+                                  <RouteIcon size={18} />
+                                  <span>Режим создания маршрута</span>
+                                </>
+                              )}
+                            </div>
+                            <div className="mode-instructions">
+                              <p>{getCreationInfo()}</p>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Статистика */}
                         <div className="stats-section">
@@ -577,6 +813,33 @@ const MapComponent: React.FC<MapComponentProps> = ({
                                     <div className="legend-color" style={{ backgroundColor: '#10b981' }}></div>
                                     <span>Низкая загрузка (1-3)</span>
                                 </div>
+                                {isCreatingRoute && (
+                                  <>
+                                    <div className="legend-item">
+                                      <div className="legend-color" style={{ 
+                                        backgroundColor: '#3B82F6'
+                                      }}></div>
+                                      <span>Выбранные для маршрута</span>
+                                    </div>
+                                    <div className="legend-item">
+                                      <div className="legend-line" style={{ 
+                                        backgroundColor: '#3B82F6',
+                                        height: '3px',
+                                        width: '24px'
+                                      }}></div>
+                                      <span>Линия маршрута</span>
+                                    </div>
+                                  </>
+                                )}
+                                {isCreatingStop && (
+                                  <div className="legend-item">
+                                    <div className="legend-color" style={{ 
+                                      backgroundColor: 'white',
+                                      border: '2px solid #3B82F6'
+                                    }}></div>
+                                    <span>Новая остановка</span>
+                                  </div>
+                                )}
                             </div>
                         </div>
                     </>
@@ -647,15 +910,50 @@ const MapComponent: React.FC<MapComponentProps> = ({
                     </button>
                 </div>
                 
+                {/* Индикатор режима создания */}
+                {(isCreatingStop || isCreatingRoute) && (
+                  <div className="creation-mode-banner">
+                    <div className="banner-content">
+                      {isCreatingStop ? (
+                        <>
+                          <MapPin size={18} />
+                          <span>Режим создания остановки</span>
+                          <span className="banner-hint">Кликните на карте чтобы выбрать местоположение</span>
+                        </>
+                      ) : (
+                        <>
+                          <RouteIcon size={18} />
+                          <span>Режим создания маршрута</span>
+                          <span className="banner-hint">Кликните на остановки чтобы добавить их в маршрут</span>
+                          {selectedStops.length > 0 && (
+                            <span className="banner-count">Выбрано: {selectedStops.length} остановок</span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <button 
+                      className="banner-close"
+                      onClick={() => {
+                        // Можно добавить обработчик отмены
+                      }}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                )}
+                
                 <div
                     ref={mapContainer}
                     className="map-container"
-                    style={{ opacity: loading ? 0.7 : 1 }}
+                    style={{ 
+                      opacity: loading ? 0.7 : 1,
+                      cursor: isCreatingStop ? 'crosshair' : isCreatingRoute ? 'pointer' : 'grab'
+                    }}
                 />
             </div>
 
-            {/* Модальное окно */}
-            {selectedModalMarker && (
+            {/* Модальное окно - только если не в режиме создания маршрута */}
+            {selectedModalMarker && !isCreatingRoute && (
                 <ModalContent
                     marker={selectedModalMarker}
                     isOpen={!!selectedModalMarker}
@@ -665,7 +963,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
             )}
             
             {/* Кнопка закрытия модального окна */}
-            {selectedModalMarker && (
+            {selectedModalMarker && !isCreatingRoute && (
                 <button 
                     className="modal-close-btn"
                     onClick={() => setSelectedModalMarker(null)}
