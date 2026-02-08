@@ -1,979 +1,376 @@
-// src/pages/Map/Map.tsx
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './MapComponent.css';
 import ModalContent from './ModalContent';
 import { getMarkers } from '../../api/markersApi';
-import { 
-  Clock, Filter, Layers, RefreshCw, Zap, BarChart, 
-  MapPin, Maximize2, Minimize2, Settings, X,
-  Route as RouteIcon // Переименовываем Route из lucide-react
-} from 'lucide-react';
+import { Clock, Filter, RefreshCw, Zap, BarChart, MapPin, Minimize2, Maximize2, X } from 'lucide-react';
 
-// Обновляем интерфейс, чтобы избежать конфликта имен
 interface MarkerData {
   id: number;
   address: string;
-  url?: string;
   count: number;
   velocity: number;
   load: number;
   lat: number;
   lng: number;
-  coordinates?: [number, number];
-}
-
-interface ForecastState {
-  showForecast: boolean;
-  isForecastOpen: boolean;
-  forecastData: any;
-  autoRefresh: boolean;
-  showMiniChart: boolean;
 }
 
 interface MapComponentProps {
   markers?: MarkerData[];
-  selectedMarker?: MarkerData;
-  onMarkersLoad?: (markers: MarkerData[]) => void;
   onMapClick?: (lat: number, lng: number) => void;
   onMarkerClick?: (marker: MarkerData) => void;
   isCreatingStop?: boolean;
   isCreatingRoute?: boolean;
   selectedStops?: number[];
-  tempStopLocation?: {lat: number, lng: number} | null;
-  routeCoordinates?: [number, number][];
 }
 
-const MapComponent: React.FC<MapComponentProps> = ({ 
-    markers: externalMarkers, 
-    selectedMarker,
-    onMarkersLoad,
-    onMapClick,
-    onMarkerClick,
-    isCreatingStop = false,
-    isCreatingRoute = false,
-    selectedStops = [],
-    tempStopLocation,
-    routeCoordinates = []
+const MapComponent: React.FC<MapComponentProps> = ({
+  markers: externalMarkers,
+  onMapClick,
+  onMarkerClick,
+  isCreatingStop = false,
+  isCreatingRoute = false,
+  selectedStops = []
 }) => {
-    const mapContainer = useRef(null);
-    const map = useRef<maplibregl.Map | null>(null);
-    const markersRef = useRef<maplibregl.Marker[]>([]);
-    const tempMarkerRef = useRef<maplibregl.Marker | null>(null);
-    const routeLineRef = useRef<maplibregl.Layer | null>(null);
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<maplibregl.Marker[]>([]);
+
+  const [localMarkers, setLocalMarkers] = useState<MarkerData[]>([]);
+  const [loading, setLoading] = useState(!externalMarkers);
+  const [error, setError] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [selectedModalMarker, setSelectedModalMarker] = useState<MarkerData | null>(null);
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+
+  const markers = externalMarkers || localMarkers;
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!externalMarkers) {
+      fetchMarkers();
+    }
+  }, [externalMarkers]);
+
+  const fetchMarkers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const fetchedMarkers = await getMarkers();
+      setLocalMarkers(fetchedMarkers);
+    } catch (err) {
+      console.error('Failed to fetch markers:', err);
+      setError('Не удалось загрузить данные остановок');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!mapContainer.current) return;
     
-    // Состояния UI
-    const [localMarkers, setLocalMarkers] = useState<MarkerData[]>([]);
-    const [loading, setLoading] = useState(!externalMarkers);
-    const [error, setError] = useState<string | null>(null);
-    const [autoRefresh, setAutoRefresh] = useState(true);
-    const [showHeatmap, setShowHeatmap] = useState(true);
-    const [showTraffic, setShowTraffic] = useState(true);
-    const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
-    const [currentTime, setCurrentTime] = useState(new Date());
-    const [mapStats, setMapStats] = useState({
-      totalStops: 0,
-      avgLoad: 0,
-      maxLoad: 0,
-      activeRoutes: 0
-    });
-    
-    // Модальное окно
-    const [selectedModalMarker, setSelectedModalMarker] = useState<MarkerData | null>(null);
-    const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-    const [forecastsState, setForecastsState] = useState<Map<string, ForecastState>>(new Map());
-
-    const markers = externalMarkers || localMarkers;
-
-    // Таймер для автообновления времени
-    useEffect(() => {
-      const timer = setInterval(() => {
-        setCurrentTime(new Date());
-      }, 60000);
-      
-      return () => clearInterval(timer);
-    }, []);
-
-    // Загрузка маркеров
-    useEffect(() => {
-        if (!externalMarkers) {
-            fetchMarkers();
-            
-            if (autoRefresh) {
-              const intervalId = setInterval(fetchMarkers, 30000);
-              return () => clearInterval(intervalId);
-            }
-        }
-    }, [externalMarkers, autoRefresh]);
-
-    const fetchMarkers = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const fetchedMarkers = await getMarkers();
-            setLocalMarkers(fetchedMarkers);
-            
-            updateMapStats(fetchedMarkers);
-            
-            if (onMarkersLoad) {
-                onMarkersLoad(fetchedMarkers);
-            }
-        } catch (err) {
-            console.error('Failed to fetch markers:', err);
-            setError('Не удалось загрузить данные остановок');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const updateMapStats = (markers: MarkerData[]) => {
-      const total = markers.length;
-      const avgLoad = total > 0 ? Math.round(markers.reduce((sum, m) => sum + m.load, 0) / total) : 0;
-      const maxLoad = Math.max(...markers.map(m => m.load), 0);
-      const activeRoutes = new Set(markers.map(m => m.url?.split('/').pop() || '')).size;
-      
-      setMapStats({ totalStops: total, avgLoad, maxLoad, activeRoutes });
-    };
-
-    // Инициализация карты
-    useEffect(() => {
-        if (!mapContainer.current) return;
-
-        map.current = new maplibregl.Map({
-            container: mapContainer.current,
-            style: {
-                version: 8,
-                sources: {
-                    'osm-raster-tiles': {
-                        type: 'raster',
-                        tiles: [
-                            'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
-                        ],
-                        tileSize: 256,
-                        attribution: '© OpenStreetMap'
-                    }
-                },
-                layers: [{
-                    id: 'osm-tiles',
-                    type: 'raster',
-                    source: 'osm-raster-tiles',
-                    minzoom: 0,
-                    maxzoom: 22
-                }]
-            },
-            center: [48.2412, 54.1851],
-            zoom: 10,
-            maxZoom: 18,
-            minZoom: 8
-        });
-
-        // Добавляем навигацию
-        map.current.addControl(new maplibregl.NavigationControl());
-        
-        // Добавляем масштаб
-        map.current.addControl(new maplibregl.ScaleControl({
-            maxWidth: 100,
-            unit: 'metric'
-        }));
-
-        // Добавляем обработчик клика на карту
-        map.current.on('click', (e) => {
-          if (onMapClick && isCreatingStop) {
-            const { lng, lat } = e.lngLat;
-            onMapClick(lat, lng);
+    map.current = new maplibregl.Map({
+      container: mapContainer.current,
+      style: {
+        version: 8,
+        sources: {
+          'osm-raster-tiles': {
+            type: 'raster',
+            tiles: [
+              'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+              'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+              'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+            ],
+            tileSize: 256,
+            attribution: '© OpenStreetMap'
           }
-        });
-
-        return () => {
-            if (map.current) {
-                map.current.remove();
-                markersRef.current.forEach(marker => marker.remove());
-                if (tempMarkerRef.current) {
-                  tempMarkerRef.current.remove();
-                }
-            }
-        };
-    }, []);
-
-    // Функции для управления состоянием прогноза
-    const updateForecastState = useCallback((address: string, updates: Partial<ForecastState>) => {
-        setForecastsState(prev => {
-            const newState = new Map(prev);
-            const currentState = newState.get(address) || {
-                showForecast: false,
-                isForecastOpen: false,
-                forecastData: null,
-                autoRefresh: false,
-                showMiniChart: true
-            };
-            newState.set(address, { ...currentState, ...updates });
-            return newState;
-        });
-    }, []);
-
-    // Обработчик клика на маркер - с учетом режима создания маршрута
-    const handleMarkerClick = (marker: MarkerData) => {
-        if (isCreatingRoute && onMarkerClick) {
-            // В режиме создания маршрута передаем клик в родительский компонент
-            console.log('Creating route: marker clicked:', marker.address);
-            onMarkerClick(marker);
-            return;
-        }
-        
-        // Стандартное поведение - открыть модалку
-        console.log('Standard click: marker clicked:', marker.address);
-        setSelectedModalMarker(marker);
-        
-        // Плавно приближаем карту к маркеру (опционально)
-        if (map.current) {
-            map.current.flyTo({
-                center: [marker.lng, marker.lat],
-                zoom: 15,
-                essential: true,
-                duration: 800
-            });
-        }
-    };
-
-    // Фильтрация маркеров
-    const filteredMarkers = markers.filter(marker => {
-      if (selectedFilters.includes('high') && marker.load <= 7) return false;
-      if (selectedFilters.includes('medium') && (marker.load <= 3 || marker.load > 7)) return false;
-      if (selectedFilters.includes('low') && marker.load > 3) return false;
-      return true;
+        },
+        layers: [{
+          id: 'osm-tiles',
+          type: 'raster',
+          source: 'osm-raster-tiles',
+          minzoom: 0,
+          maxzoom: 22
+        }]
+      },
+      center: [54.1851, 48.2412],
+      zoom: 10,
+      maxZoom: 18,
+      minZoom: 8
     });
 
-    // Создание кастомного маркера БЕЗ попапа
-    const createCustomMarker = (marker: MarkerData): HTMLDivElement => {
-        const el = document.createElement('div');
-        el.className = 'custom-marker';
-        
-        // Определяем состояние маркера
-        const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
-        const color = loadToColor(marker.load);
-        const size = getMarkerSize(marker.load);
-        const selectedIndex = isSelected ? selectedStops.indexOf(marker.id) + 1 : 0;
-        
-        // Базовые стили
-        el.style.width = `${size}px`;
-        el.style.height = `${size}px`;
-        el.style.backgroundColor = isSelected ? '#3B82F6' : color; // Синий для выбранных
-        el.style.cursor = 'pointer';
-        el.style.border = isSelected ? '3px solid #2563EB' : '3px solid white';
-        el.style.borderRadius = '50%';
-        el.style.boxShadow = isSelected 
-          ? '0 4px 12px rgba(37, 99, 235, 0.5)' 
-          : '0 4px 12px rgba(0,0,0,0.3)';
-        el.style.display = 'flex';
-        el.style.alignItems = 'center';
-        el.style.justifyContent = 'center';
-        el.style.transition = 'all 0.3s ease';
-        el.style.zIndex = isSelected ? '100' : '10';
-        el.style.position = 'relative';
-        el.style.transformOrigin = 'center center';
+    map.current.addControl(new maplibregl.NavigationControl());
+    map.current.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }));
 
-        // Пульсация для выбранных маркеров
-        if (isSelected) {
-          const pulse = document.createElement('div');
-          pulse.className = 'marker-pulse-selected';
-          pulse.style.position = 'absolute';
-          pulse.style.top = '-6px';
-          pulse.style.left = '-6px';
-          pulse.style.right = '-6px';
-          pulse.style.bottom = '-6px';
-          pulse.style.borderRadius = '50%';
-          pulse.style.border = '2px solid #3B82F6';
-          pulse.style.opacity = '0.5';
-          pulse.style.animation = 'pulse 1.5s infinite';
-          el.appendChild(pulse);
-        }
+    map.current.on('click', (e) => {
+      if (onMapClick && isCreatingStop) {
+        const { lng, lat } = e.lngLat;
+        onMapClick(lat, lng);
+      }
+    });
 
-        // Создаем текстовое содержимое
-        const text = document.createElement('div');
-        text.className = 'marker-text';
-        
-        if (isSelected && selectedIndex > 0) {
-          // Показываем номер порядка для выбранных остановок
-          text.textContent = selectedIndex.toString();
-        } else {
-          // Показываем загрузку для обычных остановок
-          text.textContent = marker.load.toString();
-        }
-        
-        text.style.color = 'white';
-        text.style.fontWeight = 'bold';
-        text.style.fontSize = size > 40 ? '14px' : '12px';
-        text.style.textShadow = '0 1px 2px rgba(0,0,0,0.3)';
-        text.style.position = 'relative';
-        text.style.zIndex = '2';
-        el.appendChild(text);
-
-        // Всплывающая подсказка (будет через CSS псевдоэлемент)
-        el.setAttribute('data-address', marker.address);
-        el.setAttribute('data-load', marker.load.toString());
-        el.setAttribute('data-selected', isSelected.toString());
-
-        return el;
+    return () => {
+      if (map.current) {
+        map.current.remove();
+        markersRef.current.forEach(marker => marker.remove());
+      }
     };
+  }, []);
 
-    // Добавление обработчиков к маркеру
-    const addMarkerEventListeners = (markerElement: HTMLDivElement, marker: MarkerData) => {
-        const handleClick = (e: MouseEvent) => {
-            e.stopPropagation();
-            e.preventDefault();
-            console.log('Marker element clicked, isCreatingRoute:', isCreatingRoute);
-            handleMarkerClick(marker);
-        };
-
-        const handleMouseEnter = () => {
-            // Подсветка при наведении
-            markerElement.style.boxShadow = isCreatingRoute 
-              ? '0 6px 20px rgba(0,0,0,0.4)'
-              : '0 6px 20px rgba(0,0,0,0.4)';
-            markerElement.style.zIndex = '100';
-            markerElement.classList.add('marker-hover');
-        };
-
-        const handleMouseLeave = () => {
-            const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
-            markerElement.style.boxShadow = isSelected 
-              ? '0 4px 12px rgba(37, 99, 235, 0.5)' 
-              : '0 4px 12px rgba(0,0,0,0.3)';
-            markerElement.style.zIndex = isSelected ? '100' : '10';
-            markerElement.classList.remove('marker-hover');
-        };
-
-        markerElement.addEventListener('click', handleClick);
-        markerElement.addEventListener('mouseenter', handleMouseEnter);
-        markerElement.addEventListener('mouseleave', handleMouseLeave);
-
-        // Сохраняем ссылки на обработчики для очистки
-        (markerElement as any)._clickHandler = handleClick;
-        (markerElement as any)._mouseEnterHandler = handleMouseEnter;
-        (markerElement as any)._mouseLeaveHandler = handleMouseLeave;
+  useEffect(() => {
+    if (!map.current) return;
+    
+    const handleClick = (e: maplibregl.MapMouseEvent) => {
+      if (onMapClick && isCreatingStop) {
+        const { lng, lat } = e.lngLat;
+        onMapClick(lat, lng);
+      }
     };
-
-    // Очистка обработчиков маркера
-    const cleanupMarker = (markerElement: HTMLDivElement) => {
-        if ((markerElement as any)._clickHandler) {
-            markerElement.removeEventListener('click', (markerElement as any)._clickHandler);
-        }
-        if ((markerElement as any)._mouseEnterHandler) {
-            markerElement.removeEventListener('mouseenter', (markerElement as any)._mouseEnterHandler);
-        }
-        if ((markerElement as any)._mouseLeaveHandler) {
-            markerElement.removeEventListener('mouseleave', (markerElement as any)._mouseLeaveHandler);
-        }
+    
+    if (isCreatingStop) {
+      map.current.on('click', handleClick);
+    }
+    
+    return () => {
+      if (map.current) {
+        map.current.off('click', handleClick);
+      }
     };
+  }, [isCreatingStop, onMapClick]);
 
-    // Обновление маркеров на карте
-    useEffect(() => {
-        if (!map.current || loading) return;
+  const loadToColor = (load: number): string => {
+    if (load <= 3) return "#10b981";
+    if (load <= 7) return "#f59e0b";
+    return "#ef4444";
+  };
 
-        console.log('🔄 Updating markers, total:', filteredMarkers.length);
-        console.log('Selected stops for route:', selectedStops);
-        console.log('Is creating route:', isCreatingRoute);
+  const getMarkerSize = (load: number): number => {
+    if (load <= 3) return 32;
+    if (load <= 7) return 40;
+    return 48;
+  };
 
-        // Удаляем старые маркеры
-        markersRef.current.forEach((markerInstance, index) => {
-            const markerElement = markerInstance.getElement() as HTMLDivElement;
-            if (markerElement) {
-                cleanupMarker(markerElement);
-            }
-            markerInstance.remove();
+  const createCustomMarker = (marker: MarkerData): HTMLDivElement => {
+    const el = document.createElement('div');
+    el.className = 'custom-marker';
+
+    const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
+    const color = loadToColor(marker.load);
+    const size = getMarkerSize(marker.load);
+    const selectedIndex = isSelected ? selectedStops.indexOf(marker.id) + 1 : 0;
+
+    el.style.width = `${size}px`;
+    el.style.height = `${size}px`;
+    el.style.backgroundColor = isSelected ? '#3B82F6' : color;
+    el.style.cursor = 'pointer';
+    el.style.border = isSelected ? '3px solid #2563EB' : '3px solid white';
+    el.style.borderRadius = '50%';
+    el.style.boxShadow = isSelected
+      ? '0 4px 12px rgba(37, 99, 235, 0.5)'
+      : '0 4px 12px rgba(0,0,0,0.3)';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.style.transition = 'all 0.3s ease';
+
+    const text = document.createElement('div');
+    text.className = 'marker-text';
+    if (isSelected && selectedIndex > 0) {
+      text.textContent = selectedIndex.toString();
+    } else {
+      text.textContent = marker.load?.toString() || '0';
+    }
+    text.style.color = 'white';
+    text.style.fontWeight = 'bold';
+    text.style.fontSize = size > 40 ? '14px' : '12px';
+    text.style.textShadow = '0 1px 2px rgba(0,0,0,0.3)';
+    el.appendChild(text);
+
+    el.setAttribute('data-address', marker.address || '');
+    el.setAttribute('data-load', marker.load?.toString() || '0');
+    el.setAttribute('data-id', marker.id?.toString() || '');
+
+    return el;
+  };
+
+  const handleMarkerClick = (marker: MarkerData) => {
+    if (isCreatingRoute && onMarkerClick) {
+      onMarkerClick(marker);
+      return;
+    }
+    if (!isCreatingRoute && !isCreatingStop) {
+      setSelectedModalMarker(marker);
+      if (map.current) {
+        map.current.flyTo({
+          center: [marker.lng, marker.lat],
+          zoom: 15,
+          essential: true,
+          duration: 800
         });
-        markersRef.current = [];
+      }
+    }
+  };
 
-        // Добавляем новые маркеры
-        const markersInstances = filteredMarkers.map(marker => {
-            const markerElement = createCustomMarker(marker);
-            
-            // Добавляем обработчики событий
-            addMarkerEventListeners(markerElement, marker);
-            
-            // Создаем маркер с anchor: 'bottom' чтобы не убегал
-            const markerInstance = new maplibregl.Marker({ 
-                element: markerElement,
-                anchor: 'center' // Используем center, но фиксируем через transform-origin
-            })
-                .setLngLat([marker.lng, marker.lat])
-                .addTo(map.current!);
+  useEffect(() => {
+    if (!map.current || loading) return;
 
-            return markerInstance;
-        });
+    markersRef.current.forEach((markerInstance) => {
+      const markerElement = markerInstance.getElement() as HTMLDivElement;
+      if (markerElement && (markerElement as any)._clickHandler) {
+        markerElement.removeEventListener('click', (markerElement as any)._clickHandler);
+      }
+      markerInstance.remove();
+    });
+    markersRef.current = [];
 
-        markersRef.current = markersInstances;
-    }, [filteredMarkers, loading, isCreatingRoute, selectedStops]);
-
-    // Временный маркер для создания остановки
-    useEffect(() => {
-      if (!map.current) return;
+    const markersInstances = markers.map(marker => {
+      const markerElement = createCustomMarker(marker);
       
-      // Удаляем старый временный маркер
-      if (tempMarkerRef.current) {
-        tempMarkerRef.current.remove();
-        tempMarkerRef.current = null;
-      }
-      
-      // Добавляем новый временный маркер если есть координаты
-      if (tempStopLocation && isCreatingStop) {
-        const tempMarkerEl = document.createElement('div');
-        tempMarkerEl.className = 'temp-marker';
-        tempMarkerEl.innerHTML = `
-          <div class="temp-marker-pulse"></div>
-          <div class="temp-marker-center"></div>
-        `;
-        
-        tempMarkerRef.current = new maplibregl.Marker({
-          element: tempMarkerEl,
-          anchor: 'center'
-        })
-          .setLngLat([tempStopLocation.lng, tempStopLocation.lat])
-          .addTo(map.current);
-      }
-    }, [tempStopLocation, isCreatingStop]);
+      const clickHandler = (e: MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        handleMarkerClick(marker);
+      };
+      markerElement.addEventListener('click', clickHandler);
+      (markerElement as any)._clickHandler = clickHandler;
 
-    // Отрисовка линии маршрута
-    useEffect(() => {
-      if (!map.current) return;
-      
-      // Удаляем старую линию если есть
-      if (routeLineRef.current) {
-        if (map.current.getLayer('route-line')) {
-          map.current.removeLayer('route-line');
-        }
-        if (map.current.getLayer('route-line-dash')) {
-          map.current.removeLayer('route-line-dash');
-        }
-        if (map.current.getSource('route-line')) {
-          map.current.removeSource('route-line');
-        }
-        routeLineRef.current = null;
-      }
-      
-      // Добавляем новую линию если есть координаты
-      if (routeCoordinates.length >= 2 && isCreatingRoute) {
-        console.log('Drawing route line with coordinates:', routeCoordinates);
-        
-        // Добавляем источник данных
-        map.current.addSource('route-line', {
-          type: 'geojson',
-          data: {
-            type: 'Feature',
-            geometry: {
-              type: 'LineString',
-              coordinates: routeCoordinates
-            },
-            properties: {}
-          }
-        });
-        
-        // Добавляем слой линии
-        map.current.addLayer({
-          id: 'route-line',
-          type: 'line',
-          source: 'route-line',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': '#3B82F6',
-            'line-width': 4,
-            'line-opacity': 0.8
-          }
-        });
-        
-        // Добавляем пунктирную линию для эффекта
-        map.current.addLayer({
-          id: 'route-line-dash',
-          type: 'line',
-          source: 'route-line',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': '#60A5FA',
-            'line-width': 2,
-            'line-dasharray': [2, 2],
-            'line-opacity': 0.6
-          }
-        });
-        
-        routeLineRef.current = map.current.getLayer('route-line');
-        
-        // Подсвечиваем выбранные остановки
-        highlightSelectedStops();
-      }
-    }, [routeCoordinates, isCreatingRoute]);
+      const markerInstance = new maplibregl.Marker({
+        element: markerElement,
+        anchor: 'center'
+      })
+        .setLngLat([marker.lng, marker.lat])
+        .addTo(map.current!);
+      return markerInstance;
+    });
+    markersRef.current = markersInstances;
+  }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops]);
 
-    // Подсветка выбранных остановок
-    const highlightSelectedStops = () => {
-      if (!map.current || !isCreatingRoute || selectedStops.length === 0) return;
-      
-      // Анимируем выбранные маркеры
-      selectedStops.forEach((stopId, index) => {
-        const marker = markersRef.current.find(m => {
-          const element = m.getElement() as HTMLDivElement;
-          return element && element.getAttribute('data-address')?.includes(stopId.toString());
-        });
-        
-        if (marker) {
-          const element = marker.getElement() as HTMLDivElement;
-          element.style.animation = 'bounce 0.5s ease';
-          setTimeout(() => {
-            element.style.animation = '';
-          }, 500);
-        }
-      });
-    };
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  };
 
-    // Эффект для выбранного маркера извне
-    useEffect(() => {
-        if (selectedMarker && map.current && markers.length > 0) {
-            const marker = markers.find(m => m.address === selectedMarker.address);
-            if (marker) {
-                // Если мы не в режиме создания маршрута, открываем модалку
-                if (!isCreatingRoute) {
-                  setSelectedModalMarker(marker);
-                }
-                map.current.flyTo({
-                    center: [marker.lng, marker.lat],
-                    zoom: 15,
-                    essential: true,
-                    duration: 800
-                });
-            }
-        }
-    }, [selectedMarker, markers, isCreatingRoute]);
-
-    const loadToColor = (load: number): string => {
-        if (load <= 3) return "#10b981";
-        if (load <= 7) return "#f59e0b";
-        return "#ef4444";
-    };
-
-    const getMarkerSize = (load: number): number => {
-      if (load <= 3) return 32;
-      if (load <= 7) return 40;
-      return 48;
-    };
-
-    const toggleFilter = (filter: string) => {
-      setSelectedFilters(prev => 
-        prev.includes(filter) 
-          ? prev.filter(f => f !== filter)
-          : [...prev, filter]
-      );
-    };
-
-    const formatTime = (date: Date) => {
-      return date.toLocaleTimeString('ru-RU', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      });
-    };
-
-    const handleOpenForecast = () => {
-        if (selectedModalMarker) {
-            updateForecastState(selectedModalMarker.address, {
-                showForecast: true,
-                isForecastOpen: true
-            });
-        }
-    };
-
-    // Закрытие модального окна при клике на Escape
-    useEffect(() => {
-        const handleEscape = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && selectedModalMarker) {
-                setSelectedModalMarker(null);
-            }
-        };
-        
-        window.addEventListener('keydown', handleEscape);
-        return () => window.removeEventListener('keydown', handleEscape);
-    }, [selectedModalMarker]);
-
-    // Изменение курсора в режиме создания
-    useEffect(() => {
-      if (map.current && mapContainer.current) {
-        const container = mapContainer.current as HTMLElement;
-        if (isCreatingStop) {
-          container.style.cursor = 'crosshair';
-        } else if (isCreatingRoute) {
-          container.style.cursor = 'pointer';
-        } else {
-          container.style.cursor = 'grab';
-        }
-      }
-    }, [isCreatingStop, isCreatingRoute]);
-
-    // Информация о режиме создания
-    const getCreationInfo = () => {
-      if (isCreatingStop) {
-        return 'Режим создания остановки: кликните на карте чтобы выбрать местоположение';
-      }
-      if (isCreatingRoute) {
-        return `Режим создания маршрута: кликните на остановки чтобы добавить их в маршрут (${selectedStops.length} выбрано)`;
-      }
-      return '';
-    };
-
-    return (
-        <div className="map-page">
-            {/* Боковая панель управления */}
-            <div className={`map-control-panel ${isPanelCollapsed ? 'collapsed' : ''}`}>
-                {!isPanelCollapsed ? (
-                    <>
-                        <div className="panel-header">
-                            <div className="header-main">
-                                <h3>🗺️ Карта пассажиропотоков</h3>
-                                <div className="time-display">
-                                    <Clock size={16} />
-                                    <span>{formatTime(currentTime)}</span>
-                                </div>
-                            </div>
-                            <button 
-                                className="collapse-btn"
-                                onClick={() => setIsPanelCollapsed(true)}
-                                title="Свернуть панель"
-                            >
-                                <Minimize2 size={20} />
-                            </button>
-                        </div>
-
-                        {/* Информация о режиме создания */}
-                        {(isCreatingStop || isCreatingRoute) && (
-                          <div className="creation-mode-info">
-                            <div className="mode-indicator">
-                              {isCreatingStop ? (
-                                <>
-                                  <MapPin size={18} />
-                                  <span>Режим создания остановки</span>
-                                </>
-                              ) : (
-                                <>
-                                  <RouteIcon size={18} />
-                                  <span>Режим создания маршрута</span>
-                                </>
-                              )}
-                            </div>
-                            <div className="mode-instructions">
-                              <p>{getCreationInfo()}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Статистика */}
-                        <div className="stats-section">
-                            <div className="stats-grid">
-                                <div className="stat-card">
-                                    <div className="stat-icon">
-                                        <MapPin size={20} />
-                                    </div>
-                                    <div className="stat-info">
-                                        <div className="stat-value">{mapStats.totalStops}</div>
-                                        <div className="stat-label">Остановок</div>
-                                    </div>
-                                </div>
-                                <div className="stat-card">
-                                    <div className="stat-icon">
-                                        <Zap size={20} />
-                                    </div>
-                                    <div className="stat-info">
-                                        <div className="stat-value">{mapStats.avgLoad}%</div>
-                                        <div className="stat-label">Ср. загрузка</div>
-                                    </div>
-                                </div>
-                                <div className="stat-card">
-                                    <div className="stat-icon">
-                                        <BarChart size={20} />
-                                    </div>
-                                    <div className="stat-info">
-                                        <div className="stat-value">{mapStats.maxLoad}%</div>
-                                        <div className="stat-label">Макс. загрузка</div>
-                                    </div>
-                                </div>
-                                <div className="stat-card">
-                                    <div className="stat-icon">
-                                        <Layers size={20} />
-                                    </div>
-                                    <div className="stat-info">
-                                        <div className="stat-value">{mapStats.activeRoutes}</div>
-                                        <div className="stat-label">Маршрутов</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Фильтры */}
-                        <div className="filters-section">
-                            <h4>
-                                <Filter size={18} />
-                                Фильтры загрузки
-                            </h4>
-                            <div className="filter-buttons">
-                                <button 
-                                    className={`filter-btn ${selectedFilters.includes('high') ? 'active' : ''}`}
-                                    onClick={() => toggleFilter('high')}
-                                    style={{ '--filter-color': '#ef4444' } as React.CSSProperties}
-                                >
-                                    <div className="filter-dot"></div>
-                                    Высокая
-                                </button>
-                                <button 
-                                    className={`filter-btn ${selectedFilters.includes('medium') ? 'active' : ''}`}
-                                    onClick={() => toggleFilter('medium')}
-                                    style={{ '--filter-color': '#f59e0b' } as React.CSSProperties}
-                                >
-                                    <div className="filter-dot"></div>
-                                    Средняя
-                                </button>
-                                <button 
-                                    className={`filter-btn ${selectedFilters.includes('low') ? 'active' : ''}`}
-                                    onClick={() => toggleFilter('low')}
-                                    style={{ '--filter-color': '#10b981' } as React.CSSProperties}
-                                >
-                                    <div className="filter-dot"></div>
-                                    Низкая
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Настройки отображения */}
-                        <div className="display-section">
-                            <h4>
-                                <Layers size={18} />
-                                Отображение
-                            </h4>
-                            <div className="toggle-group">
-                                <label className="toggle-item">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={showHeatmap}
-                                        onChange={(e) => setShowHeatmap(e.target.checked)}
-                                    />
-                                    <span className="toggle-slider"></span>
-                                    <span className="toggle-label">Тепловая карта</span>
-                                </label>
-                                <label className="toggle-item">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={showTraffic}
-                                        onChange={(e) => setShowTraffic(e.target.checked)}
-                                    />
-                                    <span className="toggle-slider"></span>
-                                    <span className="toggle-label">Трафик в реальном времени</span>
-                                </label>
-                                <label className="toggle-item">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={autoRefresh}
-                                        onChange={(e) => setAutoRefresh(e.target.checked)}
-                                    />
-                                    <span className="toggle-slider"></span>
-                                    <span className="toggle-label">Автообновление</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        {/* Быстрые действия */}
-                        <div className="actions-section">
-                            <button 
-                                className="action-btn primary"
-                                onClick={fetchMarkers}
-                                disabled={loading}
-                            >
-                                <RefreshCw size={18} />
-                                {loading ? 'Обновление...' : 'Обновить данные'}
-                            </button>
-                            <button className="action-btn secondary">
-                                Экспорт данных
-                            </button>
-                        </div>
-
-                        {/* Легенда */}
-                        <div className="legend-section">
-                            <h4>Легенда</h4>
-                            <div className="legend-items">
-                                <div className="legend-item">
-                                    <div className="legend-color" style={{ backgroundColor: '#ef4444' }}></div>
-                                    <span>Высокая загрузка (8-10)</span>
-                                </div>
-                                <div className="legend-item">
-                                    <div className="legend-color" style={{ backgroundColor: '#f59e0b' }}></div>
-                                    <span>Средняя загрузка (4-7)</span>
-                                </div>
-                                <div className="legend-item">
-                                    <div className="legend-color" style={{ backgroundColor: '#10b981' }}></div>
-                                    <span>Низкая загрузка (1-3)</span>
-                                </div>
-                                {isCreatingRoute && (
-                                  <>
-                                    <div className="legend-item">
-                                      <div className="legend-color" style={{ 
-                                        backgroundColor: '#3B82F6'
-                                      }}></div>
-                                      <span>Выбранные для маршрута</span>
-                                    </div>
-                                    <div className="legend-item">
-                                      <div className="legend-line" style={{ 
-                                        backgroundColor: '#3B82F6',
-                                        height: '3px',
-                                        width: '24px'
-                                      }}></div>
-                                      <span>Линия маршрута</span>
-                                    </div>
-                                  </>
-                                )}
-                                {isCreatingStop && (
-                                  <div className="legend-item">
-                                    <div className="legend-color" style={{ 
-                                      backgroundColor: 'white',
-                                      border: '2px solid #3B82F6'
-                                    }}></div>
-                                    <span>Новая остановка</span>
-                                  </div>
-                                )}
-                            </div>
-                        </div>
-                    </>
-                ) : (
-                    <div className="collapsed-panel">
-                        <button 
-                            className="expand-btn"
-                            onClick={() => setIsPanelCollapsed(false)}
-                            title="Развернуть панель"
-                        >
-                            <Maximize2 size={24} />
-                        </button>
-                        <div className="collapsed-stats">
-                            <div className="mini-stat">
-                                <MapPin size={16} />
-                                <span>{mapStats.totalStops}</span>
-                            </div>
-                            <div className="mini-stat">
-                                <Zap size={16} />
-                                <span>{mapStats.avgLoad}%</span>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Основная область карты */}
-            <div className="map-area">
-                {/* Индикатор загрузки */}
-                {loading && (
-                    <div className="map-loading-overlay">
-                        <div className="spinner"></div>
-                        <p>Загрузка данных в реальном времени...</p>
-                    </div>
-                )}
-                
-                {/* Сообщение об ошибке */}
-                {error && (
-                    <div className="map-error-overlay">
-                        <div className="error-message">⚠️ {error}</div>
-                        <button className="retry-btn" onClick={fetchMarkers}>
-                            Повторить
-                        </button>
-                    </div>
-                )}
-                
-                {/* Быстрые кнопки управления */}
-                <div className="quick-controls">
-                    <button 
-                        className="quick-btn"
-                        onClick={fetchMarkers}
-                        title="Обновить данные"
-                    >
-                        <RefreshCw size={18} />
-                    </button>
-                    <button 
-                        className="quick-btn"
-                        onClick={() => setIsPanelCollapsed(!isPanelCollapsed)}
-                        title={isPanelCollapsed ? "Развернуть панель" : "Свернуть панель"}
-                    >
-                        {isPanelCollapsed ? <Maximize2 size={18} /> : <Minimize2 size={18} />}
-                    </button>
-                    <button 
-                        className="quick-btn"
-                        title="Настройки карты"
-                    >
-                        <Settings size={18} />
-                    </button>
+  return (
+    <div className="map-page">
+      <div className={`map-control-panel ${isPanelCollapsed ? 'collapsed' : ''}`}>
+        {!isPanelCollapsed ? (
+          <>
+            <div className="panel-header">
+              <div className="header-main">
+                <h3>🗺️ Карта пассажиропотоков</h3>
+                <div className="time-display">
+                  <Clock size={16} />
+                  <span>{formatTime(currentTime)}</span>
                 </div>
-                
-                {/* Индикатор режима создания */}
-                {(isCreatingStop || isCreatingRoute) && (
-                  <div className="creation-mode-banner">
-                    <div className="banner-content">
-                      {isCreatingStop ? (
-                        <>
-                          <MapPin size={18} />
-                          <span>Режим создания остановки</span>
-                          <span className="banner-hint">Кликните на карте чтобы выбрать местоположение</span>
-                        </>
-                      ) : (
-                        <>
-                          <RouteIcon size={18} />
-                          <span>Режим создания маршрута</span>
-                          <span className="banner-hint">Кликните на остановки чтобы добавить их в маршрут</span>
-                          {selectedStops.length > 0 && (
-                            <span className="banner-count">Выбрано: {selectedStops.length} остановок</span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    <button 
-                      className="banner-close"
-                      onClick={() => {
-                        // Можно добавить обработчик отмены
-                      }}
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                )}
-                
-                <div
-                    ref={mapContainer}
-                    className="map-container"
-                    style={{ 
-                      opacity: loading ? 0.7 : 1,
-                      cursor: isCreatingStop ? 'crosshair' : isCreatingRoute ? 'pointer' : 'grab'
-                    }}
-                />
+              </div>
+              <button className="collapse-btn" onClick={() => setIsPanelCollapsed(true)}>
+                <Minimize2 size={20} />
+              </button>
             </div>
 
-            {/* Модальное окно - только если не в режиме создания маршрута */}
-            {selectedModalMarker && !isCreatingRoute && (
-                <ModalContent
-                    marker={selectedModalMarker}
-                    isOpen={!!selectedModalMarker}
-                    onClose={() => setSelectedModalMarker(null)}
-                    onForecastClick={handleOpenForecast}
-                />
+            {(isCreatingStop || isCreatingRoute) && (
+              <div className="creation-mode-info">
+                <div className="mode-indicator">
+                  {isCreatingStop ? (
+                    <>
+                      <MapPin size={18} />
+                      <span>Режим создания остановки - кликните на карту</span>
+                    </>
+                  ) : (
+                    <>
+                      <MapPin size={18} />
+                      <span>Режим создания маршрута - кликайте на остановки</span>
+                    </>
+                  )}
+                </div>
+              </div>
             )}
-            
-            {/* Кнопка закрытия модального окна */}
-            {selectedModalMarker && !isCreatingRoute && (
-                <button 
-                    className="modal-close-btn"
-                    onClick={() => setSelectedModalMarker(null)}
-                    title="Закрыть детали остановки (Esc)"
-                >
-                    <X size={20} />
-                </button>
-            )}
-        </div>
-    );
+
+            <div className="stats-section">
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-icon">
+                    <MapPin size={20} />
+                  </div>
+                  <div className="stat-info">
+                    <div className="stat-value">{markers.length}</div>
+                    <div className="stat-label">Остановок</div>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon">
+                    <RefreshCw size={20} />
+                  </div>
+                  <div className="stat-info">
+                    <div className="stat-value">-</div>
+                    <div className="stat-label">Автообновление</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="actions-section">
+              <button className="action-btn primary" onClick={fetchMarkers} disabled={loading}>
+                <RefreshCw size={18} />
+                {loading ? 'Обновление...' : 'Обновить данные'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="collapsed-panel">
+            <button className="expand-btn" onClick={() => setIsPanelCollapsed(false)}>
+              <Maximize2 size={24} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="map-area">
+        {loading && (
+          <div className="map-loading-overlay">
+            <div className="spinner"></div>
+            <p>Загрузка данных...</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="map-error-overlay">
+            <div className="error-message">⚠️ {error}</div>
+            <button className="retry-btn" onClick={fetchMarkers}>Повторить</button>
+          </div>
+        )}
+
+        <div
+          ref={mapContainer}
+          className="map-container"
+          style={{
+            cursor: isCreatingStop ? 'crosshair' : isCreatingRoute ? 'pointer' : 'grab'
+          }}
+        />
+      </div>
+
+      {selectedModalMarker && !isCreatingRoute && !isCreatingStop && (
+        <ModalContent
+          marker={selectedModalMarker}
+          isOpen={!!selectedModalMarker}
+          onClose={() => setSelectedModalMarker(null)}
+        />
+      )}
+
+      {selectedModalMarker && !isCreatingRoute && !isCreatingStop && (
+        <button
+          className="modal-close-btn"
+          onClick={() => setSelectedModalMarker(null)}
+        >
+          <X size={20} />
+        </button>
+      )}
+    </div>
+  );
 };
 
 export default MapComponent;
