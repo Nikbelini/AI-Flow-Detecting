@@ -98,7 +98,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
           maxzoom: 22
         }]
       },
-      center: [54.1851, 48.2412],
+      center: [48.2412, 54.1851],
       zoom: 10,
       maxZoom: 18,
       minZoom: 8
@@ -207,7 +207,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       setSelectedModalMarker(marker);
       if (map.current) {
         map.current.flyTo({
-          center: [marker.lng, marker.lat],
+          center: [marker.lat, marker.lng],
           zoom: 15,
           essential: true,
           duration: 800
