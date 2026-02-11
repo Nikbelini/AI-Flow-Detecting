@@ -8,7 +8,10 @@ import './AnalyticsPage.css';
 
 const AnalyticsPage: React.FC = () => {
   const [creationMode, setCreationMode] = useState<'none' | 'stop' | 'route'>('none');
-  const [selectedStopsForRoute, setSelectedStopsForRoute] = useState<{ id: number, order: number, address: string }[]>([]);
+  // ИЗМЕНЕНО: убрали id, теперь только order и address
+  const [selectedStopsForRoute, setSelectedStopsForRoute] = useState<
+    { order: number; address: string }[]
+  >([]);
   const [newStopData, setNewStopData] = useState({
     address: '',
     lat: 0,
@@ -63,35 +66,31 @@ const AnalyticsPage: React.FC = () => {
 
   const handleMapClick = (lat: number, lng: number) => {
     if (creationMode === 'stop') {
-      setNewStopData(prev => ({
-        ...prev,
-        lat,
-        lng
-      }));
+      setNewStopData(prev => ({ ...prev, lat, lng }));
       setShowStopModal(true);
     }
   };
 
+  // ИСПРАВЛЕНО: используем address для идентификации
   const handleMarkerClick = (marker: any) => {
-    if (creationMode === 'route') {
-      const existingIndex = selectedStopsForRoute.findIndex(item => item.id === marker.id);
-      
-      if (existingIndex >= 0) {
-        const newStops = selectedStopsForRoute.filter(item => item.id !== marker.id);
-        const updatedStops = newStops.map((item, index) => ({ ...item, order: index + 1 }));
-        setSelectedStopsForRoute(updatedStops);
-        showNotificationFunc(`Остановка "${marker.address}" удалена из маршрута`, 'info');
-      } else {
-        const newStop = { 
-          id: marker.id, 
-          order: selectedStopsForRoute.length + 1, 
-          address: marker.address 
-        };
-        const newStops = [...selectedStopsForRoute, newStop];
-        setSelectedStopsForRoute(newStops);
-        showNotificationFunc(`Остановка "${marker.address}" добавлена (${newStops.length})`, 'info');
-      }
+    if (creationMode !== 'route') return;
+
+    const alreadySelected = selectedStopsForRoute.some(
+      stop => stop.address === marker.address
+    );
+
+    if (alreadySelected) {
+      showNotificationFunc(`Остановка "${marker.address}" уже добавлена в маршрут`, 'info');
+      return;
     }
+
+    const newStop = {
+      order: selectedStopsForRoute.length + 1,
+      address: marker.address
+    };
+
+    setSelectedStopsForRoute([...selectedStopsForRoute, newStop]);
+    showNotificationFunc(`Остановка "${marker.address}" добавлена (${selectedStopsForRoute.length + 1})`, 'info');
   };
 
   const handleCreateStopSubmit = async () => {
@@ -112,23 +111,23 @@ const AnalyticsPage: React.FC = () => {
 
       setStops(prev => [...prev, createdStop]);
       setShowStopModal(false);
-      setNewStopData({ 
-        address: '', 
-        lat: 0, 
-        lng: 0, 
-        count: 0, 
-        velocity: 0, 
-        load: 0, 
-        cityId: 1 
+      setNewStopData({
+        address: '',
+        lat: 0,
+        lng: 0,
+        count: 0,
+        velocity: 0,
+        load: 0,
+        cityId: 1
       });
       setCreationMode('none');
-      
       showNotificationFunc('Остановка успешно создана!', 'success');
     } catch (error) {
       showNotificationFunc('Ошибка при создании остановки', 'error');
     }
   };
 
+  // ИСПРАВЛЕНО: получаем stopId из массива stops по адресу
   const handleCreateRouteSubmit = async () => {
     try {
       if (selectedStopsForRoute.length < 2) {
@@ -140,18 +139,25 @@ const AnalyticsPage: React.FC = () => {
         return;
       }
 
+      // Сопоставляем адреса с реальными объектами остановок для получения id
       const routeStops = selectedStopsForRoute
         .sort((a, b) => a.order - b.order)
-        .map((item, index) => ({
-          stopId: item.id,
-          order: index + 1,
-          direction: 'A',
-          travelTimeToNext: index < selectedStopsForRoute.length - 1 ? 5 : 0
-        }));
+        .map((item, index) => {
+          const stop = stops.find(s => s.address === item.address);
+          if (!stop) {
+            throw new Error(`Остановка с адресом "${item.address}" не найдена`);
+          }
+          return {
+            stopId: stop.id,
+            order: index + 1,
+            direction: 'A' as const,
+            travelTimeToNext: index < selectedStopsForRoute.length - 1 ? 5 : 0
+          };
+        });
 
-      const createdRoute = await createRoute({ 
-        ...newRouteData, 
-        stops: routeStops 
+      const createdRoute = await createRoute({
+        ...newRouteData,
+        stops: routeStops
       });
 
       setRoutes(prev => [...prev, createdRoute]);
@@ -168,7 +174,7 @@ const AnalyticsPage: React.FC = () => {
         intervalMinutes: 15,
         operatingHours: '06:00-23:00'
       });
-      
+
       showNotificationFunc(`Маршрут "${newRouteData.number}" создан!`, 'success');
     } catch (error) {
       showNotificationFunc('Ошибка при создании маршрута', 'error');
@@ -181,29 +187,29 @@ const AnalyticsPage: React.FC = () => {
     showNotificationFunc('Создание отменено', 'info');
   };
 
+  // ИСПРАВЛЕНО: работаем с адресами вместо id
   const moveStopUp = (index: number) => {
     if (index <= 0) return;
-    setSelectedStopsForRoute(prev => {
-      const newStops = [...prev];
-      [newStops[index], newStops[index - 1]] = [newStops[index - 1], newStops[index]];
-      return newStops.map((item, i) => ({ ...item, order: i + 1 }));
-    });
+    const newStops = [...selectedStopsForRoute];
+    [newStops[index], newStops[index - 1]] = [newStops[index - 1], newStops[index]];
+    setSelectedStopsForRoute(newStops.map((item, i) => ({ ...item, order: i + 1 })));
   };
 
   const moveStopDown = (index: number) => {
     if (index >= selectedStopsForRoute.length - 1) return;
-    setSelectedStopsForRoute(prev => {
-      const newStops = [...prev];
-      [newStops[index], newStops[index + 1]] = [newStops[index + 1], newStops[index]];
-      return newStops.map((item, i) => ({ ...item, order: i + 1 }));
-    });
+    const newStops = [...selectedStopsForRoute];
+    [newStops[index], newStops[index + 1]] = [newStops[index + 1], newStops[index]];
+    setSelectedStopsForRoute(newStops.map((item, i) => ({ ...item, order: i + 1 })));
   };
 
-  const removeStopFromRoute = (stopId: number) => {
-    setSelectedStopsForRoute(prev => {
-      const newStops = prev.filter(item => item.id !== stopId);
-      return newStops.map((item, index) => ({ ...item, order: index + 1 }));
-    });
+  const removeStopFromRoute = (address: string) => {
+    const newStops = selectedStopsForRoute.filter(item => item.address !== address);
+    setSelectedStopsForRoute(newStops.map((item, index) => ({ ...item, order: index + 1 })));
+  };
+
+  const removeLastStop = () => {
+    if (selectedStopsForRoute.length === 0) return;
+    setSelectedStopsForRoute(selectedStopsForRoute.slice(0, -1));
   };
 
   return (
@@ -241,22 +247,33 @@ const AnalyticsPage: React.FC = () => {
               )}
             </h3>
             <div className="card-controls">
-              <button 
-                className={`mode-btn ${creationMode === 'stop' ? 'active' : ''}`} 
+              <button
+                className={`mode-btn ${creationMode === 'stop' ? 'active' : ''}`}
                 onClick={() => setCreationMode('stop')}
               >
                 <MapPin size={16} />
               </button>
-              <button 
-                className={`mode-btn ${creationMode === 'route' ? 'active' : ''}`} 
-                onClick={() => setCreationMode('route')}
+              <button
+                className={`mode-btn ${creationMode === 'route' ? 'active' : ''}`}
+                onClick={() => {
+                  setCreationMode('route');
+                  setSelectedStopsForRoute([]);
+                  showNotificationFunc('Выберите остановки для маршрута по порядку', 'info');
+                }}
               >
                 <Route size={16} />
               </button>
               {(creationMode === 'stop' || creationMode === 'route') && (
-                <button className="mode-btn cancel" onClick={cancelCreationMode}>
-                  <X size={16} />
-                </button>
+                <div className="mode-controls">
+                  {creationMode === 'route' && selectedStopsForRoute.length > 0 && (
+                    <button className="mode-btn undo" onClick={removeLastStop} title="Удалить последнюю остановку">
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                  <button className="mode-btn cancel" onClick={cancelCreationMode}>
+                    <X size={16} />
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -267,7 +284,8 @@ const AnalyticsPage: React.FC = () => {
               onMarkerClick={handleMarkerClick}
               isCreatingStop={creationMode === 'stop'}
               isCreatingRoute={creationMode === 'route'}
-              selectedStops={selectedStopsForRoute.map(s => s.id)}
+              // ИЗМЕНЕНО: передаём массив адресов
+              selectedStops={selectedStopsForRoute.map(s => s.address)}
             />
           </div>
         </div>
@@ -283,7 +301,7 @@ const AnalyticsPage: React.FC = () => {
             {stops.slice(0, 10).map((stop) => (
               <div
                 key={stop.id}
-                className={`stop-item ${selectedStopsForRoute.some(s => s.id === stop.id) ? 'selected' : ''}`}
+                className={`stop-item ${selectedStopsForRoute.some(s => s.address === stop.address) ? 'selected' : ''}`}
               >
                 <div className="stop-marker" style={{ backgroundColor: getMarkerColor(stop.load) }}>
                   {stop.load}
@@ -295,9 +313,9 @@ const AnalyticsPage: React.FC = () => {
                     <span className="stat">{stop.load}/10</span>
                   </div>
                 </div>
-                {selectedStopsForRoute.some(s => s.id === stop.id) && (
+                {selectedStopsForRoute.some(s => s.address === stop.address) && (
                   <div className="stop-order">
-                    #{selectedStopsForRoute.find(s => s.id === stop.id)?.order}
+                    #{selectedStopsForRoute.find(s => s.address === stop.address)?.order}
                   </div>
                 )}
               </div>
@@ -311,29 +329,36 @@ const AnalyticsPage: React.FC = () => {
               <h3>Маршрут в разработке ({selectedStopsForRoute.length})</h3>
             </div>
             <div className="card-body selected-stops-list">
+              <div className="route-instructions">
+                <AlertCircle size={14} />
+                <span>Выберите остановки на карте в нужном порядке</span>
+              </div>
               {selectedStopsForRoute.map((item, index) => (
-                <div key={item.id} className="selected-stop-item">
+                <div key={item.address} className="selected-stop-item">
                   <div className="stop-order-badge">#{item.order}</div>
                   <div className="stop-info">
                     <div className="stop-address">{item.address}</div>
                     <div className="stop-actions">
-                      <button 
-                        className="action-btn" 
-                        onClick={() => moveStopUp(index)} 
+                      <button
+                        className="action-btn"
+                        onClick={() => moveStopUp(index)}
                         disabled={index === 0}
+                        title="Переместить выше"
                       >
                         <ChevronUp size={14} />
                       </button>
-                      <button 
-                        className="action-btn" 
-                        onClick={() => moveStopDown(index)} 
+                      <button
+                        className="action-btn"
+                        onClick={() => moveStopDown(index)}
                         disabled={index === selectedStopsForRoute.length - 1}
+                        title="Переместить ниже"
                       >
                         <ChevronDown size={14} />
                       </button>
-                      <button 
-                        className="action-btn remove" 
-                        onClick={() => removeStopFromRoute(item.id)}
+                      <button
+                        className="action-btn remove"
+                        onClick={() => removeStopFromRoute(item.address)}
+                        title="Удалить из маршрута"
                       >
                         <X size={14} />
                       </button>
@@ -432,9 +457,9 @@ const AnalyticsPage: React.FC = () => {
               <button className="btn-secondary" onClick={() => setShowStopModal(false)}>
                 Отмена
               </button>
-              <button 
-                className="btn-primary" 
-                onClick={handleCreateStopSubmit} 
+              <button
+                className="btn-primary"
+                onClick={handleCreateStopSubmit}
                 disabled={!newStopData.address.trim()}
               >
                 <Save size={16} />
@@ -529,8 +554,8 @@ const AnalyticsPage: React.FC = () => {
               </div>
             </div>
             <div className="modal-footer">
-              <button 
-                className="btn-secondary" 
+              <button
+                className="btn-secondary"
                 onClick={() => {
                   setShowRouteModal(false);
                   setSelectedStopsForRoute([]);
@@ -540,9 +565,9 @@ const AnalyticsPage: React.FC = () => {
                 <Trash2 size={16} />
                 Отменить
               </button>
-              <button 
-                className="btn-primary" 
-                onClick={handleCreateRouteSubmit} 
+              <button
+                className="btn-primary"
+                onClick={handleCreateRouteSubmit}
                 disabled={!newRouteData.number.trim() || selectedStopsForRoute.length < 2}
               >
                 <Save size={16} />

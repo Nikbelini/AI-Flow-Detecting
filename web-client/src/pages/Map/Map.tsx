@@ -4,7 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import './MapComponent.css';
 import ModalContent from './ModalContent';
 import { getMarkers } from '../../api/markersApi';
-import { Clock, Filter, RefreshCw, Zap, BarChart, MapPin, Minimize2, Maximize2, X } from 'lucide-react';
+import { Clock, RefreshCw, MapPin, Minimize2, Maximize2, X } from 'lucide-react';
 
 interface MarkerData {
   id: number;
@@ -22,7 +22,7 @@ interface MapComponentProps {
   onMarkerClick?: (marker: MarkerData) => void;
   isCreatingStop?: boolean;
   isCreatingRoute?: boolean;
-  selectedStops?: number[];
+  selectedStops?: string[];
 }
 
 const MapComponent: React.FC<MapComponentProps> = ({
@@ -36,6 +36,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const onMarkerClickRef = useRef(onMarkerClick);
+  const onMapClickRef = useRef(onMapClick);
 
   const [localMarkers, setLocalMarkers] = useState<MarkerData[]>([]);
   const [loading, setLoading] = useState(!externalMarkers);
@@ -47,14 +49,17 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const markers = externalMarkers || localMarkers;
 
   useEffect(() => {
+    onMarkerClickRef.current = onMarkerClick;
+    onMapClickRef.current = onMapClick;
+  }, [onMarkerClick, onMapClick]);
+
+  useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    if (!externalMarkers) {
-      fetchMarkers();
-    }
+    if (!externalMarkers) fetchMarkers();
   }, [externalMarkers]);
 
   const fetchMarkers = async () => {
@@ -107,13 +112,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
     map.current.addControl(new maplibregl.NavigationControl());
     map.current.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }));
 
-    map.current.on('click', (e) => {
-      if (onMapClick && isCreatingStop) {
-        const { lng, lat } = e.lngLat;
-        onMapClick(lat, lng);
-      }
-    });
-
     return () => {
       if (map.current) {
         map.current.remove();
@@ -126,9 +124,9 @@ const MapComponent: React.FC<MapComponentProps> = ({
     if (!map.current) return;
     
     const handleClick = (e: maplibregl.MapMouseEvent) => {
-      if (onMapClick && isCreatingStop) {
+      if (onMapClickRef.current && isCreatingStop) {
         const { lng, lat } = e.lngLat;
-        onMapClick(lat, lng);
+        onMapClickRef.current(lat, lng);
       }
     };
     
@@ -141,7 +139,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         map.current.off('click', handleClick);
       }
     };
-  }, [isCreatingStop, onMapClick]);
+  }, [isCreatingStop]);
 
   const loadToColor = (load: number): string => {
     if (load <= 3) return "#10b981";
@@ -159,10 +157,10 @@ const MapComponent: React.FC<MapComponentProps> = ({
     const el = document.createElement('div');
     el.className = 'custom-marker';
 
-    const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
+    const isSelected = isCreatingRoute && selectedStops.includes(marker.address);
     const color = loadToColor(marker.load);
     const size = getMarkerSize(marker.load);
-    const selectedIndex = isSelected ? selectedStops.indexOf(marker.id) + 1 : 0;
+    const selectedIndex = isSelected ? selectedStops.indexOf(marker.address) + 1 : 0;
 
     el.style.width = `${size}px`;
     el.style.height = `${size}px`;
@@ -198,24 +196,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
     return el;
   };
 
-  const handleMarkerClick = (marker: MarkerData) => {
-    if (isCreatingRoute && onMarkerClick) {
-      onMarkerClick(marker);
-      return;
-    }
-    if (!isCreatingRoute && !isCreatingStop) {
-      setSelectedModalMarker(marker);
-      if (map.current) {
-        map.current.flyTo({
-          center: [marker.lat, marker.lng],
-          zoom: 15,
-          essential: true,
-          duration: 800
-        });
-      }
-    }
-  };
-
   useEffect(() => {
     if (!map.current || loading) return;
 
@@ -234,8 +214,23 @@ const MapComponent: React.FC<MapComponentProps> = ({
       const clickHandler = (e: MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
-        handleMarkerClick(marker);
+        
+        if (isCreatingRoute && onMarkerClickRef.current) {
+          onMarkerClickRef.current(marker);
+          return;
+        }
+        
+        if (!isCreatingRoute && !isCreatingStop) {
+          setSelectedModalMarker(marker);
+          map.current?.flyTo({
+            center: [marker.lng, marker.lat],
+            zoom: 15,
+            essential: true,
+            duration: 800
+          });
+        }
       };
+      
       markerElement.addEventListener('click', clickHandler);
       (markerElement as any)._clickHandler = clickHandler;
 
@@ -247,6 +242,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         .addTo(map.current!);
       return markerInstance;
     });
+    
     markersRef.current = markersInstances;
   }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops]);
 
