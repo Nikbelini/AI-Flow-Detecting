@@ -36,6 +36,7 @@ public class StopServiceImpl implements StopService {
     public List<StopResponse> getAllStops() {
         return stopRepository.findAll().stream()
                 .map(stop -> new StopResponse(
+                        stop.getId(),
                         stop.getUrl(),
                         stop.getAddress(),
                         stop.getCount(),
@@ -183,6 +184,7 @@ public class StopServiceImpl implements StopService {
     public List<StopResponse> getAllStopsByCityId(Long cityId) {
         return stopRepository.getByCityId(cityId).stream()
                 .map(stop -> new StopResponse(
+                        stop.getId(),
                         stop.getUrl(),
                         stop.getAddress(),
                         stop.getCount(),

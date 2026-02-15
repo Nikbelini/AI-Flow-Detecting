@@ -2,6 +2,8 @@ package ru.slivkiai.flowdetect.domain.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +26,8 @@ public class RouteEntity {
     private String name;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "transport_type", nullable = false, length = 20)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
+    @Column(name = "transport_type", nullable = false, columnDefinition = "transport_type")
     private TransportType transportType;
 
     @Column(name = "is_active", nullable = false)

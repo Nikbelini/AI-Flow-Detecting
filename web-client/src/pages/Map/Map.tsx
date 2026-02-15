@@ -22,7 +22,7 @@ interface MapComponentProps {
   onMarkerClick?: (marker: MarkerData) => void;
   isCreatingStop?: boolean;
   isCreatingRoute?: boolean;
-  selectedStops?: string[];
+  selectedStops?: number[];  // ← ПРАВИЛЬНЫЙ ТИП: массив id
 }
 
 const MapComponent: React.FC<MapComponentProps> = ({
@@ -157,10 +157,11 @@ const MapComponent: React.FC<MapComponentProps> = ({
     const el = document.createElement('div');
     el.className = 'custom-marker';
 
-    const isSelected = isCreatingRoute && selectedStops.includes(marker.address);
+    // ИСПРАВЛЕНО: используем id для проверки выделения
+    const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
     const color = loadToColor(marker.load);
     const size = getMarkerSize(marker.load);
-    const selectedIndex = isSelected ? selectedStops.indexOf(marker.address) + 1 : 0;
+    const selectedIndex = isSelected ? selectedStops.indexOf(marker.id) + 1 : 0;
 
     el.style.width = `${size}px`;
     el.style.height = `${size}px`;

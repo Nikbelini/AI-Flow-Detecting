@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 @Builder
 @Data
 public class StopResponse {
+    private Long id;
     private String url;
     private String address;
     private Integer count;

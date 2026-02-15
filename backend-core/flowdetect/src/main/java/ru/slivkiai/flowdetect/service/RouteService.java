@@ -50,15 +50,26 @@ public class RouteService {
     public Route createRoute(RouteCreateRequest request) {
         log.info("Создание нового маршрута: {}", request.getNumber());
 
-        // Валидация города
+        // Явная проверка cityId
+        if (request.getCityId() == null) {
+            throw new IllegalArgumentException("ID города не может быть null");
+        }
+
+        // Проверка transportType перед вызовом name()
+        if (request.getTransportType() == null) {
+            throw new IllegalArgumentException("Тип транспорта не может быть null");
+        }
+
+        // Загрузка города
         CityEntity city = cityRepository.findById(request.getCityId())
                 .orElseThrow(() -> new EntityNotFoundException("Город с ID " + request.getCityId() + " не найден"));
 
         // Проверка уникальности номера маршрута
         if (routeRepository.existsByNumberAndCityIdAndTransportType(
-                request.getNumber(), request.getCityId(), request.getTransportType())) {
-            throw new IllegalArgumentException("Маршрут с номером " + request.getNumber() +
-                    " и типом транспорта " + request.getTransportType() + " уже существует в этом городе");
+                request.getNumber(),
+                request.getCityId(),
+                request.getTransportType().name())) {
+            throw new IllegalArgumentException("Маршрут с таким номером уже существует в этом городе");
         }
 
         // Создание маршрута
@@ -233,6 +244,10 @@ public class RouteService {
         List<RouteStopEntity> routeStops = new ArrayList<>();
 
         for (RouteStopRequest stopRequest : stopRequests) {
+            if (stopRequest.getStopId() == null) {
+                throw new IllegalArgumentException("ID остановки не может быть null");
+            }
+
             StopEntity stop = stopRepository.findById(stopRequest.getStopId())
                     .orElseThrow(() -> new EntityNotFoundException(
                             "Остановка с ID " + stopRequest.getStopId() + " не найдена"));

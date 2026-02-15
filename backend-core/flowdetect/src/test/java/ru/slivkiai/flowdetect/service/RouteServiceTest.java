@@ -210,7 +210,7 @@ class RouteServiceTest {
 
         when(cityRepository.findById(1L)).thenReturn(Optional.of(testCity));
         when(routeRepository.existsByNumberAndCityIdAndTransportType(
-                "105", 1L, TransportType.BUS)).thenReturn(false);
+                "105", 1L, String.valueOf(TransportType.BUS))).thenReturn(false);
         when(routeRepository.save(any(RouteEntity.class))).thenReturn(testRoute);
         when(stopRepository.findById(1L)).thenReturn(Optional.of(testStop1));
         when(stopRepository.findById(2L)).thenReturn(Optional.of(testStop2));
@@ -230,7 +230,7 @@ class RouteServiceTest {
 
         verify(cityRepository, times(1)).findById(1L);
         verify(routeRepository, times(1)).existsByNumberAndCityIdAndTransportType(
-                "105", 1L, TransportType.BUS);
+                "105", 1L, String.valueOf(TransportType.BUS));
         verify(routeRepository, times(1)).save(any(RouteEntity.class));
         verify(stopRepository, times(2)).findById(anyLong());
         verify(routeStopRepository, times(1)).saveAll(anyList());
@@ -248,7 +248,7 @@ class RouteServiceTest {
 
         when(cityRepository.findById(1L)).thenReturn(Optional.of(testCity));
         when(routeRepository.existsByNumberAndCityIdAndTransportType(
-                "105", 1L, TransportType.BUS)).thenReturn(true);
+                "105", 1L, String.valueOf(TransportType.BUS))).thenReturn(true);
 
         // Act & Assert
         assertThatThrownBy(() -> routeService.createRoute(request))
@@ -257,7 +257,7 @@ class RouteServiceTest {
 
         verify(cityRepository, times(1)).findById(1L);
         verify(routeRepository, times(1)).existsByNumberAndCityIdAndTransportType(
-                "105", 1L, TransportType.BUS);
+                "105", 1L, String.valueOf(TransportType.BUS));
         verify(routeRepository, never()).save(any(RouteEntity.class));
     }
 

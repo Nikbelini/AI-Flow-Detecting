@@ -3,14 +3,14 @@ import MapComponent from './Map/Map';
 import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, CheckCircle } from 'lucide-react';
 import { useStops } from '../hooks/api/useStops';
 import { useRoutes } from '../hooks/api/useRoutes';
-import type { Stop, Route as RouteType, TransportType } from '../api/types';
+import type { Stop, Route as RouteType, TransportType, RouteCreateRequest } from '../api/types';
 import './AnalyticsPage.css';
 
 const AnalyticsPage: React.FC = () => {
   const [creationMode, setCreationMode] = useState<'none' | 'stop' | 'route'>('none');
-  // ИЗМЕНЕНО: убрали id, теперь только order и address
+  // ИСПРАВЛЕНО: храним и id, и order, и address
   const [selectedStopsForRoute, setSelectedStopsForRoute] = useState<
-    { order: number; address: string }[]
+    { id: number; order: number; address: string }[]
   >([]);
   const [newStopData, setNewStopData] = useState({
     address: '',
@@ -71,12 +71,12 @@ const AnalyticsPage: React.FC = () => {
     }
   };
 
-  // ИСПРАВЛЕНО: используем address для идентификации
+  // ИСПРАВЛЕНО: сохраняем и id, и address
   const handleMarkerClick = (marker: any) => {
     if (creationMode !== 'route') return;
 
     const alreadySelected = selectedStopsForRoute.some(
-      stop => stop.address === marker.address
+      stop => stop.id === marker.id  // ← проверяем по id
     );
 
     if (alreadySelected) {
@@ -85,6 +85,7 @@ const AnalyticsPage: React.FC = () => {
     }
 
     const newStop = {
+      id: marker.id,                 // ← сохраняем id
       order: selectedStopsForRoute.length + 1,
       address: marker.address
     };
@@ -127,38 +128,53 @@ const AnalyticsPage: React.FC = () => {
     }
   };
 
-  // ИСПРАВЛЕНО: получаем stopId из массива stops по адресу
   const handleCreateRouteSubmit = async () => {
     try {
       if (selectedStopsForRoute.length < 2) {
         showNotificationFunc('Выберите минимум 2 остановки', 'error');
         return;
       }
+      
       if (!newRouteData.number.trim()) {
         showNotificationFunc('Введите номер маршрута', 'error');
         return;
       }
 
-      // Сопоставляем адреса с реальными объектами остановок для получения id
-      const routeStops = selectedStopsForRoute
-        .sort((a, b) => a.order - b.order)
-        .map((item, index) => {
-          const stop = stops.find(s => s.address === item.address);
-          if (!stop) {
-            throw new Error(`Остановка с адресом "${item.address}" не найдена`);
-          }
-          return {
-            stopId: stop.id,
-            order: index + 1,
-            direction: 'A' as const,
-            travelTimeToNext: index < selectedStopsForRoute.length - 1 ? 5 : 0
-          };
-        });
+      if (!newRouteData.transportType) {
+        showNotificationFunc('Выберите тип транспорта', 'error');
+        return;
+      }
 
-      const createdRoute = await createRoute({
-        ...newRouteData,
+      if (!newRouteData.cityId) {
+        showNotificationFunc('Не указан город', 'error');
+        return;
+      }
+
+      const sortedStops = [...selectedStopsForRoute].sort((a, b) => a.order - b.order);
+
+      // ИСПРАВЛЕНО: используем сохранённые id напрямую
+      const routeStops = sortedStops.map((item, index) => ({
+        stopId: item.id,  // ← id уже есть в selectedStopsForRoute
+        order: index + 1,
+        direction: 'A' as const,
+        travelTimeToNext: index < sortedStops.length - 1 ? 5 : 0
+      }));
+
+      const requestData: RouteCreateRequest = {
+        number: newRouteData.number,
+        name: newRouteData.name || undefined,
+        transportType: newRouteData.transportType,
+        cityId: newRouteData.cityId,
+        directionAName: newRouteData.directionAName || undefined,
+        directionBName: newRouteData.directionBName || undefined,
+        intervalMinutes: newRouteData.intervalMinutes,
+        operatingHours: newRouteData.operatingHours,
         stops: routeStops
-      });
+      };
+
+      console.log('Sending route data:', requestData);
+
+      const createdRoute = await createRoute(requestData);
 
       setRoutes(prev => [...prev, createdRoute]);
       setShowRouteModal(false);
@@ -177,6 +193,7 @@ const AnalyticsPage: React.FC = () => {
 
       showNotificationFunc(`Маршрут "${newRouteData.number}" создан!`, 'success');
     } catch (error) {
+      console.error('Route creation error:', error);
       showNotificationFunc('Ошибка при создании маршрута', 'error');
     }
   };
@@ -187,7 +204,7 @@ const AnalyticsPage: React.FC = () => {
     showNotificationFunc('Создание отменено', 'info');
   };
 
-  // ИСПРАВЛЕНО: работаем с адресами вместо id
+  // ИСПРАВЛЕНО: работаем с id
   const moveStopUp = (index: number) => {
     if (index <= 0) return;
     const newStops = [...selectedStopsForRoute];
@@ -202,8 +219,8 @@ const AnalyticsPage: React.FC = () => {
     setSelectedStopsForRoute(newStops.map((item, i) => ({ ...item, order: i + 1 })));
   };
 
-  const removeStopFromRoute = (address: string) => {
-    const newStops = selectedStopsForRoute.filter(item => item.address !== address);
+  const removeStopFromRoute = (stopId: number) => {  // ← принимаем id
+    const newStops = selectedStopsForRoute.filter(item => item.id !== stopId);
     setSelectedStopsForRoute(newStops.map((item, index) => ({ ...item, order: index + 1 })));
   };
 
@@ -284,8 +301,7 @@ const AnalyticsPage: React.FC = () => {
               onMarkerClick={handleMarkerClick}
               isCreatingStop={creationMode === 'stop'}
               isCreatingRoute={creationMode === 'route'}
-              // ИЗМЕНЕНО: передаём массив адресов
-              selectedStops={selectedStopsForRoute.map(s => s.address)}
+              selectedStops={selectedStopsForRoute.map(s => s.id)}  // ← ТЕПЕРЬ РАБОТАЕТ
             />
           </div>
         </div>
@@ -301,7 +317,7 @@ const AnalyticsPage: React.FC = () => {
             {stops.slice(0, 10).map((stop) => (
               <div
                 key={stop.id}
-                className={`stop-item ${selectedStopsForRoute.some(s => s.address === stop.address) ? 'selected' : ''}`}
+                className={`stop-item ${selectedStopsForRoute.some(s => s.id === stop.id) ? 'selected' : ''}`}  // ← проверка по id
               >
                 <div className="stop-marker" style={{ backgroundColor: getMarkerColor(stop.load) }}>
                   {stop.load}
@@ -313,9 +329,9 @@ const AnalyticsPage: React.FC = () => {
                     <span className="stat">{stop.load}/10</span>
                   </div>
                 </div>
-                {selectedStopsForRoute.some(s => s.address === stop.address) && (
+                {selectedStopsForRoute.some(s => s.id === stop.id) && (
                   <div className="stop-order">
-                    #{selectedStopsForRoute.find(s => s.address === stop.address)?.order}
+                    #{selectedStopsForRoute.find(s => s.id === stop.id)?.order}
                   </div>
                 )}
               </div>
@@ -334,7 +350,7 @@ const AnalyticsPage: React.FC = () => {
                 <span>Выберите остановки на карте в нужном порядке</span>
               </div>
               {selectedStopsForRoute.map((item, index) => (
-                <div key={item.address} className="selected-stop-item">
+                <div key={item.id} className="selected-stop-item">  {/* ← key по id */}
                   <div className="stop-order-badge">#{item.order}</div>
                   <div className="stop-info">
                     <div className="stop-address">{item.address}</div>
@@ -357,7 +373,7 @@ const AnalyticsPage: React.FC = () => {
                       </button>
                       <button
                         className="action-btn remove"
-                        onClick={() => removeStopFromRoute(item.address)}
+                        onClick={() => removeStopFromRoute(item.id)}
                         title="Удалить из маршрута"
                       >
                         <X size={14} />

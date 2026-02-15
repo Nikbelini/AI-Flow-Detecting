@@ -18,7 +18,16 @@ public interface RouteRepository extends JpaRepository<RouteEntity, Long> {
             "WHERE rs.stop.id = :stopId")
     List<RouteEntity> findByStopId(@Param("stopId") Long stopId);
 
-    boolean existsByNumberAndCityIdAndTransportType(String number, Long cityId, TransportType transportType);
+    @Query(value = "SELECT CASE WHEN COUNT(*) > 0 THEN true ELSE false END " +
+            "FROM routes r " +
+            "WHERE r.number = :number " +
+            "AND r.city_id = :cityId " +
+            "AND r.transport_type = CAST(:transportType AS transport_type)", nativeQuery = true)
+    boolean existsByNumberAndCityIdAndTransportType(
+            @Param("number") String number,
+            @Param("cityId") Long cityId,
+            @Param("transportType") String transportType
+    );
 
     @Query("SELECT r FROM RouteEntity r " +
             "WHERE r.city.id = :cityId " +
