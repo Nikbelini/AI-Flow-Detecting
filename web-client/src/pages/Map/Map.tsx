@@ -5,28 +5,23 @@ import './MapComponent.css';
 import ModalContent from './ModalContent';
 import { getMarkers } from '../../api/markersApi';
 import { Clock, RefreshCw, MapPin, Minimize2, Maximize2, X } from 'lucide-react';
-
-interface MarkerData {
-  id: number;
-  address: string;
-  count: number;
-  velocity: number;
-  load: number;
-  lat: number;
-  lng: number;
-}
+import type { Stop, Route as ApiRoute } from '../../api/types';
 
 interface MapComponentProps {
-  markers?: MarkerData[];
+  markers?: Stop[];
+  routes?: ApiRoute[];
+  selectedRouteId?: number | null;
   onMapClick?: (lat: number, lng: number) => void;
-  onMarkerClick?: (marker: MarkerData) => void;
+  onMarkerClick?: (marker: Stop) => void;
   isCreatingStop?: boolean;
   isCreatingRoute?: boolean;
-  selectedStops?: number[];  // ← ПРАВИЛЬНЫЙ ТИП: массив id
+  selectedStops?: number[];
 }
 
 const MapComponent: React.FC<MapComponentProps> = ({
   markers: externalMarkers,
+  routes = [],
+  selectedRouteId,
   onMapClick,
   onMarkerClick,
   isCreatingStop = false,
@@ -39,11 +34,11 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const onMarkerClickRef = useRef(onMarkerClick);
   const onMapClickRef = useRef(onMapClick);
 
-  const [localMarkers, setLocalMarkers] = useState<MarkerData[]>([]);
+  const [localMarkers, setLocalMarkers] = useState<Stop[]>([]);
   const [loading, setLoading] = useState(!externalMarkers);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [selectedModalMarker, setSelectedModalMarker] = useState<MarkerData | null>(null);
+  const [selectedModalMarker, setSelectedModalMarker] = useState<Stop | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
 
   const markers = externalMarkers || localMarkers;
@@ -78,7 +73,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
   useEffect(() => {
     if (!mapContainer.current) return;
-    
+
     map.current = new maplibregl.Map({
       container: mapContainer.current,
       style: {
@@ -112,6 +107,10 @@ const MapComponent: React.FC<MapComponentProps> = ({
     map.current.addControl(new maplibregl.NavigationControl());
     map.current.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }));
 
+    map.current.on('load', () => {
+      drawRoutes();
+    });
+
     return () => {
       if (map.current) {
         map.current.remove();
@@ -122,24 +121,163 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
   useEffect(() => {
     if (!map.current) return;
-    
+
     const handleClick = (e: maplibregl.MapMouseEvent) => {
       if (onMapClickRef.current && isCreatingStop) {
         const { lng, lat } = e.lngLat;
         onMapClickRef.current(lat, lng);
       }
     };
-    
+
     if (isCreatingStop) {
       map.current.on('click', handleClick);
     }
-    
+
     return () => {
       if (map.current) {
         map.current.off('click', handleClick);
       }
     };
   }, [isCreatingStop]);
+
+  useEffect(() => {
+    if (!map.current || !map.current.loaded()) return;
+    drawRoutes();
+  }, [routes, selectedRouteId, map.current]);
+
+  const drawRoutes = () => {
+    if (!map.current) {
+      console.log('No map instance');
+      return;
+    }
+
+    console.log('Drawing routes, count:', routes.length);
+    console.log('Routes data:', JSON.stringify(routes, null, 2));
+
+    // Удаляем старые слои
+    ['routes-line', 'routes-line-selected'].forEach(layerId => {
+      if (map.current?.getLayer(layerId)) {
+        console.log(`Removing layer: ${layerId}`);
+        map.current.removeLayer(layerId);
+      }
+    });
+
+    if (map.current.getSource('routes')) {
+      console.log('Removing source: routes');
+      map.current.removeSource('routes');
+    }
+
+    if (routes.length === 0) {
+      console.log('No routes to draw');
+      return;
+    }
+
+    const features: any[] = [];
+
+    routes.forEach(route => {
+      console.log(`Processing route ${route.id}:`, route);
+
+      if (!route.stops || route.stops.length < 2) {
+        console.log(`Route ${route.id} has insufficient stops:`, route.stops?.length);
+        return;
+      }
+
+      const sortedStops = [...route.stops].sort((a, b) => a.orderInRoute - b.orderInRoute);
+      console.log(`Route ${route.id} sorted stops:`, sortedStops);
+
+      // ВАЖНО: MapLibre ожидает [lng, lat], а не [lat, lng]
+      const coordinates = sortedStops.map(stop => {
+        if (!stop.lng || !stop.lat) {
+          console.warn(`Stop missing coordinates:`, stop);
+          return null;
+        }
+        // Правильный порядок: [долгота, широта]
+        return [stop.lng, stop.lat];
+      }).filter(coord => coord !== null);
+
+      console.log(`Route ${route.id} coordinates (lng, lat):`, coordinates);
+
+      if (coordinates.length < 2) {
+        console.log(`Route ${route.id} has insufficient valid coordinates`);
+        return;
+      }
+
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: coordinates
+        },
+        properties: {
+          id: route.id,
+          number: route.number,
+          isSelected: route.id === selectedRouteId
+        }
+      });
+    });
+
+    console.log('Features to draw:', features);
+
+    if (features.length === 0) {
+      console.log('No valid features to draw');
+      return;
+    }
+
+    try {
+      map.current.addSource('routes', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: features
+        }
+      });
+
+      console.log('Source added successfully');
+
+      // Невыделенные маршруты (серые)
+      map.current.addLayer({
+        id: 'routes-line',
+        type: 'line',
+        source: 'routes',
+        filter: ['!=', ['get', 'isSelected'], true],
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#94a3b8',
+          'line-width': 3,
+          'line-opacity': 0.6,
+          'line-dasharray': [2, 1]
+        }
+      });
+
+      console.log('Base routes layer added');
+
+      // Выделенный маршрут (синий, жирный)
+      if (selectedRouteId) {
+        map.current.addLayer({
+          id: 'routes-line-selected',
+          type: 'line',
+          source: 'routes',
+          filter: ['==', ['get', 'isSelected'], true],
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#3b82f6',
+            'line-width': 5,
+            'line-opacity': 1
+          }
+        });
+
+        console.log('Selected route layer added');
+      }
+    } catch (error) {
+      console.error('Error adding routes to map:', error);
+    }
+  };
 
   const loadToColor = (load: number): string => {
     if (load <= 3) return "#10b981";
@@ -153,11 +291,10 @@ const MapComponent: React.FC<MapComponentProps> = ({
     return 48;
   };
 
-  const createCustomMarker = (marker: MarkerData): HTMLDivElement => {
+  const createCustomMarker = (marker: Stop): HTMLDivElement => {
     const el = document.createElement('div');
     el.className = 'custom-marker';
 
-    // ИСПРАВЛЕНО: используем id для проверки выделения
     const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
     const color = loadToColor(marker.load);
     const size = getMarkerSize(marker.load);
@@ -211,16 +348,16 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
     const markersInstances = markers.map(marker => {
       const markerElement = createCustomMarker(marker);
-      
+
       const clickHandler = (e: MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
-        
+
         if (isCreatingRoute && onMarkerClickRef.current) {
           onMarkerClickRef.current(marker);
           return;
         }
-        
+
         if (!isCreatingRoute && !isCreatingStop) {
           setSelectedModalMarker(marker);
           map.current?.flyTo({
@@ -231,7 +368,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
           });
         }
       };
-      
+
       markerElement.addEventListener('click', clickHandler);
       (markerElement as any)._clickHandler = clickHandler;
 
@@ -243,7 +380,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         .addTo(map.current!);
       return markerInstance;
     });
-    
+
     markersRef.current = markersInstances;
   }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops]);
 
@@ -303,8 +440,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
                     <RefreshCw size={20} />
                   </div>
                   <div className="stat-info">
-                    <div className="stat-value">-</div>
-                    <div className="stat-label">Автообновление</div>
+                    <div className="stat-value">{routes.length}</div>
+                    <div className="stat-label">Маршрутов</div>
                   </div>
                 </div>
               </div>

@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import MapComponent from './Map/Map';
-import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, CheckCircle } from 'lucide-react';
+import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, CheckCircle, Bus } from 'lucide-react';
 import { useStops } from '../hooks/api/useStops';
 import { useRoutes } from '../hooks/api/useRoutes';
-import type { Stop, Route as RouteType, TransportType, RouteCreateRequest } from '../api/types';
+import type { 
+  Stop, 
+  Route as ApiRoute, 
+  TransportType, 
+  RouteCreateRequest,
+  RouteStop,
+  RouteStopRequest 
+} from '../api/types';
 import './AnalyticsPage.css';
 
 const AnalyticsPage: React.FC = () => {
   const [creationMode, setCreationMode] = useState<'none' | 'stop' | 'route'>('none');
-  // ИСПРАВЛЕНО: храним и id, и order, и address
   const [selectedStopsForRoute, setSelectedStopsForRoute] = useState<
     { id: number; order: number; address: string }[]
   >([]);
@@ -36,12 +42,13 @@ const AnalyticsPage: React.FC = () => {
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState('');
   const [notificationType, setNotificationType] = useState<'info' | 'success' | 'error'>('info');
+  const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
 
   const { getStops, createStop } = useStops();
   const { getAllRoutes, createRoute } = useRoutes();
 
   const [stops, setStops] = useState<Stop[]>([]);
-  const [routes, setRoutes] = useState<RouteType[]>([]);
+  const [routes, setRoutes] = useState<ApiRoute[]>([]);
 
   useEffect(() => {
     loadData();
@@ -71,12 +78,11 @@ const AnalyticsPage: React.FC = () => {
     }
   };
 
-  // ИСПРАВЛЕНО: сохраняем и id, и address
-  const handleMarkerClick = (marker: any) => {
+  const handleMarkerClick = (marker: Stop) => {
     if (creationMode !== 'route') return;
 
     const alreadySelected = selectedStopsForRoute.some(
-      stop => stop.id === marker.id  // ← проверяем по id
+      stop => stop.id === marker.id
     );
 
     if (alreadySelected) {
@@ -85,7 +91,7 @@ const AnalyticsPage: React.FC = () => {
     }
 
     const newStop = {
-      id: marker.id,                 // ← сохраняем id
+      id: marker.id,
       order: selectedStopsForRoute.length + 1,
       address: marker.address
     };
@@ -140,23 +146,12 @@ const AnalyticsPage: React.FC = () => {
         return;
       }
 
-      if (!newRouteData.transportType) {
-        showNotificationFunc('Выберите тип транспорта', 'error');
-        return;
-      }
-
-      if (!newRouteData.cityId) {
-        showNotificationFunc('Не указан город', 'error');
-        return;
-      }
-
       const sortedStops = [...selectedStopsForRoute].sort((a, b) => a.order - b.order);
 
-      // ИСПРАВЛЕНО: используем сохранённые id напрямую
-      const routeStops = sortedStops.map((item, index) => ({
-        stopId: item.id,  // ← id уже есть в selectedStopsForRoute
+      const routeStops: RouteStopRequest[] = sortedStops.map((item, index) => ({
+        stopId: item.id,
         order: index + 1,
-        direction: 'A' as const,
+        direction: 'A',
         travelTimeToNext: index < sortedStops.length - 1 ? 5 : 0
       }));
 
@@ -171,8 +166,6 @@ const AnalyticsPage: React.FC = () => {
         operatingHours: newRouteData.operatingHours,
         stops: routeStops
       };
-
-      console.log('Sending route data:', requestData);
 
       const createdRoute = await createRoute(requestData);
 
@@ -204,7 +197,6 @@ const AnalyticsPage: React.FC = () => {
     showNotificationFunc('Создание отменено', 'info');
   };
 
-  // ИСПРАВЛЕНО: работаем с id
   const moveStopUp = (index: number) => {
     if (index <= 0) return;
     const newStops = [...selectedStopsForRoute];
@@ -219,7 +211,7 @@ const AnalyticsPage: React.FC = () => {
     setSelectedStopsForRoute(newStops.map((item, i) => ({ ...item, order: i + 1 })));
   };
 
-  const removeStopFromRoute = (stopId: number) => {  // ← принимаем id
+  const removeStopFromRoute = (stopId: number) => {
     const newStops = selectedStopsForRoute.filter(item => item.id !== stopId);
     setSelectedStopsForRoute(newStops.map((item, index) => ({ ...item, order: index + 1 })));
   };
@@ -227,6 +219,24 @@ const AnalyticsPage: React.FC = () => {
   const removeLastStop = () => {
     if (selectedStopsForRoute.length === 0) return;
     setSelectedStopsForRoute(selectedStopsForRoute.slice(0, -1));
+  };
+
+  const getMarkerColor = (load: number): string => {
+    if (load <= 3) return "#10b981";
+    if (load <= 7) return "#f59e0b";
+    return "#ef4444";
+  };
+
+  const getTransportIcon = (type: TransportType) => {
+    switch(type) {
+      case 'BUS': return '🚌';
+      case 'TROLLEYBUS': return '🚎';
+      case 'TRAM': return '🚊';
+      case 'MINIBUS': return '🚐';
+      case 'METRO': return '🚇';
+      case 'TRAIN': return '🚆';
+      default: return '🚌';
+    }
   };
 
   return (
@@ -297,45 +307,94 @@ const AnalyticsPage: React.FC = () => {
           <div className="card-body map-wrapper">
             <MapComponent
               markers={stops}
+              routes={routes}
+              selectedRouteId={selectedRouteId}
               onMapClick={handleMapClick}
               onMarkerClick={handleMarkerClick}
               isCreatingStop={creationMode === 'stop'}
               isCreatingRoute={creationMode === 'route'}
-              selectedStops={selectedStopsForRoute.map(s => s.id)}  // ← ТЕПЕРЬ РАБОТАЕТ
+              selectedStops={selectedStopsForRoute.map(s => s.id)}
             />
           </div>
         </div>
 
-        <div className="stops-card">
-          <div className="card-header">
-            <h3>Остановки ({stops.length})</h3>
-            <button className="refresh-btn" onClick={loadData}>
-              <RefreshCw size={16} />
-            </button>
+        <div className="sidebar">
+          <div className="stops-card">
+            <div className="card-header">
+              <h3>Остановки ({stops.length})</h3>
+              <button className="refresh-btn" onClick={loadData}>
+                <RefreshCw size={16} />
+              </button>
+            </div>
+            <div className="card-body stops-list">
+              {stops.slice(0, 10).map((stop) => (
+                <div
+                  key={stop.id}
+                  className={`stop-item ${selectedStopsForRoute.some(s => s.id === stop.id) ? 'selected' : ''}`}
+                >
+                  <div className="stop-marker" style={{ backgroundColor: getMarkerColor(stop.load) }}>
+                    {stop.load}
+                  </div>
+                  <div className="stop-info">
+                    <div className="stop-address">{stop.address}</div>
+                    <div className="stop-stats">
+                      <span className="stat">{stop.count} чел</span>
+                      <span className="stat">{stop.load}/10</span>
+                    </div>
+                  </div>
+                  {selectedStopsForRoute.some(s => s.id === stop.id) && (
+                    <div className="stop-order">
+                      #{selectedStopsForRoute.find(s => s.id === stop.id)?.order}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="card-body stops-list">
-            {stops.slice(0, 10).map((stop) => (
-              <div
-                key={stop.id}
-                className={`stop-item ${selectedStopsForRoute.some(s => s.id === stop.id) ? 'selected' : ''}`}  // ← проверка по id
-              >
-                <div className="stop-marker" style={{ backgroundColor: getMarkerColor(stop.load) }}>
-                  {stop.load}
-                </div>
-                <div className="stop-info">
-                  <div className="stop-address">{stop.address}</div>
-                  <div className="stop-stats">
-                    <span className="stat">{stop.count} чел</span>
-                    <span className="stat">{stop.load}/10</span>
+
+          <div className="routes-card">
+            <div className="card-header">
+              <h3>Маршруты ({routes.length})</h3>
+            </div>
+            <div className="card-body routes-list">
+              {routes.map((route) => (
+                <div
+                  key={route.id}
+                  className={`route-item ${selectedRouteId === route.id ? 'selected' : ''}`}
+                  onClick={() => setSelectedRouteId(route.id)}
+                >
+                  <div className="route-header">
+                    <span className="route-number">
+                      {getTransportIcon(route.transportType)} {route.number}
+                    </span>
+                    <span className={`route-status ${route.isActive ? 'active' : 'inactive'}`}>
+                      {route.isActive ? 'Активен' : 'Неактивен'}
+                    </span>
+                  </div>
+                  {route.name && <div className="route-name">{route.name}</div>}
+                  <div className="route-stops">
+                    {route.stops.slice(0, 3).map((stop, idx) => (
+                      <span key={stop.stopId}>
+                        {stop.address.split(',')[1]?.trim() || stop.address}
+                        {idx < Math.min(route.stops.length, 3) - 1 && ' → '}
+                      </span>
+                    ))}
+                    {route.stops.length > 3 && ' ...'}
+                  </div>
+                  <div className="route-details">
+                    <span>Интервал: {route.intervalMinutes} мин</span>
+                    <span>•</span>
+                    <span>{route.operatingHours}</span>
                   </div>
                 </div>
-                {selectedStopsForRoute.some(s => s.id === stop.id) && (
-                  <div className="stop-order">
-                    #{selectedStopsForRoute.find(s => s.id === stop.id)?.order}
-                  </div>
-                )}
-              </div>
-            ))}
+              ))}
+              {routes.length === 0 && (
+                <div className="empty-state">
+                  <Bus size={24} />
+                  <p>Нет созданных маршрутов</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -350,7 +409,7 @@ const AnalyticsPage: React.FC = () => {
                 <span>Выберите остановки на карте в нужном порядке</span>
               </div>
               {selectedStopsForRoute.map((item, index) => (
-                <div key={item.id} className="selected-stop-item">  {/* ← key по id */}
+                <div key={item.id} className="selected-stop-item">
                   <div className="stop-order-badge">#{item.order}</div>
                   <div className="stop-info">
                     <div className="stop-address">{item.address}</div>
@@ -528,6 +587,9 @@ const AnalyticsPage: React.FC = () => {
                   <option value="BUS">Автобус</option>
                   <option value="TROLLEYBUS">Троллейбус</option>
                   <option value="TRAM">Трамвай</option>
+                  <option value="MINIBUS">Маршрутка</option>
+                  <option value="METRO">Метро</option>
+                  <option value="TRAIN">Поезд</option>
                 </select>
               </div>
               <div className="form-group">
@@ -595,12 +657,6 @@ const AnalyticsPage: React.FC = () => {
       )}
     </div>
   );
-};
-
-const getMarkerColor = (load: number): string => {
-  if (load <= 3) return "#10b981";
-  if (load <= 7) return "#f59e0b";
-  return "#ef4444";
 };
 
 export default AnalyticsPage;
