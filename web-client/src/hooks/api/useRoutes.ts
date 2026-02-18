@@ -2,9 +2,7 @@
 import { useState, useCallback } from 'react';
 import { routesApi } from '../../api/routesApi';
 import type {
-  Route,
   RouteCreateRequest,
-  RouteUpdateRequest,
   RouteSearchRequest,
   RouteStopRequest
 } from '../../api/types';

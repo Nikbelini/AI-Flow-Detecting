@@ -40,6 +40,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedModalMarker, setSelectedModalMarker] = useState<Stop | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   const markers = externalMarkers || localMarkers;
 
@@ -62,7 +63,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
       setLoading(true);
       setError(null);
       const fetchedMarkers = await getMarkers();
-      setLocalMarkers(fetchedMarkers);
+      const normalized = fetchedMarkers.map((m: any) => ({ ...m, id: Number(m.id) }));
+      setLocalMarkers(normalized);
     } catch (err) {
       console.error('Failed to fetch markers:', err);
       setError('Не удалось загрузить данные остановок');
@@ -71,6 +73,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
     }
   };
 
+  // Инициализация карты
   useEffect(() => {
     if (!mapContainer.current) return;
 
@@ -108,7 +111,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
     map.current.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }));
 
     map.current.on('load', () => {
-      drawRoutes();
+      console.log('Map loaded');
+      setMapLoaded(true);
     });
 
     return () => {
@@ -119,6 +123,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
     };
   }, []);
 
+  // Обработка кликов для создания остановки
   useEffect(() => {
     if (!map.current) return;
 
@@ -140,10 +145,16 @@ const MapComponent: React.FC<MapComponentProps> = ({
     };
   }, [isCreatingStop]);
 
+  // Отрисовка маршрутов при изменении данных или загрузке карты
   useEffect(() => {
-    if (!map.current || !map.current.loaded()) return;
+    if (!map.current || !mapLoaded) {
+      console.log('Map not ready for routes');
+      return;
+    }
+    
+    console.log('Drawing routes, count:', routes.length, 'selectedId:', selectedRouteId);
     drawRoutes();
-  }, [routes, selectedRouteId, map.current]);
+  }, [routes, selectedRouteId, mapLoaded]);
 
   const drawRoutes = () => {
     if (!map.current) {
@@ -151,20 +162,21 @@ const MapComponent: React.FC<MapComponentProps> = ({
       return;
     }
 
-    console.log('Drawing routes, count:', routes.length);
-    console.log('Routes data:', JSON.stringify(routes, null, 2));
+    console.log('Starting drawRoutes with routes:', routes.length);
 
-    // Удаляем старые слои
-    ['routes-line', 'routes-line-selected'].forEach(layerId => {
-      if (map.current?.getLayer(layerId)) {
-        console.log(`Removing layer: ${layerId}`);
-        map.current.removeLayer(layerId);
+    // Удаляем старые слои и источник
+    try {
+      if (map.current.getLayer('routes-line-selected')) {
+        map.current.removeLayer('routes-line-selected');
       }
-    });
-
-    if (map.current.getSource('routes')) {
-      console.log('Removing source: routes');
-      map.current.removeSource('routes');
+      if (map.current.getLayer('routes-line')) {
+        map.current.removeLayer('routes-line');
+      }
+      if (map.current.getSource('routes')) {
+        map.current.removeSource('routes');
+      }
+    } catch (error) {
+      console.log('Error removing old layers:', error);
     }
 
     if (routes.length === 0) {
@@ -175,27 +187,23 @@ const MapComponent: React.FC<MapComponentProps> = ({
     const features: any[] = [];
 
     routes.forEach(route => {
-      console.log(`Processing route ${route.id}:`, route);
-
       if (!route.stops || route.stops.length < 2) {
-        console.log(`Route ${route.id} has insufficient stops:`, route.stops?.length);
+        console.log(`Route ${route.id} has insufficient stops`);
         return;
       }
 
       const sortedStops = [...route.stops].sort((a, b) => a.orderInRoute - b.orderInRoute);
-      console.log(`Route ${route.id} sorted stops:`, sortedStops);
-
-      // ВАЖНО: MapLibre ожидает [lng, lat], а не [lat, lng]
-      const coordinates = sortedStops.map(stop => {
-        if (!stop.lng || !stop.lat) {
-          console.warn(`Stop missing coordinates:`, stop);
-          return null;
-        }
-        // Правильный порядок: [долгота, широта]
-        return [stop.lng, stop.lat];
-      }).filter(coord => coord !== null);
-
-      console.log(`Route ${route.id} coordinates (lng, lat):`, coordinates);
+      
+      const coordinates = sortedStops
+        .map(stop => {
+          if (!stop.lng || !stop.lat) {
+            console.warn('Stop missing coordinates:', stop);
+            return null;
+          }
+          // MapLibre ожидает [lng, lat]
+          return [stop.lng, stop.lat];
+        })
+        .filter(coord => coord !== null);
 
       if (coordinates.length < 2) {
         console.log(`Route ${route.id} has insufficient valid coordinates`);
@@ -234,7 +242,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
       console.log('Source added successfully');
 
-      // Невыделенные маршруты (серые)
+      // Невыделенные маршруты (серые, пунктирные)
       map.current.addLayer({
         id: 'routes-line',
         type: 'line',
@@ -273,11 +281,74 @@ const MapComponent: React.FC<MapComponentProps> = ({
         });
 
         console.log('Selected route layer added');
+        
+        // Центрируем карту на выбранном маршруте
+        const selectedFeature = features.find(f => f.properties.id === selectedRouteId);
+        if (selectedFeature) {
+          const bounds = new maplibregl.LngLatBounds();
+          selectedFeature.geometry.coordinates.forEach((coord: [number, number]) => {
+            bounds.extend(coord);
+          });
+          map.current.fitBounds(bounds, { padding: 50, duration: 1000 });
+        }
       }
     } catch (error) {
       console.error('Error adding routes to map:', error);
     }
   };
+
+  // Отрисовка маркеров
+  useEffect(() => {
+    if (!map.current || loading) return;
+
+    markersRef.current.forEach((markerInstance) => {
+      const markerElement = markerInstance.getElement() as HTMLDivElement;
+      if (markerElement && (markerElement as any)._clickHandler) {
+        markerElement.removeEventListener('click', (markerElement as any)._clickHandler);
+      }
+      markerInstance.remove();
+    });
+    markersRef.current = [];
+
+    const markersInstances = markers.map(marker => {
+      const markerElement = createCustomMarker(marker);
+
+      const clickHandler = (e: MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+
+        console.log('Marker clicked:', marker);
+
+        if (isCreatingRoute && onMarkerClickRef.current) {
+          onMarkerClickRef.current(marker);
+          return;
+        }
+
+        if (!isCreatingRoute && !isCreatingStop) {
+          setSelectedModalMarker(marker);
+          map.current?.flyTo({
+            center: [marker.lng, marker.lat],
+            zoom: 15,
+            essential: true,
+            duration: 800
+          });
+        }
+      };
+
+      markerElement.addEventListener('click', clickHandler);
+      (markerElement as any)._clickHandler = clickHandler;
+
+      const markerInstance = new maplibregl.Marker({
+        element: markerElement,
+        anchor: 'center'
+      })
+        .setLngLat([marker.lng, marker.lat])
+        .addTo(map.current!);
+      return markerInstance;
+    });
+
+    markersRef.current = markersInstances;
+  }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops]);
 
   const loadToColor = (load: number): string => {
     if (load <= 3) return "#10b981";
@@ -333,56 +404,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
     return el;
   };
-
-  useEffect(() => {
-    if (!map.current || loading) return;
-
-    markersRef.current.forEach((markerInstance) => {
-      const markerElement = markerInstance.getElement() as HTMLDivElement;
-      if (markerElement && (markerElement as any)._clickHandler) {
-        markerElement.removeEventListener('click', (markerElement as any)._clickHandler);
-      }
-      markerInstance.remove();
-    });
-    markersRef.current = [];
-
-    const markersInstances = markers.map(marker => {
-      const markerElement = createCustomMarker(marker);
-
-      const clickHandler = (e: MouseEvent) => {
-        e.stopPropagation();
-        e.preventDefault();
-
-        if (isCreatingRoute && onMarkerClickRef.current) {
-          onMarkerClickRef.current(marker);
-          return;
-        }
-
-        if (!isCreatingRoute && !isCreatingStop) {
-          setSelectedModalMarker(marker);
-          map.current?.flyTo({
-            center: [marker.lng, marker.lat],
-            zoom: 15,
-            essential: true,
-            duration: 800
-          });
-        }
-      };
-
-      markerElement.addEventListener('click', clickHandler);
-      (markerElement as any)._clickHandler = clickHandler;
-
-      const markerInstance = new maplibregl.Marker({
-        element: markerElement,
-        anchor: 'center'
-      })
-        .setLngLat([marker.lng, marker.lat])
-        .addTo(map.current!);
-      return markerInstance;
-    });
-
-    markersRef.current = markersInstances;
-  }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops]);
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });

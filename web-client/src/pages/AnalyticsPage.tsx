@@ -1,16 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import MapComponent from './Map/Map';
-import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, CheckCircle, Bus } from 'lucide-react';
+import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, CheckCircle, Bus, Link } from 'lucide-react';
 import { useStops } from '../hooks/api/useStops';
 import { useRoutes } from '../hooks/api/useRoutes';
 import type { 
   Stop, 
   Route as ApiRoute, 
   TransportType, 
-  RouteCreateRequest,
-  RouteStop,
-  RouteStopRequest 
-} from '../api/types';
+  RouteCreateRequest} from '../api/types';
 import './AnalyticsPage.css';
 
 const AnalyticsPage: React.FC = () => {
@@ -20,6 +17,7 @@ const AnalyticsPage: React.FC = () => {
   >([]);
   const [newStopData, setNewStopData] = useState({
     address: '',
+    url: '',
     lat: 0,
     lng: 0,
     count: 0,
@@ -57,7 +55,17 @@ const AnalyticsPage: React.FC = () => {
   const loadData = async () => {
     try {
       const [stopsData, routesData] = await Promise.all([getStops(), getAllRoutes()]);
-      setStops(stopsData);
+      
+      // КРИТИЧЕСКИ ВАЖНО: нормализуем id в число и убеждаемся что все поля корректны
+      const normalizedStops = stopsData.map((stop: any) => ({
+        ...stop,
+        id: Number(stop.id),
+        // Убедимся что address не содержит проблемных символов
+        address: String(stop.address || '').trim()
+      }));
+      
+      console.log('Normalized stops:', normalizedStops);
+      setStops(normalizedStops);
       setRoutes(routesData);
     } catch (error) {
       showNotificationFunc('Ошибка при загрузке данных', 'error');
@@ -79,10 +87,21 @@ const AnalyticsPage: React.FC = () => {
   };
 
   const handleMarkerClick = (marker: Stop) => {
+    console.log('handleMarkerClick called with marker:', marker);
     if (creationMode !== 'route') return;
 
+    // Убедимся, что id число и существует
+    const markerId = Number(marker.id);
+    if (isNaN(markerId) || markerId === 0) {
+      console.error('Invalid marker id:', marker);
+      showNotificationFunc('Ошибка: некорректный ID остановки', 'error');
+      return;
+    }
+
+    console.log('markerId (converted to number):', markerId, 'type:', typeof markerId);
+
     const alreadySelected = selectedStopsForRoute.some(
-      stop => stop.id === marker.id
+      stop => stop.id === markerId
     );
 
     if (alreadySelected) {
@@ -91,12 +110,13 @@ const AnalyticsPage: React.FC = () => {
     }
 
     const newStop = {
-      id: marker.id,
+      id: markerId,
       order: selectedStopsForRoute.length + 1,
       address: marker.address
     };
 
-    setSelectedStopsForRoute([...selectedStopsForRoute, newStop]);
+    console.log('Adding new stop to selectedStopsForRoute:', newStop);
+    setSelectedStopsForRoute(prev => [...prev, newStop]);
     showNotificationFunc(`Остановка "${marker.address}" добавлена (${selectedStopsForRoute.length + 1})`, 'info');
   };
 
@@ -111,15 +131,26 @@ const AnalyticsPage: React.FC = () => {
         return;
       }
 
-      const createdStop = await createStop({
-        ...newStopData,
-        url: `https://example.com/stop/${Date.now()}`
+      const stopUrl = newStopData.url.trim() || `https://example.com/stop/${Date.now()}`;
+
+      await createStop({
+        address: newStopData.address.trim(),
+        url: stopUrl,
+        lat: newStopData.lat,
+        lng: newStopData.lng,
+        count: newStopData.count,
+        velocity: newStopData.velocity,
+        load: newStopData.load,
+        cityId: newStopData.cityId
       });
 
-      setStops(prev => [...prev, createdStop]);
+      // Перезагружаем все остановки с сервера (чтобы получить корректный id)
+      await loadData();
+
       setShowStopModal(false);
       setNewStopData({
         address: '',
+        url: '',
         lat: 0,
         lng: 0,
         count: 0,
@@ -130,6 +161,7 @@ const AnalyticsPage: React.FC = () => {
       setCreationMode('none');
       showNotificationFunc('Остановка успешно создана!', 'success');
     } catch (error) {
+      console.error('Stop creation error:', error);
       showNotificationFunc('Ошибка при создании остановки', 'error');
     }
   };
@@ -148,12 +180,22 @@ const AnalyticsPage: React.FC = () => {
 
       const sortedStops = [...selectedStopsForRoute].sort((a, b) => a.order - b.order);
 
-      const routeStops: RouteStopRequest[] = sortedStops.map((item, index) => ({
-        stopId: item.id,
-        order: index + 1,
-        direction: 'A',
-        travelTimeToNext: index < sortedStops.length - 1 ? 5 : 0
-      }));
+      // КРИТИЧЕСКИ ВАЖНО: Убеждаемся что id у каждой остановки – число и не undefined
+      const routeStops: any[] = sortedStops.map((item, index) => {
+        const stopId = Number(item.id);
+        if (isNaN(stopId) || stopId === 0) {
+          throw new Error(`Остановка "${item.address}" имеет некорректный ID`);
+        }
+        
+        // ДУБЛИРУЕМ id в разных форматах для совместимости с бэкендом
+        return {
+          stopId: stopId,           // стандартное поле
+          id: stopId,               // дубль на случай если сервер ожидает "id"
+          order: index + 1,
+          direction: 'A',
+          travelTimeToNext: index < sortedStops.length - 1 ? 5 : 0
+        };
+      });
 
       const requestData: RouteCreateRequest = {
         number: newRouteData.number,
@@ -166,6 +208,8 @@ const AnalyticsPage: React.FC = () => {
         operatingHours: newRouteData.operatingHours,
         stops: routeStops
       };
+
+      console.log('Sending route data:', JSON.stringify(requestData, null, 2));
 
       const createdRoute = await createRoute(requestData);
 
@@ -337,6 +381,18 @@ const AnalyticsPage: React.FC = () => {
                   </div>
                   <div className="stop-info">
                     <div className="stop-address">{stop.address}</div>
+                    {stop.url && (
+                      <a 
+                        href={stop.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="stop-url"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Link size={12} />
+                        <span>Ссылка</span>
+                      </a>
+                    )}
                     <div className="stop-stats">
                       <span className="stat">{stop.count} чел</span>
                       <span className="stat">{stop.load}/10</span>
@@ -408,39 +464,139 @@ const AnalyticsPage: React.FC = () => {
                 <AlertCircle size={14} />
                 <span>Выберите остановки на карте в нужном порядке</span>
               </div>
-              {selectedStopsForRoute.map((item, index) => (
-                <div key={item.id} className="selected-stop-item">
-                  <div className="stop-order-badge">#{item.order}</div>
-                  <div className="stop-info">
-                    <div className="stop-address">{item.address}</div>
-                    <div className="stop-actions">
-                      <button
-                        className="action-btn"
-                        onClick={() => moveStopUp(index)}
-                        disabled={index === 0}
-                        title="Переместить выше"
+              {selectedStopsForRoute.map((item, index) => {
+                // Проверяем, является ли остановка "новой" (созданной через форму)
+                const isNewStop = item.id >= 5; // или любой другой признак
+                
+                return (
+                  <div 
+                    key={item.id} 
+                    className={`selected-stop-item ${isNewStop ? 'new-stop' : ''}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0.5rem',
+                      marginBottom: '0.25rem',
+                      backgroundColor: '#f9fafb',
+                      borderRadius: '0.375rem',
+                      borderLeft: '3px solid #3b82f6'
+                    }}
+                  >
+                    <div 
+                      className="stop-order-badge"
+                      style={{
+                        width: '2rem',
+                        height: '2rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: '#3b82f6',
+                        color: 'white',
+                        fontWeight: 'bold',
+                        borderRadius: '9999px',
+                        marginRight: '0.75rem',
+                        flexShrink: 0
+                      }}
+                    >
+                      #{item.order}
+                    </div>
+                    <div 
+                      className="stop-info"
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        minWidth: 0
+                      }}
+                    >
+                      <div 
+                        className="stop-address"
+                        style={{
+                          fontSize: '0.875rem',
+                          fontWeight: 500,
+                          color: '#1f2937',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          maxWidth: '200px'
+                        }}
+                        title={item.address}
                       >
-                        <ChevronUp size={14} />
-                      </button>
-                      <button
-                        className="action-btn"
-                        onClick={() => moveStopDown(index)}
-                        disabled={index === selectedStopsForRoute.length - 1}
-                        title="Переместить ниже"
+                        {item.address}
+                      </div>
+                      <div 
+                        className="stop-actions"
+                        style={{
+                          display: 'flex',
+                          gap: '0.25rem',
+                          flexShrink: 0
+                        }}
                       >
-                        <ChevronDown size={14} />
-                      </button>
-                      <button
-                        className="action-btn remove"
-                        onClick={() => removeStopFromRoute(item.id)}
-                        title="Удалить из маршрута"
-                      >
-                        <X size={14} />
-                      </button>
+                        <button
+                          className="action-btn"
+                          onClick={() => moveStopUp(index)}
+                          disabled={index === 0}
+                          title="Переместить выше"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '0.25rem',
+                            borderRadius: '0.25rem',
+                            color: '#6b7280',
+                            transition: 'all 0.2s',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <ChevronUp size={14} />
+                        </button>
+                        <button
+                          className="action-btn"
+                          onClick={() => moveStopDown(index)}
+                          disabled={index === selectedStopsForRoute.length - 1}
+                          title="Переместить ниже"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '0.25rem',
+                            borderRadius: '0.25rem',
+                            color: '#6b7280',
+                            transition: 'all 0.2s',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                        <button
+                          className="action-btn remove"
+                          onClick={() => removeStopFromRoute(item.id)}
+                          title="Удалить из маршрута"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '0.25rem',
+                            borderRadius: '0.25rem',
+                            color: '#6b7280',
+                            transition: 'all 0.2s',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <button
                 className="configure-route-btn"
                 onClick={() => {
@@ -449,6 +605,17 @@ const AnalyticsPage: React.FC = () => {
                   } else {
                     showNotificationFunc('Добавьте еще остановки', 'error');
                   }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.5rem',
+                  marginTop: '0.5rem',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                  fontWeight: 500
                 }}
               >
                 Завершить создание маршрута
@@ -478,6 +645,23 @@ const AnalyticsPage: React.FC = () => {
                   required
                 />
               </div>
+              
+              <div className="form-group">
+                <label>URL (необязательно)</label>
+                <div className="url-input-wrapper">
+                  <Link size={16} className="url-icon" />
+                  <input
+                    type="url"
+                    value={newStopData.url}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, url: e.target.value }))}
+                    placeholder="https://example.com/stop/123"
+                  />
+                </div>
+                <small className="field-hint">
+                  Оставьте пустым для автоматической генерации
+                </small>
+              </div>
+
               <div className="form-group">
                 <label>Координаты</label>
                 <div className="coordinates-inputs">
@@ -497,6 +681,7 @@ const AnalyticsPage: React.FC = () => {
                   />
                 </div>
               </div>
+              
               <div className="stats-grid">
                 <div className="form-group">
                   <label>Количество людей</label>
