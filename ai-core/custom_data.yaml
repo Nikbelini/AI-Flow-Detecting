@@ -1,0 +1,5 @@
+nc: 1
+names: ['human']
+path: dataset
+train: train_split
+val: val_split

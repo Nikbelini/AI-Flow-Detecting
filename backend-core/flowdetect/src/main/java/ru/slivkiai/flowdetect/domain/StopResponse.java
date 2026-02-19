@@ -18,4 +18,6 @@ public class StopResponse {
     private Integer load;
     private Double lat;
     private Double lng;
+
+    private boolean predicted;
 }
