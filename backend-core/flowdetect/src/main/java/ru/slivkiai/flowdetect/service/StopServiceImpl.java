@@ -43,7 +43,8 @@ public class StopServiceImpl implements StopService {
                         stop.getVelocity(),
                         stop.getLoad(),
                         stop.getLat().doubleValue(),
-                        stop.getLng().doubleValue()
+                        stop.getLng().doubleValue(),
+                        false
                 ))
                 .collect(Collectors.toList());
     }
@@ -191,7 +192,8 @@ public class StopServiceImpl implements StopService {
                         stop.getVelocity(),
                         stop.getLoad(),
                         stop.getLat().doubleValue(),
-                        stop.getLng().doubleValue()
+                        stop.getLng().doubleValue(),
+                        false
                 ))
                 .collect(Collectors.toList());
     }
