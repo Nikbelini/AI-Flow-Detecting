@@ -1,33 +1,14 @@
 // src/api/markersApi.ts
 import apiClient from './client';
+import type { Stop } from './types';
 
-// Экспортируем интерфейс
-export type Marker = {
-  id: number;
-  address: string;
-  url?: string;
-  count: number;
-  velocity: number;
-  load: number;
-  lat: number;
-  lng: number;
-  coordinates?: [number, number];
-};
-
-export interface MarkersResponse {
-  stops: Marker[];
-}
-
-export const getMarkers = async (): Promise<Marker[]> => {
+export const getMarkers = async (): Promise<Stop[]> => {
   try {
-    const response = await apiClient.get<MarkersResponse>('/stops');
-    const markers = response.data.stops;
-    
-    return markers.map(marker => ({
-      ...marker,
-      coordinates: [marker.lng, marker.lat] as [number, number]
+    const response = await apiClient.get<{ stops: Stop[] }>('/stops');
+    return response.data.stops.map(stop => ({
+      ...stop,
+      coordinates: [stop.lng, stop.lat]
     }));
-    
   } catch (error) {
     console.error('Error fetching markers:', error);
     throw error;
