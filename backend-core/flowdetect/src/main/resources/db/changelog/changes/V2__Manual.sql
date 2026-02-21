@@ -1,4 +1,13 @@
+INSERT INTO cities (name, lat, lng) VALUES 
+    ('Ульяновск', 54.1851, 48.2412)
+ON CONFLICT DO NOTHING;
+
 -- Добавление новых остановок для Ульяновска
+
+-- Гончарова 19
+INSERT INTO stops (url, address, count, velocity, load, city_id, lat, lng) VALUES
+    ('https://restreamer.vms.evo73.ru/918335436b92ac26/stream.m3u8', 'г.Ульяновск, ул. Гончарова 19', 1, 1, 1,
+     (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.307815, 48.379345);
 
 -- Минаева 1
 INSERT INTO stops (url, address, count, velocity, load, city_id, lat, lng) VALUES
@@ -83,10 +92,10 @@ INSERT INTO stops (url, address, count, velocity, load, city_id, lat, lng) VALUE
     (NULL, 'г.Ульяновск, ул. Кирова 59', 1, 1, 1, (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.298280, 48.380333),
     (NULL, 'г.Ульяновск, ул. Луначарского 17', 1, 1, 1, (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.263823, 48.333072),
     (NULL, 'г.Ульяновск, пр-т Гая 25А', 1, 1, 1, (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.264060, 48.326470),
-    (NULL, 'г.Ульяновск, ул. Камышинская 19Г', 1, 1, 1, (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.271101, 48.302539);
-    (NULL, 'г.Ульяновск, ул. Рябикова, 47В', 1, 1, 1, (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.278182, 48.294319);
-    (NULL, 'г.Ульяновск, ул. Пушкарёва, 44Б', 1, 1, 1, (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.315122, 48.356133);
-    (NULL, 'г.Ульяновск, ул. Врача Михайлова 64', 1, 1, 1, (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.353155, 48.527450);
+    (NULL, 'г.Ульяновск, ул. Камышинская 19Г', 1, 1, 1, (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.271101, 48.302539),
+    (NULL, 'г.Ульяновск, ул. Рябикова, 47В', 1, 1, 1, (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.278182, 48.294319),
+    (NULL, 'г.Ульяновск, ул. Пушкарёва, 44Б', 1, 1, 1, (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.315122, 48.356133),
+    (NULL, 'г.Ульяновск, ул. Врача Михайлова 64', 1, 1, 1, (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.353155, 48.527450),
     (NULL, 'г.Ульяновск, пр-т. Генерала Тюленева, 16А', 1, 1, 1, (SELECT id FROM cities WHERE name = 'Ульяновск'), 54.380144, 48.589838);
 
 

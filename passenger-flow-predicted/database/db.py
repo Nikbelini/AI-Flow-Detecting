@@ -15,7 +15,8 @@ def load_stop_history(city_id: int):
            s.lat, s.lng
     FROM stops_history sh
     JOIN stops s ON s.address = sh.address
-    WHERE sh.city_id = %s
+    WHERE sh.city_id = :city_id
     ORDER BY sh.datetime
     """
-    return pd.read_sql(query, engine, params=[city_id])
+    return pd.read_sql(query, engine, params={"city_id": city_id})
+
