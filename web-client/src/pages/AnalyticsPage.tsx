@@ -1,258 +1,728 @@
-// src/pages/AnalyticsPage.tsx
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import MapComponent from './Map/Map';
-import './AnalyticsPage.css'; // Создадим CSS файл для стилей
+import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, CheckCircle, Bus, Link } from 'lucide-react';
+import { useStops } from '../hooks/api/useStops';
+import { useRoutes } from '../hooks/api/useRoutes';
+import type { 
+  Stop, 
+  Route as ApiRoute, 
+  TransportType, 
+  RouteCreateRequest,
+  RouteStopRequest  // Добавляем правильный тип
+} from '../api/types';
+import './AnalyticsPage.css';
 
 const AnalyticsPage: React.FC = () => {
-  const [showHeatmap, setShowHeatmap] = useState(true);
-  const [predictionDepth, setPredictionDepth] = useState(24);
-  const [activeMetric, setActiveMetric] = useState('passenger');
+  const [creationMode, setCreationMode] = useState<'none' | 'stop' | 'route'>('none');
+  const [selectedStopsForRoute, setSelectedStopsForRoute] = useState<
+    { id: number; order: number; address: string }[]
+  >([]);
+  const [newStopData, setNewStopData] = useState({
+    address: '',
+    url: '',
+    lat: 0,
+    lng: 0,
+    count: 0,
+    velocity: 0,
+    load: 0,
+    cityId: 1
+  });
+  const [newRouteData, setNewRouteData] = useState({
+    number: '',
+    name: '',
+    transportType: 'BUS' as TransportType,
+    cityId: 1,
+    directionAName: '',
+    directionBName: '',
+    intervalMinutes: 15,
+    operatingHours: '06:00-23:00'
+  });
+  const [showStopModal, setShowStopModal] = useState(false);
+  const [showRouteModal, setShowRouteModal] = useState(false);
+  const [showNotification, setShowNotification] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState('');
+  const [notificationType, setNotificationType] = useState<'info' | 'success' | 'error'>('info');
+  const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
 
-  const metrics = [
-    { id: 'passenger', title: 'Пассажиропоток', unit: 'чел/час', value: 1247, trend: 12.5 },
-    { id: 'buses', title: 'Транспорт', unit: 'ед.', value: 42, trend: -3.2 },
-    { id: 'accuracy', title: 'Точность', unit: '%', value: 87.3, trend: 2.1 },
-    { id: 'delay', title: 'Задержка', unit: 'мин', value: 4.2, trend: -1.8 }
-  ];
+  const { getStops, createStop } = useStops();
+  const { getAllRoutes, createRoute } = useRoutes();
 
-  const tools = [
-    { icon: '📊', title: 'Генератор отчетов', desc: 'Автоматические отчеты PDF/Excel' },
-    { icon: '🎯', title: 'Статистика (диаграммы, графики)', desc: 'Отображение' },
-    { icon: '🔍', title: 'Просмотр маршрутов', desc: 'Более быстрый маршрут' },
-    { icon: '📈', title: 'Оптимизационное решение', desc: 'Решение оптимизации' },
-    { icon: '🔄', title: 'Калибровка модели', desc: 'Обновить коэффициенты' },
-    { icon: '💾', title: 'Экспорт данных', desc: 'CSV, JSON, API' }
-  ];
+  const [stops, setStops] = useState<Stop[]>([]);
+  const [routes, setRoutes] = useState<ApiRoute[]>([]);
 
-  const timeFilters = [
-    { label: 'Час', value: 'hour' },
-    { label: 'День', value: 'day' },
-    { label: 'Неделя', value: 'week' },
-    { label: 'Месяц', value: 'month' }
-  ];
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [stopsData, routesData] = await Promise.all([getStops(), getAllRoutes()]);
+      
+      // Нормализуем остановки
+      const normalizedStops = stopsData.map((stop: any) => ({
+        ...stop,
+        id: Number(stop.id),
+        address: String(stop.address || '').trim(),
+        url: stop.url || '' // Сохраняем URL если есть
+      }));
+      
+      console.log('Loaded stops:', normalizedStops);
+      setStops(normalizedStops);
+      setRoutes(routesData);
+    } catch (error) {
+      showNotificationFunc('Ошибка при загрузке данных', 'error');
+    }
+  };
+
+  const showNotificationFunc = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setNotificationMessage(message);
+    setNotificationType(type);
+    setShowNotification(true);
+    setTimeout(() => setShowNotification(false), 3000);
+  };
+
+  const handleMapClick = (lat: number, lng: number) => {
+    if (creationMode === 'stop') {
+      setNewStopData(prev => ({ ...prev, lat, lng }));
+      setShowStopModal(true);
+    }
+  };
+
+  const handleMarkerClick = (marker: Stop) => {
+    console.log('Marker clicked:', marker);
+    if (creationMode !== 'route') return;
+
+    const markerId = Number(marker.id);
+    if (isNaN(markerId) || markerId === 0) {
+      console.error('Invalid marker id:', marker);
+      showNotificationFunc('Ошибка: некорректный ID остановки', 'error');
+      return;
+    }
+
+    const alreadySelected = selectedStopsForRoute.some(
+      stop => stop.id === markerId
+    );
+
+    if (alreadySelected) {
+      showNotificationFunc(`Остановка "${marker.address}" уже добавлена в маршрут`, 'info');
+      return;
+    }
+
+    const newStop = {
+      id: markerId,
+      order: selectedStopsForRoute.length + 1,
+      address: marker.address
+    };
+
+    setSelectedStopsForRoute(prev => [...prev, newStop]);
+    showNotificationFunc(`Остановка "${marker.address}" добавлена (${selectedStopsForRoute.length + 1})`, 'info');
+  };
+
+  const handleCreateStopSubmit = async () => {
+    try {
+      if (!newStopData.address.trim()) {
+        showNotificationFunc('Введите адрес остановки', 'error');
+        return;
+      }
+      if (newStopData.lat === 0 || newStopData.lng === 0) {
+        showNotificationFunc('Координаты не установлены', 'error');
+        return;
+      }
+
+      // Если URL не указан, отправляем пустую строку
+      // Бэкенд сам сгенерирует URL или сохранит как null
+      const stopData = {
+        address: newStopData.address.trim(),
+        url: newStopData.url.trim() || '', // Отправляем пустую строку, если URL не указан
+        lat: newStopData.lat,
+        lng: newStopData.lng,
+        count: newStopData.count,
+        velocity: newStopData.velocity,
+        load: newStopData.load,
+        cityId: newStopData.cityId
+      };
+
+      console.log('Creating stop with data:', stopData);
+      await createStop(stopData);
+
+      // Перезагружаем данные
+      await loadData();
+
+      setShowStopModal(false);
+      setNewStopData({
+        address: '',
+        url: '',
+        lat: 0,
+        lng: 0,
+        count: 0,
+        velocity: 0,
+        load: 0,
+        cityId: 1
+      });
+      setCreationMode('none');
+      showNotificationFunc('Остановка успешно создана!', 'success');
+    } catch (error) {
+      console.error('Stop creation error:', error);
+      showNotificationFunc('Ошибка при создании остановки', 'error');
+    }
+  };
+
+  const handleCreateRouteSubmit = async () => {
+    try {
+      if (selectedStopsForRoute.length < 2) {
+        showNotificationFunc('Выберите минимум 2 остановки', 'error');
+        return;
+      }
+      
+      if (!newRouteData.number.trim()) {
+        showNotificationFunc('Введите номер маршрута', 'error');
+        return;
+      }
+
+      const sortedStops = [...selectedStopsForRoute].sort((a, b) => a.order - b.order);
+
+      // Используем правильный тип RouteStopRequest
+      const routeStops: RouteStopRequest[] = sortedStops.map((item, index) => ({
+        stopId: item.id,  // Только stopId, как в типе
+        order: index + 1,
+        direction: 'A',
+        travelTimeToNext: index < sortedStops.length - 1 ? 5 : 0
+      }));
+
+      const requestData: RouteCreateRequest = {
+        number: newRouteData.number,
+        name: newRouteData.name || undefined,
+        transportType: newRouteData.transportType,
+        cityId: newRouteData.cityId,
+        directionAName: newRouteData.directionAName || undefined,
+        directionBName: newRouteData.directionBName || undefined,
+        intervalMinutes: newRouteData.intervalMinutes,
+        operatingHours: newRouteData.operatingHours,
+        stops: routeStops
+      };
+
+      console.log('Sending route data:', requestData);
+
+      const createdRoute = await createRoute(requestData);
+
+      setRoutes(prev => [...prev, createdRoute]);
+      setShowRouteModal(false);
+      setCreationMode('none');
+      setSelectedStopsForRoute([]);
+      setNewRouteData({
+        number: '',
+        name: '',
+        transportType: 'BUS',
+        cityId: 1,
+        directionAName: '',
+        directionBName: '',
+        intervalMinutes: 15,
+        operatingHours: '06:00-23:00'
+      });
+
+      showNotificationFunc(`Маршрут "${newRouteData.number}" создан!`, 'success');
+    } catch (error) {
+      console.error('Route creation error:', error);
+      showNotificationFunc('Ошибка при создании маршрута', 'error');
+    }
+  };
+
+  const cancelCreationMode = () => {
+    setCreationMode('none');
+    setSelectedStopsForRoute([]);
+    showNotificationFunc('Создание отменено', 'info');
+  };
+
+  const moveStopUp = (index: number) => {
+    if (index <= 0) return;
+    const newStops = [...selectedStopsForRoute];
+    [newStops[index], newStops[index - 1]] = [newStops[index - 1], newStops[index]];
+    setSelectedStopsForRoute(newStops.map((item, i) => ({ ...item, order: i + 1 })));
+  };
+
+  const moveStopDown = (index: number) => {
+    if (index >= selectedStopsForRoute.length - 1) return;
+    const newStops = [...selectedStopsForRoute];
+    [newStops[index], newStops[index + 1]] = [newStops[index + 1], newStops[index]];
+    setSelectedStopsForRoute(newStops.map((item, i) => ({ ...item, order: i + 1 })));
+  };
+
+  const removeStopFromRoute = (stopId: number) => {
+    const newStops = selectedStopsForRoute.filter(item => item.id !== stopId);
+    setSelectedStopsForRoute(newStops.map((item, index) => ({ ...item, order: index + 1 })));
+  };
+
+  const removeLastStop = () => {
+    if (selectedStopsForRoute.length === 0) return;
+    setSelectedStopsForRoute(selectedStopsForRoute.slice(0, -1));
+  };
+
+  const getMarkerColor = (load: number): string => {
+    if (load <= 3) return "#10b981";
+    if (load <= 7) return "#f59e0b";
+    return "#ef4444";
+  };
+
+  const getTransportIcon = (type: TransportType) => {
+    switch(type) {
+      case 'BUS': return '🚌';
+      case 'TROLLEYBUS': return '🚎';
+      case 'TRAM': return '🚊';
+      case 'MINIBUS': return '🚐';
+      case 'METRO': return '🚇';
+      case 'TRAIN': return '🚆';
+      default: return '🚌';
+    }
+  };
 
   return (
     <div className="analytics-page">
-      {/* Заголовок и фильтры */}
+      {showNotification && (
+        <div className={`creation-notification ${notificationType}`}>
+          {notificationType === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+          <span>{notificationMessage}</span>
+        </div>
+      )}
+
       <div className="analytics-header">
         <div className="header-left">
-          <h1 className="page-title">📊 Аналитический центр</h1>
-          <p className="page-subtitle">Прогнозирование и анализ пассажиропотоков в реальном времени</p>
+          <h1 className="page-title">Аналитический центр</h1>
+          <p className="page-subtitle">Прогнозирование и анализ пассажиропотоков</p>
         </div>
-        
         <div className="header-right">
-          <div className="time-filters">
-            {timeFilters.map((filter) => (
-              <button 
-                key={filter.value}
-                className={`time-filter-btn ${filter.value === 'day' ? 'active' : ''}`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
           <button className="export-btn">
-            📤 Экспорт данных
+            <Download size={16} />
+            Экспорт данных
           </button>
         </div>
       </div>
 
-      {/* Основная сетка */}
       <div className="analytics-grid">
-        {/* Основная карта */}
         <div className="main-card map-container">
           <div className="card-header">
-            <h3>🗺️ Карта пассажиропотоков</h3>
+            <h3>
+              Карта пассажиропотоков
+              {creationMode === 'stop' && <span className="creation-badge">Создание остановки</span>}
+              {creationMode === 'route' && (
+                <span className="creation-badge">
+                  Создание маршрута: {selectedStopsForRoute.length} остановок
+                </span>
+              )}
+            </h3>
             <div className="card-controls">
-              <div className="heatmap-toggle">
-                <span className="toggle-label">Тепловая карта</span>
-                <label className="switch">
-                  <input 
-                    type="checkbox" 
-                    checked={showHeatmap}
-                    onChange={(e) => setShowHeatmap(e.target.checked)}
-                  />
-                  <span className="slider"></span>
-                </label>
+              <button
+                className={`mode-btn ${creationMode === 'stop' ? 'active' : ''}`}
+                onClick={() => setCreationMode('stop')}
+              >
+                <MapPin size={16} />
+              </button>
+              <button
+                className={`mode-btn ${creationMode === 'route' ? 'active' : ''}`}
+                onClick={() => {
+                  setCreationMode('route');
+                  setSelectedStopsForRoute([]);
+                  showNotificationFunc('Выберите остановки для маршрута по порядку', 'info');
+                }}
+              >
+                <Route size={16} />
+              </button>
+              {(creationMode === 'stop' || creationMode === 'route') && (
+                <div className="mode-controls">
+                  {creationMode === 'route' && selectedStopsForRoute.length > 0 && (
+                    <button className="mode-btn undo" onClick={removeLastStop} title="Удалить последнюю остановку">
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                  <button className="mode-btn cancel" onClick={cancelCreationMode}>
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="card-body map-wrapper">
+            <MapComponent
+              markers={stops}
+              routes={routes}
+              selectedRouteId={selectedRouteId}
+              onMapClick={handleMapClick}
+              onMarkerClick={handleMarkerClick}
+              isCreatingStop={creationMode === 'stop'}
+              isCreatingRoute={creationMode === 'route'}
+              selectedStops={selectedStopsForRoute.map(s => s.id)}
+            />
+          </div>
+        </div>
+
+        <div className="sidebar">
+          <div className="stops-card">
+            <div className="card-header">
+              <h3>Остановки ({stops.length})</h3>
+              <button className="refresh-btn" onClick={loadData}>
+                <RefreshCw size={16} />
+              </button>
+            </div>
+            <div className="card-body stops-list">
+              {stops.slice(0, 10).map((stop) => (
+                <div
+                  key={stop.id}
+                  className={`stop-item ${selectedStopsForRoute.some(s => s.id === stop.id) ? 'selected' : ''}`}
+                >
+                  <div className="stop-marker" style={{ backgroundColor: getMarkerColor(stop.load) }}>
+                    {stop.load}
+                  </div>
+                  <div className="stop-info">
+                    <div className="stop-address">{stop.address}</div>
+                    {stop.url && stop.url.trim() !== '' && (
+                      <a 
+                        href={stop.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="stop-url"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Link size={12} />
+                        <span>Ссылка</span>
+                      </a>
+                    )}
+                    <div className="stop-stats">
+                      <span className="stat">{stop.count} чел</span>
+                      <span className="stat">{stop.load}/10</span>
+                    </div>
+                  </div>
+                  {selectedStopsForRoute.some(s => s.id === stop.id) && (
+                    <div className="stop-order">
+                      #{selectedStopsForRoute.find(s => s.id === stop.id)?.order}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="routes-card">
+            <div className="card-header">
+              <h3>Маршруты ({routes.length})</h3>
+            </div>
+            <div className="card-body routes-list">
+              {routes.map((route) => (
+                <div
+                  key={route.id}
+                  className={`route-item ${selectedRouteId === route.id ? 'selected' : ''}`}
+                  onClick={() => setSelectedRouteId(route.id)}
+                >
+                  <div className="route-header">
+                    <span className="route-number">
+                      {getTransportIcon(route.transportType)} {route.number}
+                    </span>
+                    <span className={`route-status ${route.isActive ? 'active' : 'inactive'}`}>
+                      {route.isActive ? 'Активен' : 'Неактивен'}
+                    </span>
+                  </div>
+                  {route.name && <div className="route-name">{route.name}</div>}
+                  <div className="route-stops">
+                    {route.stops.slice(0, 3).map((stop, idx) => (
+                      <span key={stop.stopId}>
+                        {stop.address.split(',')[1]?.trim() || stop.address}
+                        {idx < Math.min(route.stops.length, 3) - 1 && ' → '}
+                      </span>
+                    ))}
+                    {route.stops.length > 3 && ' ...'}
+                  </div>
+                  <div className="route-details">
+                    <span>Интервал: {route.intervalMinutes} мин</span>
+                    <span>•</span>
+                    <span>{route.operatingHours}</span>
+                  </div>
+                </div>
+              ))}
+              {routes.length === 0 && (
+                <div className="empty-state">
+                  <Bus size={24} />
+                  <p>Нет созданных маршрутов</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {creationMode === 'route' && selectedStopsForRoute.length > 0 && (
+          <div className="selected-stops-card">
+            <div className="card-header">
+              <h3>Маршрут в разработке ({selectedStopsForRoute.length})</h3>
+            </div>
+            <div className="card-body selected-stops-list">
+              <div className="route-instructions">
+                <AlertCircle size={14} />
+                <span>Выберите остановки на карте в нужном порядке</span>
               </div>
-              
-              <div className="prediction-slider">
-                <span className="slider-label">Прогноз: {predictionDepth} ч</span>
-                <input 
-                  type="range" 
-                  min="1" 
-                  max="72" 
-                  value={predictionDepth}
-                  onChange={(e) => setPredictionDepth(parseInt(e.target.value))}
-                  className="range-slider"
+              {selectedStopsForRoute.map((item, index) => (
+                <div key={item.id} className="selected-stop-item">
+                  <div className="stop-order-badge">#{item.order}</div>
+                  <div className="stop-info">
+                    <div className="stop-address" title={item.address}>
+                      {item.address}
+                    </div>
+                    <div className="stop-actions">
+                      <button
+                        className="action-btn"
+                        onClick={() => moveStopUp(index)}
+                        disabled={index === 0}
+                        title="Переместить выше"
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                      <button
+                        className="action-btn"
+                        onClick={() => moveStopDown(index)}
+                        disabled={index === selectedStopsForRoute.length - 1}
+                        title="Переместить ниже"
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                      <button
+                        className="action-btn remove"
+                        onClick={() => removeStopFromRoute(item.id)}
+                        title="Удалить из маршрута"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <button
+                className="configure-route-btn"
+                onClick={() => {
+                  if (selectedStopsForRoute.length >= 2) {
+                    setShowRouteModal(true);
+                  } else {
+                    showNotificationFunc('Добавьте еще остановки', 'error');
+                  }
+                }}
+              >
+                Завершить создание маршрута
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {showStopModal && (
+        <div className="modal-overlay" onClick={() => setShowStopModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Создание остановки</h3>
+              <button className="modal-close" onClick={() => setShowStopModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Адрес остановки *</label>
+                <input
+                  type="text"
+                  value={newStopData.address}
+                  onChange={(e) => setNewStopData(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder="Введите адрес"
+                  required
                 />
               </div>
-            </div>
-          </div>
-          
-          <div className="card-body map-wrapper">
-            <MapComponent />
-            {showHeatmap && (
-              <div className="heatmap-overlay">
-                <div className="heatmap-legend">
-                  <div className="legend-title">Интенсивность потока</div>
-                  <div className="legend-gradient">
-                    <span>Низкая</span>
-                    <div className="gradient-bar"></div>
-                    <span>Высокая</span>
-                  </div>
+              
+              <div className="form-group">
+                <label>URL (необязательно)</label>
+                <div className="url-input-wrapper">
+                  <Link size={16} className="url-icon" />
+                  <input
+                    type="url"
+                    value={newStopData.url}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, url: e.target.value }))}
+                    placeholder="https://example.com/stop/123"
+                  />
                 </div>
+                <small className="field-hint">
+                  Оставьте пустым, если не нужен
+                </small>
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* Метрики */}
-        <div className="metrics-grid">
-          {metrics.map((metric) => (
-            <div 
-              key={metric.id} 
-              className={`metric-card ${activeMetric === metric.id ? 'active' : ''}`}
-              onClick={() => setActiveMetric(metric.id)}
-            >
-              <div className="metric-header">
-                <h4>{metric.title}</h4>
-                <div className={`trend-indicator ${metric.trend >= 0 ? 'positive' : 'negative'}`}>
-                  {metric.trend >= 0 ? '↗' : '↘'} {Math.abs(metric.trend)}%
+              <div className="form-group">
+                <label>Координаты</label>
+                <div className="coordinates-inputs">
+                  <input
+                    type="number"
+                    step="0.000001"
+                    value={newStopData.lat}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, lat: parseFloat(e.target.value) || 0 }))}
+                    placeholder="Широта"
+                  />
+                  <input
+                    type="number"
+                    step="0.000001"
+                    value={newStopData.lng}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, lng: parseFloat(e.target.value) || 0 }))}
+                    placeholder="Долгота"
+                  />
                 </div>
               </div>
-              <div className="metric-value">
-                {metric.value} <span className="metric-unit">{metric.unit}</span>
-              </div>
-              <div className="metric-progress">
-                <div 
-                  className="progress-bar" 
-                  style={{ width: `${Math.min(100, (metric.value / 1500) * 100)}%` }}
-                ></div>
+              
+              <div className="stats-grid">
+                <div className="form-group">
+                  <label>Количество людей</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newStopData.count}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, count: parseInt(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Скорость потока</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newStopData.velocity}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, velocity: parseInt(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Загрузка (1-10)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={newStopData.load}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, load: parseInt(e.target.value) || 1 }))}
+                  />
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-
-        {/* Панель инструментов */}
-        <div className="tools-card">
-          <div className="card-header">
-            <h3>🛠️ Инструменты аналитика</h3>
-          </div>
-          <div className="card-body tools-grid">
-            {tools.map((tool, index) => (
-              <button key={index} className="tool-button">
-                <span className="tool-icon">{tool.icon}</span>
-                <div className="tool-info">
-                  <div className="tool-title">{tool.title}</div>
-                  <div className="tool-desc">{tool.desc}</div>
-                </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowStopModal(false)}>
+                Отмена
               </button>
-            ))}
-          </div>
-          <div className="card-footer">
-            <Link to="/simulation" className="simulation-button">
-              🎮 Запустить обучение модели
-            </Link>
+              <button
+                className="btn-primary"
+                onClick={handleCreateStopSubmit}
+                disabled={!newStopData.address.trim()}
+              >
+                <Save size={16} />
+                Создать остановку
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Графики и статистика */}
-        <div className="charts-card">
-          <div className="card-header">
-            <h3>📈 Динамика пассажиропотока</h3>
-            <select className="chart-select">
-              <option>По часам</option>
-              <option>По дням</option>
-              <option>По неделям</option>
-            </select>
-          </div>
-          <div className="card-body">
-            <div className="chart-placeholder">
-              <div className="chart-grid">
-                {Array.from({ length: 24 }).map((_, hour) => (
-                  <div key={hour} className="chart-bar-container">
-                    <div 
-                      className="chart-bar" 
-                      style={{ 
-                        height: `${30 + Math.sin(hour / 3) * 40 + Math.random() * 20}%` 
-                      }}
-                    ></div>
-                    <div className="chart-label">{hour}:00</div>
-                  </div>
-                ))}
+      {showRouteModal && (
+        <div className="modal-overlay" onClick={() => setShowRouteModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>
+                Завершение создания маршрута
+                <span className="stops-count">{selectedStopsForRoute.length} остановок</span>
+              </h3>
+              <button className="modal-close" onClick={() => setShowRouteModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Номер маршрута *</label>
+                <input
+                  type="text"
+                  value={newRouteData.number}
+                  onChange={(e) => setNewRouteData(prev => ({ ...prev, number: e.target.value }))}
+                  placeholder="105"
+                  required
+                />
               </div>
-              <div className="chart-legend">
-                <div className="legend-item">
-                  <div className="legend-color actual"></div>
-                  <span>Фактический</span>
+              <div className="form-group">
+                <label>Название маршрута</label>
+                <input
+                  type="text"
+                  value={newRouteData.name}
+                  onChange={(e) => setNewRouteData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Центр - Южный район"
+                />
+              </div>
+              <div className="form-group">
+                <label>Тип транспорта *</label>
+                <select
+                  value={newRouteData.transportType}
+                  onChange={(e) => setNewRouteData(prev => ({ ...prev, transportType: e.target.value as TransportType }))}
+                  required
+                >
+                  <option value="BUS">Автобус</option>
+                  <option value="TROLLEYBUS">Троллейбус</option>
+                  <option value="TRAM">Трамвай</option>
+                  <option value="MINIBUS">Маршрутка</option>
+                  <option value="METRO">Метро</option>
+                  <option value="TRAIN">Поезд</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Название направления А</label>
+                <input
+                  type="text"
+                  value={newRouteData.directionAName}
+                  onChange={(e) => setNewRouteData(prev => ({ ...prev, directionAName: e.target.value }))}
+                  placeholder="Откуда"
+                />
+              </div>
+              <div className="form-group">
+                <label>Название направления Б</label>
+                <input
+                  type="text"
+                  value={newRouteData.directionBName}
+                  onChange={(e) => setNewRouteData(prev => ({ ...prev, directionBName: e.target.value }))}
+                  placeholder="Куда"
+                />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Интервал (мин)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newRouteData.intervalMinutes}
+                    onChange={(e) => setNewRouteData(prev => ({ ...prev, intervalMinutes: parseInt(e.target.value) || 15 }))}
+                  />
                 </div>
-                <div className="legend-item">
-                  <div className="legend-color predicted"></div>
-                  <span>Прогноз</span>
+                <div className="form-group">
+                  <label>Время работы</label>
+                  <input
+                    type="text"
+                    value={newRouteData.operatingHours}
+                    onChange={(e) => setNewRouteData(prev => ({ ...prev, operatingHours: e.target.value }))}
+                    placeholder="06:00-23:00"
+                  />
                 </div>
               </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setShowRouteModal(false);
+                  setSelectedStopsForRoute([]);
+                  setCreationMode('none');
+                }}
+              >
+                <Trash2 size={16} />
+                Отменить
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleCreateRouteSubmit}
+                disabled={!newRouteData.number.trim() || selectedStopsForRoute.length < 2}
+              >
+                <Save size={16} />
+                Создать маршрут
+              </button>
             </div>
           </div>
         </div>
-
-        {/* Статус системы */}
-        <div className="status-card">
-          <div className="card-header">
-            <h3>⚙️ Статус системы</h3>
-          </div>
-          <div className="card-body">
-            <div className="status-item">
-              <div className="status-header">
-                <span className="status-name">Модель прогнозирования</span>
-                <span className="status-value success">Активна</span>
-              </div>
-              <div className="status-progress">
-                <div className="progress-bar" style={{ width: '95%' }}></div>
-              </div>
-            </div>
-            
-            <div className="status-item">
-              <div className="status-header">
-                <span className="status-name">Сбор данных с камер</span>
-                <span className="status-value warning">42/64 активны</span>
-              </div>
-              <div className="status-progress">
-                <div className="progress-bar" style={{ width: '65%' }}></div>
-              </div>
-            </div>
-            
-            <div className="status-item">
-              <div className="status-header">
-                <span className="status-name">Обновление в реальном времени</span>
-                <span className="status-value">Задержка 3.2с</span>
-              </div>
-              <div className="status-progress">
-                <div className="progress-bar" style={{ width: '88%' }}></div>
-              </div>
-            </div>
-            
-            <div className="status-item">
-              <div className="status-header">
-                <span className="status-name">Точность прогнозов</span>
-                <span className="status-value success">87.3%</span>
-              </div>
-              <div className="status-progress">
-                <div className="progress-bar" style={{ width: '87%' }}></div>
-              </div>
-            </div>
-          </div>
-          <div className="card-footer">
-            <button className="settings-button">
-              ⚙️ Настройки системы
-            </button>
-            <button className="refresh-button">
-              🔄 Обновить данные
-            </button>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
