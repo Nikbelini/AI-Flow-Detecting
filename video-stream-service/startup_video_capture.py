@@ -21,8 +21,18 @@ from config import (
     FRAME_SAVE_IS_ENABLED,
 )
 
-model = YOLO("best.pt")
+# Импорты для дерева решений
+from flow_detection.decision_tree import YoloDecisionTree
+from flow_detection.model_registry import YoloModelRegistry
+
 flow_detection_client = FlowDetectClient(url=FLOW_DETECTION_URL)
+
+# Инициализация дерева решений и реестра моделей
+decision_tree = YoloDecisionTree(enable_ml=True)
+model_registry = YoloModelRegistry()
+
+# fallback модель на случай проблем
+fallback_model = model_registry.get("preprocessdetect.pt")
 
 
 def process_frame(stop_id: int, frame: Any) -> None:
@@ -31,10 +41,39 @@ def process_frame(stop_id: int, frame: Any) -> None:
     h, w = frame.shape[:2]
     logger.info(f"[stop{stop_id}] кадр {w}x{h} отправлен на обработку")
     ts = int(time.time())
+    
+    people_count = 0
+    
     if PEOPLE_DETECTION_IS_ENABLED:
-        results = model(frame, classes=[0])
-        frame = results[0].plot()
-        people_count = len(results[0].boxes)
+        try:
+            # Получаем текущую погоду для остановки
+            weather = flow_detection_client.get_current_weather(stop_id)
+
+            # Выбираем модель через дерево решений
+            model_path = decision_tree.select_model(
+                weather_code=weather.weatherCode,
+                precipitation=weather.precipitation,
+                current_time=weather.datetime,
+            )
+
+            # Загружаем модель из реестра (кэширование)
+            model = model_registry.get(model_path)
+
+        except Exception as e:
+            logger.exception(f"Ошибка при выборе/загрузке модели, используем fallback: {e}")
+            model = fallback_model
+
+        # Детекция людей
+        try:
+            results = model(frame, classes=[0])
+            frame = results[0].plot()
+            people_count = len(results[0].boxes)
+        except:
+            logger.exception(f"Ошибка при детекции, fallback модель: {e}")
+            # Если что-то пошло не так, fallback на best.pt
+            results = fallback_model(frame, classes=[0])
+            frame = results[0].plot()
+            people_count = len(results[0].boxes)
     else:
         people_count = 322
 
@@ -71,7 +110,12 @@ def grab_frame(stop_id: int, url: str) -> dict:
 
 def startup() -> None:
     if FLOW_DETECTION_INTEGRATION_IS_ENABLED:
-        urls = flow_detection_client.get_stops_urls()
+        all_stops = flow_detection_client.get_stops_urls()
+
+        urls = [s for s in all_stops if s.url]
+        
+        logger.info(f"Остановок всего: {len(all_stops)}, "
+                    f"с камерами: {len(urls)}")
     else:
         urls = [StopsUrlSchema(id=1, url=HLS_URLS[0])]
     with ThreadPoolExecutor(max_workers=len(urls)) as pool:

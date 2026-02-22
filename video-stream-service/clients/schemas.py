@@ -1,9 +1,10 @@
+from typing import Optional
 from pydantic import BaseModel, TypeAdapter
 
 
 class StopsUrlSchema(BaseModel):
     id: int
-    url: str
+    url: Optional[str] = None
 
 
 class StopsUrlsResponse(BaseModel):
