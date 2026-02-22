@@ -2,225 +2,200 @@
 import React, { useState, useEffect } from 'react';
 import './SimulationPage.css';
 import MapComponent from './Map/Map';
+import { 
+  Play, Save, RotateCcw, Download, Eye, EyeOff,
+  Clock, Users, Bus, AlertTriangle, TrendingUp,
+  Plus, Trash2, Settings
+} from 'lucide-react';
 
-// Типы данных из сервиса моделирования
-interface Scenario {
-  id: string;
-  name: string;
-  description: string;
-  createdAt: string;
-  status: 'draft' | 'ready' | 'running' | 'completed' | 'failed';
-  modifications: Modification[];
-  results?: SimulationResults;
+interface SimulationState {
+  status: 'idle' | 'running' | 'completed' | 'error';
+  progress: number;
+  currentHour: number;
+  results: SimulationResults | null;
+}
+
+interface SimulationResults {
+  baseMetrics: Metrics;
+  modifiedMetrics: Metrics;
+  hourlyData: HourlyData[];
+  affectedStops: AffectedStop[];
+}
+
+interface Metrics {
+  avgWaitTime: number;
+  maxWaitTime: number;
+  totalPassengers: number;
+  avgLoad: number;
+  transportUtilization: number;
+}
+
+interface HourlyData {
+  hour: number;
+  basePassengers: number;
+  modifiedPassengers: number;
+  baseWaitTime: number;
+  modifiedWaitTime: number;
+}
+
+interface AffectedStop {
+  id: number;
+  address: string;
+  loadChange: number;
+  waitTimeChange: number;
+  status: 'improved' | 'worsened' | 'neutral';
 }
 
 interface Modification {
   id: string;
-  type: 'add_stop' | 'remove_stop' | 'close_stop' | 'add_route' | 'change_interval' | 'change_capacity';
-  targetId?: string;
-  targetName?: string;
+  type: 'close_stop' | 'add_stop' | 'change_interval' | 'change_capacity';
+  targetId?: number;
   parameters: Record<string, any>;
-  hourCondition?: {
-    start?: number;
-    end?: number;
-  };
-}
-
-interface SimulationResults {
-  id: string;
-  scenarioId: string;
-  generatedAt: string;
-  metrics: {
-    avgWaitTime: number;
-    maxWaitTime: number;
-    totalPassengerKm: number;
-    transportUtilization: number;
-    maxLoad: number;
-    efficiencyScore: number;
-  };
-  hourlyData: HourlyMetric[];
-  comparison?: ComparisonData;
-}
-
-interface HourlyMetric {
-  hour: number;
-  waitTime: number;
-  passengerCount: number;
-  transportCount: number;
-  load: number;
-}
-
-interface ComparisonData {
-  baselineId: string;
-  baselineName: string;
-  differences: {
-    avgWaitTime: number;
-    maxWaitTime: number;
-    totalPassengerKm: number;
-    transportUtilization: number;
-  };
+  enabled: boolean;
 }
 
 const SimulationPage: React.FC = () => {
-  // Состояния
-  const [scenarios, setScenarios] = useState<Scenario[]>([]);
-  const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
-  const [simulationProgress, setSimulationProgress] = useState(0);
-  const [activeTab, setActiveTab] = useState<'parameters' | 'results' | 'comparison'>('parameters');
-  const [selectedHour, setSelectedHour] = useState<number | null>(null);
-  const [showHeatmap, setShowHeatmap] = useState(true);
-  const [forecastDepth, setForecastDepth] = useState(24);
+  const [simState, setSimState] = useState<SimulationState>({
+    status: 'idle',
+    progress: 0,
+    currentHour: 8,
+    results: null
+  });
 
-  // Загрузка сценариев при монтировании
-  useEffect(() => {
-    fetchScenarios();
-  }, []);
-
-  // Имитация прогресса симуляции
-  useEffect(() => {
-    if (isRunning) {
-      const interval = setInterval(() => {
-        setSimulationProgress(prev => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            setIsRunning(false);
-            return 100;
-          }
-          return prev + 5;
-        });
-      }, 300);
-      return () => clearInterval(interval);
+  const [modifications, setModifications] = useState<Modification[]>([
+    {
+      id: '1',
+      type: 'close_stop',
+      targetId: 15,
+      parameters: { hours: [7, 8, 9, 17, 18, 19] },
+      enabled: true
     }
-  }, [isRunning]);
+  ]);
 
-  const fetchScenarios = async () => {
-    // TODO: GET /scenarios
-    const mockScenarios: Scenario[] = [
-      {
-        id: '1',
-        name: 'Закрытие остановки "Центральная"',
-        description: 'Моделирование последствий закрытия главной остановки на 2 недели',
-        createdAt: '2024-01-15T10:30:00',
-        status: 'completed',
-        modifications: [
-          { id: 'm1', type: 'close_stop', targetId: '15', targetName: 'Центральная', parameters: {} }
-        ],
-        results: {
-          id: 'r1',
-          scenarioId: '1',
-          generatedAt: '2024-01-15T10:31:00',
-          metrics: {
-            avgWaitTime: 11.4,
-            maxWaitTime: 23.5,
-            totalPassengerKm: 12450,
-            transportUtilization: 0.78,
-            maxLoad: 8.2,
-            efficiencyScore: 0.64
-          },
-          hourlyData: Array.from({ length: 24 }, (_, i) => ({
-            hour: i,
-            waitTime: 8 + Math.sin(i / 3) * 5 + Math.random() * 3,
-            passengerCount: 200 + Math.sin(i / 6) * 150 + Math.random() * 50,
-            transportCount: 12 + Math.floor(Math.random() * 4),
-            load: 3 + Math.sin(i / 4) * 3 + Math.random() * 2
-          }))
-        }
-      },
-      {
-        id: '2',
-        name: 'Добавление маршрута №15А',
-        description: 'Новый маршрут через спальный район',
-        createdAt: '2024-01-16T14:20:00',
-        status: 'ready',
-        modifications: [
-          { id: 'm2', type: 'add_route', parameters: { interval: 15, stops: ['18', '22', '31'] } }
+  const [selectedStop, setSelectedStop] = useState<any>(null);
+  const [editMode, setEditMode] = useState<'view' | 'select'>('view');
+  const [showComparison, setShowComparison] = useState(true);
+  const [selectedHour, setSelectedHour] = useState(8);
+
+  // Симулированные результаты (для демонстрации)
+  useEffect(() => {
+    if (simState.status === 'completed' && !simState.results) {
+      const mockResults: SimulationResults = {
+        baseMetrics: {
+          avgWaitTime: 8.2,
+          maxWaitTime: 15.4,
+          totalPassengers: 12450,
+          avgLoad: 4.3,
+          transportUtilization: 0.68
+        },
+        modifiedMetrics: {
+          avgWaitTime: 11.4,
+          maxWaitTime: 22.1,
+          totalPassengers: 11870,
+          avgLoad: 5.8,
+          transportUtilization: 0.74
+        },
+        hourlyData: Array.from({ length: 24 }, (_, hour) => ({
+          hour,
+          basePassengers: 400 + Math.sin(hour / 3) * 200 + 300,
+          modifiedPassengers: 380 + Math.sin(hour / 3) * 220 + 280,
+          baseWaitTime: 5 + Math.sin(hour / 4) * 3 + 2,
+          modifiedWaitTime: 7 + Math.sin(hour / 4) * 4 + 3
+        })),
+        affectedStops: [
+          { id: 16, address: 'ул. Ленина, 16', loadChange: 47, waitTimeChange: 3.2, status: 'worsened' },
+          { id: 23, address: 'пр. Мира, 23', loadChange: 28, waitTimeChange: 2.1, status: 'worsened' },
+          { id: 8, address: 'ул. Советская, 8', loadChange: -15, waitTimeChange: -1.8, status: 'improved' },
+          { id: 42, address: 'пл. Победы', loadChange: 12, waitTimeChange: 0.9, status: 'worsened' }
         ]
-      },
-      {
-        id: '3',
-        name: 'Увеличение интервала на маршруте №7',
-        description: 'С 10 до 15 минут в часы пик',
-        createdAt: '2024-01-16T09:15:00',
-        status: 'draft',
-        modifications: [
-          { 
-            id: 'm3', 
-            type: 'change_interval', 
-            targetId: '7', 
-            targetName: 'Маршрут №7',
-            parameters: { oldInterval: 10, newInterval: 15 },
-            hourCondition: { start: 7, end: 10 }
-          }
-        ]
+      };
+      
+      setSimState(prev => ({ ...prev, results: mockResults }));
+    }
+  }, [simState.status]);
+
+  // Запуск симуляции
+  const runSimulation = () => {
+    setSimState({
+      status: 'running',
+      progress: 0,
+      currentHour: 8,
+      results: null
+    });
+
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 10;
+      setSimState(prev => ({ ...prev, progress }));
+      
+      if (progress >= 100) {
+        clearInterval(interval);
+        setSimState(prev => ({ ...prev, status: 'completed', progress: 100 }));
       }
-    ];
-    setScenarios(mockScenarios);
+    }, 200);
   };
 
-  const runSimulation = async () => {
-    if (!selectedScenario) return;
-    
-    setIsRunning(true);
-    setSimulationProgress(0);
-    setActiveTab('results');
-    
-    // TODO: POST /simulations
-    // Тело запроса: { scenarioId: selectedScenario.id, forecastHours: forecastDepth }
-    
-    // Имитация завершения
-    setTimeout(() => {
-      setIsRunning(false);
-      setSimulationProgress(100);
-    }, 6000);
+  // Сброс симуляции
+  const resetSimulation = () => {
+    setSimState({
+      status: 'idle',
+      progress: 0,
+      currentHour: 8,
+      results: null
+    });
+    setModifications([]);
+    setSelectedStop(null);
   };
 
-  const saveScenario = async () => {
-    // TODO: POST /scenarios
-    console.log('Сохранение сценария');
-  };
-
-  const deleteScenario = async (id: string) => {
-    // TODO: DELETE /scenarios/{id}
-    setScenarios(prev => prev.filter(s => s.id !== id));
-    if (selectedScenario?.id === id) {
-      setSelectedScenario(null);
+  // Добавление модификации
+  const addModification = (type: Modification['type']) => {
+    if (!selectedStop && type !== 'add_stop') {
+      alert('Сначала выберите остановку на карте');
+      return;
     }
-  };
 
-  const cloneScenario = async (scenario: Scenario) => {
-    // TODO: POST /scenarios/clone
-    const newScenario = {
-      ...scenario,
+    const newMod: Modification = {
       id: Date.now().toString(),
-      name: `${scenario.name} (копия)`,
-      createdAt: new Date().toISOString(),
-      status: 'draft' as const,
-      results: undefined
+      type,
+      targetId: selectedStop?.id,
+      parameters: type === 'close_stop' ? { hours: [7, 8, 9, 17, 18, 19] } :
+                   type === 'change_interval' ? { interval: 15 } :
+                   type === 'change_capacity' ? { capacity: 50 } : {},
+      enabled: true
     };
-    setScenarios(prev => [...prev, newScenario]);
+
+    setModifications(prev => [...prev, newMod]);
   };
 
-  // Получение цвета для статуса
-  const getStatusColor = (status: string) => {
-    switch(status) {
-      case 'completed': return '#10b981';
-      case 'running': return '#f59e0b';
-      case 'failed': return '#ef4444';
-      case 'ready': return '#3b82f6';
-      default: return '#6b7280';
-    }
+  // Удаление модификации
+  const removeModification = (id: string) => {
+    setModifications(prev => prev.filter(m => m.id !== id));
   };
 
-  const getStatusText = (status: string) => {
-    switch(status) {
-      case 'completed': return 'Завершён';
-      case 'running': return 'Выполняется';
-      case 'failed': return 'Ошибка';
-      case 'ready': return 'Готов';
-      case 'draft': return 'Черновик';
-      default: return status;
+  // Переключение модификации
+  const toggleModification = (id: string) => {
+    setModifications(prev => prev.map(m => 
+      m.id === id ? { ...m, enabled: !m.enabled } : m
+    ));
+  };
+
+  // Получение цвета для остановки
+  const getStopColor = (stopId: number): string => {
+    if (!simState.results) return '#10b981';
+    
+    const affected = simState.results.affectedStops.find(a => a.id === stopId);
+    if (!affected) return '#10b981';
+    
+    if (affected.loadChange > 30) return '#ef4444';
+    if (affected.loadChange > 10) return '#f59e0b';
+    return '#10b981';
+  };
+
+  // Обработчик клика на маркер
+  const handleMarkerClick = (marker: any) => {
+    console.log('Marker clicked in simulation page:', marker);
+    if (editMode === 'select') {
+      setSelectedStop(marker);
     }
   };
 
@@ -229,499 +204,343 @@ const SimulationPage: React.FC = () => {
       {/* Заголовок */}
       <div className="simulation-header">
         <div className="header-left">
-          <h1 className="page-title">🎮 Лаборатория моделирования</h1>
-          <p className="page-subtitle">Создавайте сценарии "что если" и оценивайте их последствия</p>
+          <h1 className="page-title">🎮 Моделирование "Что если"</h1>
+          <p className="page-subtitle">
+            Безопасно изменяйте транспортную сеть и мгновенно оценивайте последствия
+          </p>
         </div>
         
         <div className="header-right">
-          <button 
-            className="create-scenario-btn"
-            onClick={() => setIsCreating(true)}
-          >
-            + Новый сценарий
-          </button>
-          <button 
-            className="refresh-btn"
-            onClick={fetchScenarios}
-          >
-            🔄
-          </button>
+          <div className="simulation-status">
+            <div className={`status-badge ${simState.status}`}>
+              {simState.status === 'idle' && '⚪ Готов к запуску'}
+              {simState.status === 'running' && '🟡 Выполняется...'}
+              {simState.status === 'completed' && '🟢 Симуляция завершена'}
+              {simState.status === 'error' && '🔴 Ошибка'}
+            </div>
+            
+            {simState.status === 'running' && (
+              <div className="progress-bar">
+                <div className="progress-fill" style={{ width: `${simState.progress}%` }}></div>
+              </div>
+            )}
+          </div>
+          
+          <div className="header-actions">
+            <button 
+              className="action-btn primary"
+              onClick={runSimulation}
+              disabled={simState.status === 'running' || modifications.length === 0}
+            >
+              <Play size={18} />
+              Запустить симуляцию
+            </button>
+            
+            <button 
+              className="action-btn secondary"
+              onClick={resetSimulation}
+            >
+              <RotateCcw size={18} />
+              Сбросить
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Основная сетка */}
       <div className="simulation-grid">
-        {/* Левая колонка — список сценариев */}
-        <div className="scenarios-panel">
-          <div className="panel-header">
-            <h3>📋 Мои сценарии</h3>
-            <span className="scenarios-count">{scenarios.length}</span>
-          </div>
-          
-          <div className="scenarios-list">
-            {scenarios.map(scenario => (
-              <div 
-                key={scenario.id} 
-                className={`scenario-item ${selectedScenario?.id === scenario.id ? 'selected' : ''}`}
-                onClick={() => setSelectedScenario(scenario)}
+        {/* Левая панель - инструменты моделирования */}
+        <div className="left-panel">
+          <div className="panel-section">
+            <h3 className="panel-title">
+              <Settings size={18} />
+              Режим редактирования
+            </h3>
+            
+            <div className="edit-mode-tabs">
+              <button 
+                className={`mode-tab ${editMode === 'view' ? 'active' : ''}`}
+                onClick={() => setEditMode('view')}
               >
-                <div className="scenario-header">
-                  <div className="scenario-name">{scenario.name}</div>
-                  <div 
-                    className="scenario-status"
-                    style={{ 
-                      backgroundColor: getStatusColor(scenario.status),
-                      color: 'white'
-                    }}
-                  >
-                    {getStatusText(scenario.status)}
+                <Eye size={16} />
+                Просмотр
+              </button>
+              <button 
+                className={`mode-tab ${editMode === 'select' ? 'active' : ''}`}
+                onClick={() => setEditMode('select')}
+              >
+                <Plus size={16} />
+                Выбор остановки
+              </button>
+            </div>
+            
+            {editMode === 'select' && (
+              <div className="selection-hint">
+                <div className="hint-dot"></div>
+                <span>Кликните на остановку на карте</span>
+              </div>
+            )}
+          </div>
+
+          {selectedStop && (
+            <div className="panel-section selected-stop">
+              <h3 className="panel-title">
+                <Bus size={18} />
+                Выбранная остановка
+              </h3>
+              
+              <div className="stop-info">
+                <div className="stop-address">{selectedStop.address}</div>
+                <div className="stop-metrics">
+                  <div className="stop-metric">
+                    <Users size={14} />
+                    <span>Текущая загрузка: {selectedStop.load || 0}/10</span>
                   </div>
-                </div>
-                
-                <div className="scenario-description">
-                  {scenario.description}
-                </div>
-                
-                <div className="scenario-meta">
-                  <span className="scenario-date">
-                    {new Date(scenario.createdAt).toLocaleDateString('ru-RU')}
-                  </span>
-                  <span className="scenario-modifications">
-                    {scenario.modifications.length} изменений
-                  </span>
-                </div>
-                
-                {scenario.results && (
-                  <div className="scenario-preview">
-                    <div className="preview-metric">
-                      <span className="metric-label">Ожидание</span>
-                      <span className="metric-value">{scenario.results.metrics.avgWaitTime.toFixed(1)} мин</span>
-                    </div>
-                    <div className="preview-metric">
-                      <span className="metric-label">Загрузка</span>
-                      <span className="metric-value">{scenario.results.metrics.maxLoad.toFixed(1)}/10</span>
-                    </div>
+                  <div className="stop-metric">
+                    <Clock size={14} />
+                    <span>Ср. ожидание: 8.2 мин</span>
                   </div>
-                )}
-                
-                <div className="scenario-actions">
-                  <button 
-                    className="action-btn clone"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      cloneScenario(scenario);
-                    }}
-                    title="Клонировать"
-                  >
-                    📋
-                  </button>
-                  <button 
-                    className="action-btn delete"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteScenario(scenario.id);
-                    }}
-                    title="Удалить"
-                  >
-                    🗑️
-                  </button>
                 </div>
               </div>
-            ))}
+              
+              <div className="quick-actions">
+                <button 
+                  className="quick-action-btn"
+                  onClick={() => addModification('close_stop')}
+                >
+                  🚫 Закрыть
+                </button>
+                <button 
+                  className="quick-action-btn"
+                  onClick={() => addModification('change_interval')}
+                >
+                  ⏱️ Интервал
+                </button>
+                <button 
+                  className="quick-action-btn"
+                  onClick={() => addModification('change_capacity')}
+                >
+                  📦 Вместимость
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="panel-section">
+            <h3 className="panel-title">
+              <Plus size={18} />
+              Активные изменения
+            </h3>
+            
+            {modifications.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">⚡</div>
+                <p>Нет активных изменений</p>
+                <p className="empty-hint">
+                  Выберите остановку на карте и добавьте изменение
+                </p>
+              </div>
+            ) : (
+              <div className="modifications-list">
+                {modifications.map(mod => (
+                  <div key={mod.id} className={`modification-item ${!mod.enabled ? 'disabled' : ''}`}>
+                    <div className="modification-header">
+                      <div className="modification-type">
+                        {mod.type === 'close_stop' && '🚫 Закрытие остановки'}
+                        {mod.type === 'add_stop' && '➕ Новая остановка'}
+                        {mod.type === 'change_interval' && '⏱️ Изменение интервала'}
+                        {mod.type === 'change_capacity' && '📦 Изменение вместимости'}
+                      </div>
+                      
+                      <div className="modification-actions">
+                        <button 
+                          className="mod-action"
+                          onClick={() => toggleModification(mod.id)}
+                          title={mod.enabled ? 'Отключить' : 'Включить'}
+                        >
+                          {mod.enabled ? <Eye size={14} /> : <EyeOff size={14} />}
+                        </button>
+                        <button 
+                          className="mod-action delete"
+                          onClick={() => removeModification(mod.id)}
+                          title="Удалить"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="modification-details">
+                      {mod.targetId && <span>Остановка #{mod.targetId}</span>}
+                      {mod.type === 'close_stop' && (
+                        <span className="mod-params">
+                          Часы: {mod.parameters.hours?.join(', ')}
+                        </span>
+                      )}
+                      {mod.type === 'change_interval' && (
+                        <span className="mod-params">
+                          Новый интервал: {mod.parameters.interval} мин
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Центральная часть — редактор сценария */}
-        <div className="editor-panel">
-          {selectedScenario ? (
-            <>
-              {/* Вкладки */}
-              <div className="editor-tabs">
-                <button 
-                  className={`tab ${activeTab === 'parameters' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('parameters')}
-                >
-                  ⚙️ Параметры
-                </button>
-                <button 
-                  className={`tab ${activeTab === 'results' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('results')}
-                  disabled={!selectedScenario.results && !isRunning}
-                >
-                  📊 Результаты
-                </button>
-                <button 
-                  className={`tab ${activeTab === 'comparison' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('comparison')}
-                  disabled={!selectedScenario.results}
-                >
-                  🔍 Сравнение
-                </button>
+        {/* Центральная область - карта */}
+        <div className="map-area">
+          <MapComponent 
+            markers={[]}
+            routes={[]}
+            onMarkerClick={handleMarkerClick}
+          />
+          
+          {editMode === 'select' && (
+            <div className="map-overlay-hint">
+              <div className="hint-box">
+                <div className="hint-arrow">👆</div>
+                <p>Кликните на остановку на карте</p>
               </div>
-
-              {/* Панель параметров */}
-              {activeTab === 'parameters' && (
-                <div className="parameters-panel">
-                  <div className="scenario-info">
-                    <input 
-                      type="text" 
-                      className="scenario-name-input"
-                      value={selectedScenario.name}
-                      onChange={(e) => setSelectedScenario({
-                        ...selectedScenario,
-                        name: e.target.value
-                      })}
-                    />
-                    <textarea 
-                      className="scenario-description-input"
-                      value={selectedScenario.description}
-                      onChange={(e) => setSelectedScenario({
-                        ...selectedScenario,
-                        description: e.target.value
-                      })}
-                      rows={3}
-                    />
-                  </div>
-
-                  <div className="modifications-list">
-                    <h4>Изменения сети</h4>
-                    {selectedScenario.modifications.map(mod => (
-                      <div key={mod.id} className="modification-item">
-                        <div className="modification-type">
-                          {mod.type === 'close_stop' && '🚫 Закрытие остановки'}
-                          {mod.type === 'add_route' && '➕ Новый маршрут'}
-                          {mod.type === 'change_interval' && '⏱️ Изменение интервала'}
-                          {mod.type === 'add_stop' && '📍 Новая остановка'}
-                        </div>
-                        <div className="modification-details">
-                          {mod.targetName && <span className="target">{mod.targetName}</span>}
-                          {mod.hourCondition && (
-                            <span className="hour-condition">
-                              {mod.hourCondition.start}:00 - {mod.hourCondition.end}:00
-                            </span>
-                          )}
-                        </div>
-                        <button className="remove-modification">✕</button>
-                      </div>
-                    ))}
-                    
-                    <button className="add-modification-btn">
-                      + Добавить изменение
-                    </button>
-                  </div>
-
-                  <div className="simulation-params">
-                    <h4>Параметры симуляции</h4>
-                    
-                    <div className="param-row">
-                      <label>Глубина прогноза</label>
-                      <div className="param-control">
-                        <input 
-                          type="range" 
-                          min="1" 
-                          max="72" 
-                          value={forecastDepth}
-                          onChange={(e) => setForecastDepth(parseInt(e.target.value))}
-                        />
-                        <span className="param-value">{forecastDepth} ч</span>
-                      </div>
-                    </div>
-                    
-                    <div className="param-row">
-                      <label>Показывать тепловую карту</label>
-                      <label className="switch">
-                        <input 
-                          type="checkbox" 
-                          checked={showHeatmap}
-                          onChange={(e) => setShowHeatmap(e.target.checked)}
-                        />
-                        <span className="slider"></span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="editor-actions">
-                    <button 
-                      className="save-btn"
-                      onClick={saveScenario}
-                    >
-                      💾 Сохранить
-                    </button>
-                    <button 
-                      className={`run-btn ${isRunning ? 'running' : ''}`}
-                      onClick={runSimulation}
-                      disabled={isRunning || selectedScenario.status === 'running'}
-                    >
-                      {isRunning ? (
-                        <>⏳ Выполняется... {simulationProgress}%</>
-                      ) : (
-                        <>▶️ Запустить симуляцию</>
-                      )}
-                    </button>
-                  </div>
-
-                  {isRunning && (
-                    <div className="simulation-progress">
-                      <div 
-                        className="progress-bar"
-                        style={{ width: `${simulationProgress}%` }}
-                      ></div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Панель результатов */}
-              {activeTab === 'results' && selectedScenario.results && (
-                <div className="results-panel">
-                  <div className="metrics-grid">
-                    <div className="metric-card">
-                      <div className="metric-icon">⏱️</div>
-                      <div className="metric-content">
-                        <div className="metric-label">Среднее ожидание</div>
-                        <div className="metric-value">{selectedScenario.results.metrics.avgWaitTime.toFixed(1)} мин</div>
-                      </div>
-                    </div>
-                    
-                    <div className="metric-card">
-                      <div className="metric-icon">⚠️</div>
-                      <div className="metric-content">
-                        <div className="metric-label">Макс. ожидание</div>
-                        <div className="metric-value">{selectedScenario.results.metrics.maxWaitTime.toFixed(1)} мин</div>
-                      </div>
-                    </div>
-                    
-                    <div className="metric-card">
-                      <div className="metric-icon">🚌</div>
-                      <div className="metric-content">
-                        <div className="metric-label">Использование транспорта</div>
-                        <div className="metric-value">{(selectedScenario.results.metrics.transportUtilization * 100).toFixed(0)}%</div>
-                      </div>
-                    </div>
-                    
-                    <div className="metric-card">
-                      <div className="metric-icon">📊</div>
-                      <div className="metric-content">
-                        <div className="metric-label">Макс. нагрузка</div>
-                        <div className="metric-value">{selectedScenario.results.metrics.maxLoad.toFixed(1)}/10</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* График по часам */}
-                  <div className="hourly-chart">
-                    <h4>Динамика по часам</h4>
-                    <div className="chart-controls">
-                      <select className="chart-metric-select">
-                        <option>Время ожидания</option>
-                        <option>Пассажиропоток</option>
-                        <option>Количество транспорта</option>
-                        <option>Нагрузка</option>
-                      </select>
-                    </div>
-                    
-                    <div className="chart-container">
-                      <div className="chart-bars">
-                        {selectedScenario.results.hourlyData.map((data, i) => (
-                          <div 
-                            key={i} 
-                            className="chart-bar-wrapper"
-                            onMouseEnter={() => setSelectedHour(i)}
-                            onMouseLeave={() => setSelectedHour(null)}
-                          >
-                            <div 
-                              className="chart-bar"
-                              style={{ 
-                                height: `${(data.waitTime / 25) * 100}%`,
-                                backgroundColor: selectedHour === i ? '#3b82f6' : '#60a5fa'
-                              }}
-                            >
-                              {selectedHour === i && (
-                                <div className="chart-tooltip">
-                                  <div>{data.waitTime.toFixed(1)} мин</div>
-                                  <div>{data.passengerCount} чел</div>
-                                </div>
-                              )}
-                            </div>
-                            <div className="chart-label">{i}:00</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="result-actions">
-                    <button className="export-btn">📥 Экспорт результатов</button>
-                    <button className="compare-btn" onClick={() => setActiveTab('comparison')}>
-                      🔍 Сравнить с базовым сценарием
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Панель сравнения */}
-              {activeTab === 'comparison' && selectedScenario.results && (
-                <div className="comparison-panel">
-                  <h4>Сравнение с базовым сценарием</h4>
-                  
-                  <div className="comparison-table">
-                    <div className="comparison-row header">
-                      <div className="metric-name">Метрика</div>
-                      <div className="baseline-value">Базовый</div>
-                      <div className="simulated-value">Симуляция</div>
-                      <div className="difference">Изменение</div>
-                    </div>
-                    
-                    <div className="comparison-row">
-                      <div className="metric-name">Среднее время ожидания</div>
-                      <div className="baseline-value">8.2 мин</div>
-                      <div className="simulated-value">{selectedScenario.results.metrics.avgWaitTime.toFixed(1)} мин</div>
-                      <div className="difference positive">+3.2 мин (39%)</div>
-                    </div>
-                    
-                    <div className="comparison-row">
-                      <div className="metric-name">Максимальное ожидание</div>
-                      <div className="baseline-value">18.5 мин</div>
-                      <div className="simulated-value">{selectedScenario.results.metrics.maxWaitTime.toFixed(1)} мин</div>
-                      <div className="difference negative">+5.0 мин (27%)</div>
-                    </div>
-                    
-                    <div className="comparison-row">
-                      <div className="metric-name">Пассажиро-километры</div>
-                      <div className="baseline-value">13,200</div>
-                      <div className="simulated-value">{selectedScenario.results.metrics.totalPassengerKm}</div>
-                      <div className="difference negative">-750 (5.7%)</div>
-                    </div>
-                    
-                    <div className="comparison-row">
-                      <div className="metric-name">Использование транспорта</div>
-                      <div className="baseline-value">72%</div>
-                      <div className="simulated-value">{(selectedScenario.results.metrics.transportUtilization * 100).toFixed(0)}%</div>
-                      <div className="difference positive">+6%</div>
-                    </div>
-                  </div>
-
-                  <div className="comparison-chart">
-                    <h5>Динамика времени ожидания</h5>
-                    <div className="dual-line-chart">
-                      {selectedScenario.results.hourlyData.map((data, i) => (
-                        <div key={i} className="chart-hour">
-                          <div 
-                            className="baseline-line"
-                            style={{ height: `${(8 / 25) * 100}%` }}
-                          ></div>
-                          <div 
-                            className="simulated-line"
-                            style={{ height: `${(data.waitTime / 25) * 100}%` }}
-                          ></div>
-                          <div className="hour-label">{i}:00</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="no-scenario">
-              <div className="no-scenario-icon">🎯</div>
-              <h3>Выберите сценарий для моделирования</h3>
-              <p>Или создайте новый, чтобы начать анализ "что если"</p>
-              <button 
-                className="create-first-scenario"
-                onClick={() => setIsCreating(true)}
-              >
-                + Создать первый сценарий
-              </button>
             </div>
           )}
         </div>
 
-        {/* Правая колонка — карта */}
-        <div className="map-panel">
-          <div className="map-header">
-            <h3>🗺️ Визуализация</h3>
-            <div className="map-controls">
-              <button 
-                className={`map-control-btn ${showHeatmap ? 'active' : ''}`}
-                onClick={() => setShowHeatmap(!showHeatmap)}
-                title="Тепловая карта"
-              >
-                🔥
-              </button>
-              <button 
-                className="map-control-btn"
-                title="Центрировать"
-              >
-                🎯
-              </button>
-            </div>
-          </div>
-          
-          <div className="map-container">
-            <MapComponent />
-            
-            {selectedHour !== null && selectedScenario?.results && (
-              <div className="hour-indicator">
-                <div className="hour-badge">
-                  ⏱️ Час {selectedHour}:00
+        {/* Правая панель - результаты */}
+        <div className="right-panel">
+          {simState.results ? (
+            <>
+              <div className="panel-section">
+                <h3 className="panel-title">
+                  <TrendingUp size={18} />
+                  Ключевые метрики
+                </h3>
+                
+                <div className="metrics-comparison">
+                  <div className="metric-row header">
+                    <div className="metric-name">Метрика</div>
+                    <div className="metric-base">Было</div>
+                    <div className="metric-modified">Стало</div>
+                    <div className="metric-change">Δ</div>
+                  </div>
+                  
+                  <div className="metric-row">
+                    <div className="metric-name">Ср. время ожидания</div>
+                    <div className="metric-base">{simState.results.baseMetrics.avgWaitTime} мин</div>
+                    <div className="metric-modified">{simState.results.modifiedMetrics.avgWaitTime} мин</div>
+                    <div className="metric-change negative">
+                      +{((simState.results.modifiedMetrics.avgWaitTime / simState.results.baseMetrics.avgWaitTime - 1) * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                  
+                  <div className="metric-row">
+                    <div className="metric-name">Макс. время ожидания</div>
+                    <div className="metric-base">{simState.results.baseMetrics.maxWaitTime} мин</div>
+                    <div className="metric-modified">{simState.results.modifiedMetrics.maxWaitTime} мин</div>
+                    <div className="metric-change negative">
+                      +{((simState.results.modifiedMetrics.maxWaitTime / simState.results.baseMetrics.maxWaitTime - 1) * 100).toFixed(1)}%
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
-            
-            {isRunning && (
-              <div className="simulation-overlay">
-                <div className="simulation-spinner"></div>
-                <p>Симуляция... {simulationProgress}%</p>
+
+              <div className="panel-section">
+                <h3 className="panel-title">
+                  <Clock size={18} />
+                  Почасовая динамика
+                </h3>
+                
+                <div className="hourly-chart">
+                  <div className="chart-bars">
+                    {simState.results.hourlyData.map((data, idx) => (
+                      <div key={idx} className="chart-bar-group">
+                        <div className="bar-container base">
+                          <div 
+                            className="bar-fill base"
+                            style={{ 
+                              height: `${(data.basePassengers / 1500) * 100}%`,
+                              opacity: selectedHour === data.hour ? 1 : 0.6
+                            }}
+                          ></div>
+                        </div>
+                        <div className="bar-container modified">
+                          <div 
+                            className="bar-fill modified"
+                            style={{ 
+                              height: `${(data.modifiedPassengers / 1500) * 100}%`,
+                              opacity: selectedHour === data.hour ? 1 : 0.6
+                            }}
+                          ></div>
+                        </div>
+                        <div 
+                          className="hour-label"
+                          onClick={() => setSelectedHour(data.hour)}
+                        >
+                          {data.hour}:00
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="chart-legend">
+                    <div className="legend-item">
+                      <div className="legend-color base"></div>
+                      <span>Базовый сценарий</span>
+                    </div>
+                    <div className="legend-item">
+                      <div className="legend-color modified"></div>
+                      <span>С изменениями</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
+
+              <div className="panel-section">
+                <h3 className="panel-title">
+                  <AlertTriangle size={18} />
+                  Наиболее затронутые остановки
+                </h3>
+                
+                <div className="affected-stops-list">
+                  {simState.results.affectedStops.map(stop => (
+                    <div key={stop.id} className={`affected-stop-item ${stop.status}`}>
+                      <div className="stop-address">{stop.address}</div>
+                      <div className="stop-changes">
+                        <div className="change-badge load">
+                          <span className="change-label">Нагрузка</span>
+                          <span className={`change-value ${stop.loadChange > 0 ? 'up' : 'down'}`}>
+                            {stop.loadChange > 0 ? '↑' : '↓'} {Math.abs(stop.loadChange)}%
+                          </span>
+                        </div>
+                        <div className="change-badge wait">
+                          <span className="change-label">Ожидание</span>
+                          <span className={`change-value ${stop.waitTimeChange > 0 ? 'up' : 'down'}`}>
+                            {stop.waitTimeChange > 0 ? '↑' : '↓'} {Math.abs(stop.waitTimeChange)} мин
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="panel-section">
+                <button className="export-btn full-width">
+                  <Download size={18} />
+                  Экспортировать результаты
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="empty-results">
+              <div className="empty-icon">📊</div>
+              <h3>Нет результатов</h3>
+              <p>Добавьте изменения и запустите симуляцию</p>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Модальное окно создания сценария */}
-      {isCreating && (
-        <div className="modal-overlay">
-          <div className="modal-content create-scenario-modal">
-            <div className="modal-header">
-              <h2>➕ Новый сценарий моделирования</h2>
-              <button className="close-modal" onClick={() => setIsCreating(false)}>✕</button>
-            </div>
-            
-            <div className="modal-body">
-              <div className="form-group">
-                <label>Название сценария</label>
-                <input type="text" placeholder="Например: Закрытие остановки Центральная" />
-              </div>
-              
-              <div className="form-group">
-                <label>Описание</label>
-                <textarea 
-                  placeholder="Что вы хотите проверить?" 
-                  rows={3}
-                ></textarea>
-              </div>
-              
-              <div className="form-group">
-                <label>Базовый сценарий (опционально)</label>
-                <select>
-                  <option value="">Пустой сценарий</option>
-                  {scenarios.filter(s => s.status === 'completed').map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setIsCreating(false)}>Отмена</button>
-              <button className="create-btn" onClick={() => setIsCreating(false)}>
-                Создать и перейти к редактированию
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
