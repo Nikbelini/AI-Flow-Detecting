@@ -6,16 +6,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
-
-import ru.slivkiai.flowdetect.domain.WeatherResponseDto;
 import ru.slivkiai.flowdetect.domain.entity.CityEntity;
 import ru.slivkiai.flowdetect.domain.entity.WeatherDataEntity;
-import ru.slivkiai.flowdetect.repository.StopRepository;
 import ru.slivkiai.flowdetect.repository.WeatherDataRepository;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -23,9 +19,6 @@ import java.util.Optional;
 public class WeatherServiceImpl implements WeatherService {
 
     private final WeatherDataRepository weatherDataRepository;
-    
-    private final StopRepository stopsRepository;
-
     private final RestTemplate restTemplate = new RestTemplate();
 
     private static final String OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
@@ -103,19 +96,4 @@ public class WeatherServiceImpl implements WeatherService {
             log.error("❌ Error saving weather data to database", e);
         }
     }
-
-    @Override
-    public Optional<WeatherResponseDto> getLatestWeatherByStop(Long stopId) {
-        return stopsRepository.findById(stopId)
-                .flatMap(stop -> {
-                    Long cityId = stop.getCity().getId();
-                    return weatherDataRepository.findLatestByCityId(cityId);
-                })
-                .map(weather -> new WeatherResponseDto(
-                        weather.getWeatherCode(),
-                        weather.getPrecipitation(),
-                        weather.getDatetime()
-                ));
-    }
-
 }

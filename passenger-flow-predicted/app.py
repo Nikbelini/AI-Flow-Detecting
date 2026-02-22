@@ -3,20 +3,17 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from domain.schemas import ForecastRequest
 from inference.forecast import forecast_city
-from typing import Dict
 
 app = FastAPI(title="passenger-flow-predicted")
 
 from threading import Thread
 from services.training_loop import training_loop
 
-status_dict: Dict = {}
-
 @app.on_event("startup")
 def startup():
     Thread(
         target=training_loop,
-        args=(1, status_dict),  # city_id
+        args=(1,),  # city_id
         daemon=True
     ).start()
 

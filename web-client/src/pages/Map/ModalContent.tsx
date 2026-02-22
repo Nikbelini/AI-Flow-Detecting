@@ -1,7 +1,7 @@
+// src/pages/Map/ModalContent.tsx
 import React, { useState, useEffect } from 'react';
 import './ModalContent.css';
 import ForecastPanel from './ForecastPanel';
-import HlsPlayer from './HlsPlayer';
 
 interface Marker {
   id: number;
@@ -424,22 +424,19 @@ const ModalContent: React.FC<ModalContentProps> = ({
           {activeTab === 'stream' && marker.url && (
             <div className="tab-content stream-tab">
               <div className="stream-header">
-                <div className="stream-header">
-                <h3>🎥 Прямая трансляция с остановки</h3>
-              </div>
-
-                <div className="stream-container" style={{ width: '100%', height: '480px' }}>
-                {/* Вставляем рабочий HLS-плеер */}
-                <HlsPlayer
-                  src={marker.url}
-                  autoPlay
-                  muted
-                  controls
-                  playsInline
-                  style={{ width: '100%', height: '100%', backgroundColor: 'black' }}
-                  onError={(e) => console.error('HLS error:', e)}
-                />
-              </div>
+                <h3>
+                  <span className="section-icon">🎥</span>
+                  Прямая трансляция с остановки
+                </h3>
+                <a 
+                  href={`/bus-stop?src=${marker.url}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="external-link"
+                >
+                  <span className="link-icon">🔗</span>
+                  Открыть в новом окне
+                </a>
               </div>
               
               <div className="stream-container">
