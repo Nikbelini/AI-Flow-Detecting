@@ -14,14 +14,10 @@ RUN apt-get update && apt-get install ffmpeg libsm6 libxext6 libgl1  -y
 
 COPY ./pyproject.toml ./uv.lock ./.python-version /code/
 
-# RUN --mount=type=cache,target=/root/.cache/uv \
-#     --mount=type=bind,source=uv.lock,target=uv.lock \
-#     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-#     uv sync --no-install-project
-
 RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --no-install-project
-
 
 COPY . /code/
 
