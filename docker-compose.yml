@@ -17,6 +17,24 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - flowdetect-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flowdetect-network
 
   flowdetect-app:
     build:
@@ -25,15 +43,22 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/stops
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
       ML_FORECAST_SERVICE_URL: http://load-forecast-service:8082
+      MODELING_SERVICE_URL: http://transport-modeling-service:8084
     ports:
       - "8080:8080"
     volumes:
       - ./backend-core/flowdetect/logs:/app/logs
+    networks:
+      - flowdetect-network
 
   load-forecast-service:
     build:
@@ -49,13 +74,15 @@ services:
       - PYTHONPATH=/app
       - MODEL_WEIGHTS_PATH=/app/models/best_powerful_model.weights.h5
       - PREPROCESSOR_PATH=/app/models/preprocessor.pkl
-      - TF_ENABLE_ONEDNN_OPTS=0  # Отключаем oneDNN для стабильности
+      - TF_ENABLE_ONEDNN_OPTS=0
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
       interval: 30s
       timeout: 10s
       retries: 3
     restart: unless-stopped
+    networks:
+      - flowdetect-network
 
   passenger-flow-predicted:
     build:
@@ -66,8 +93,13 @@ services:
       - "8083:8083"
     environment:
       DB_URL: postgresql://postgres:postgres@postgres:5432/stops
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./models:/app/result/models
     healthcheck:
@@ -76,12 +108,55 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
+    networks:
+      - flowdetect-network
+
+  transport-modeling-service:
+    build:
+      context: ./transport-modeling-service
+      dockerfile: Dockerfile
+    container_name: transport-modeling-service
+    ports:
+      - "8084:8084"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=stops
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - FLOWDETECT_URL=http://flowdetect-app:8080
+      - FORECAST_SERVICE_URL=http://load-forecast-service:8082
+      - CACHE_TTL_DAYS=30
+      - HISTORY_DAYS=90
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      flowdetect-app:
+        condition: service_started
+      load-forecast-service:
+        condition: service_healthy
+    volumes:
+      - ./transport-modeling-service/logs:/app/logs
+      - ./transport-modeling-service/data:/app/data
+      - ./transport-modeling-service/cache:/app/cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - flowdetect-network
 
   video-stream-service:
     dns:
       - 8.8.8.8
       - 1.1.1.1
-      - 4.4.4.4
     container_name: video-stream-service
     depends_on:
       flowdetect-app:
@@ -97,19 +172,30 @@ services:
           propagation: rprivate
       - /code/.venv
     restart: on-failure
+    networks:
+      - flowdetect-network
 
   frontend:
     build:
       context: ./web-client
     container_name: frontend
     ports:
-      - "5173:5173"  # Порт Vite по умолчанию
+      - "5173:5173"
     environment:
       - NODE_ENV=development
       - VITE_HOST=0.0.0.0
       - VITE_API_URL=http://localhost:8080
+      - VITE_MODELING_URL=http://localhost:8084
     depends_on:
       - flowdetect-app
+      - transport-modeling-service
+    networks:
+      - flowdetect-network
 
 volumes:
   postgres_data:
+  redis_data:
+
+networks:
+  flowdetect-network:
+    driver: bridge
