@@ -1,9 +1,9 @@
 // src/pages/SimulationPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import './SimulationPage.css';
-import MapComponent from './Map/Map';
+import SimulationMap from './Map/SimulationMap';
 import type { Stop } from '../api/types';
-import { 
+import {
   Play, Save, RotateCcw, Download, Eye, EyeOff,
   Clock, Users, Bus, AlertTriangle, TrendingUp,
   Plus, Trash2, Settings
@@ -102,7 +102,7 @@ const SimulationPage: React.FC = () => {
         const response = await fetch('http://localhost:8084/health');
         const data = await response.json();
         setServiceAvailable(data.status === 'healthy');
-        
+
         if (data.status === 'healthy') {
           loadCityStops();
         }
@@ -111,7 +111,7 @@ const SimulationPage: React.FC = () => {
         setServiceAvailable(false);
       }
     };
-    
+
     checkService();
   }, []);
 
@@ -121,7 +121,7 @@ const SimulationPage: React.FC = () => {
       setIsLoading(true);
       const response = await fetch(`http://localhost:8084/stops/${CITY_ID}`);
       const data = await response.json();
-      
+
       // Преобразуем в формат для карты
       const stopsWithCoords: ExtendedStop[] = data.map((stop: any) => ({
         id: stop.id,
@@ -142,7 +142,7 @@ const SimulationPage: React.FC = () => {
         avg_pattern: stop.avg_pattern,
         coordinates: [stop.lng, stop.lat] as [number, number]
       }));
-      
+
       setCityStops(stopsWithCoords);
     } catch (error) {
       console.error('Ошибка загрузки остановок:', error);
@@ -174,7 +174,7 @@ const SimulationPage: React.FC = () => {
         },
         body: JSON.stringify(mods.filter(m => m.enabled))
       });
-      
+
       const result = await response.json();
       if (!result.valid) {
         console.warn('Ошибки валидации:', result.errors);
@@ -224,13 +224,13 @@ const SimulationPage: React.FC = () => {
       }
 
       const data = await response.json();
-      
+
       // Симулируем прогресс (так как у нас синхронный запрос)
       let progress = 0;
       const interval = setInterval(() => {
         progress += 20;
         setSimState(prev => ({ ...prev, progress }));
-        
+
         if (progress >= 100) {
           clearInterval(interval);
           setSimState(prev => ({
@@ -266,8 +266,8 @@ const SimulationPage: React.FC = () => {
       type,
       targetId: selectedStop?.id,
       parameters: type === 'close_stop' ? { hours: [7, 8, 9, 17, 18, 19] } :
-                   type === 'change_interval' ? { interval: 15 } :
-                   type === 'change_capacity' ? { capacity: 50 } : {},
+        type === 'change_interval' ? { interval: 15 } :
+          type === 'change_capacity' ? { capacity: 50 } : {},
       enabled: true
     };
 
@@ -288,7 +288,7 @@ const SimulationPage: React.FC = () => {
 
   // Переключение модификации
   const toggleModification = (id: string) => {
-    setModifications(prev => prev.map(m => 
+    setModifications(prev => prev.map(m =>
       m.id === id ? { ...m, enabled: !m.enabled } : m
     ));
   };
@@ -310,10 +310,10 @@ const SimulationPage: React.FC = () => {
   // Получение цвета для остановки (на основе результатов)
   const getStopColor = (stopId: number): string => {
     if (!simState.results) return '#10b981';
-    
+
     const affected = simState.results.affectedStops.find(a => a.id === stopId);
     if (!affected) return '#10b981';
-    
+
     if (affected.loadChange > 30) return '#ef4444';
     if (affected.loadChange > 10) return '#f59e0b';
     return '#10b981';
@@ -332,12 +332,12 @@ const SimulationPage: React.FC = () => {
   // Экспорт результатов
   const exportResults = () => {
     if (!simState.results) return;
-    
+
     const dataStr = JSON.stringify(simState.results, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    
+    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+
     const exportFileDefaultName = `simulation_results_${new Date().toISOString()}.json`;
-    
+
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -356,7 +356,7 @@ const SimulationPage: React.FC = () => {
             Безопасно изменяйте транспортную сеть и мгновенно оценивайте последствия
           </p>
         </div>
-        
+
         <div className="header-right">
           {/* Индикатор доступности сервиса */}
           {!serviceAvailable && (
@@ -364,7 +364,7 @@ const SimulationPage: React.FC = () => {
               ⚠️ Сервис моделирования недоступен
             </div>
           )}
-          
+
           <div className="simulation-status">
             <div className={`status-badge ${simState.status}`}>
               {simState.status === 'idle' && '⚪ Готов к запуску'}
@@ -372,20 +372,20 @@ const SimulationPage: React.FC = () => {
               {simState.status === 'completed' && '🟢 Симуляция завершена'}
               {simState.status === 'error' && '🔴 Ошибка'}
             </div>
-            
+
             {simState.status === 'running' && (
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${simState.progress}%` }}></div>
               </div>
             )}
-            
+
             {simState.errorMessage && (
               <div className="error-message">{simState.errorMessage}</div>
             )}
           </div>
-          
+
           <div className="header-actions">
-            <button 
+            <button
               className="action-btn primary"
               onClick={runSimulation}
               disabled={simState.status === 'running' || modifications.length === 0 || !serviceAvailable}
@@ -393,8 +393,8 @@ const SimulationPage: React.FC = () => {
               <Play size={18} />
               Запустить симуляцию
             </button>
-            
-            <button 
+
+            <button
               className="action-btn secondary"
               onClick={resetSimulation}
             >
@@ -414,16 +414,16 @@ const SimulationPage: React.FC = () => {
               <Settings size={18} />
               Режим редактирования
             </h3>
-            
+
             <div className="edit-mode-tabs">
-              <button 
+              <button
                 className={`mode-tab ${editMode === 'view' ? 'active' : ''}`}
                 onClick={() => setEditMode('view')}
               >
                 <Eye size={16} />
                 Просмотр
               </button>
-              <button 
+              <button
                 className={`mode-tab ${editMode === 'select' ? 'active' : ''}`}
                 onClick={() => setEditMode('select')}
               >
@@ -431,7 +431,7 @@ const SimulationPage: React.FC = () => {
                 Выбор остановки
               </button>
             </div>
-            
+
             {editMode === 'select' && (
               <div className="selection-hint">
                 <div className="hint-dot"></div>
@@ -446,7 +446,7 @@ const SimulationPage: React.FC = () => {
                 <Bus size={18} />
                 Выбранная остановка
               </h3>
-              
+
               <div className="stop-info">
                 <div className="stop-address">{selectedStop.address}</div>
                 <div className="stop-metrics">
@@ -454,8 +454,8 @@ const SimulationPage: React.FC = () => {
                     <Users size={14} />
                     <span>
                       Текущая загрузка: {
-                        selectedStop.load || 
-                        selectedStop.avg_load || 
+                        selectedStop.load ||
+                        selectedStop.avg_load ||
                         0
                       }/10
                     </span>
@@ -482,28 +482,28 @@ const SimulationPage: React.FC = () => {
                   )}
                 </div>
               </div>
-              
+
               {/* Пиковые часы (если есть) */}
               {selectedStop.peak_hours && selectedStop.peak_hours.length > 0 && (
                 <div className="stop-peak-hours">
                   <small>Пиковые часы: {selectedStop.peak_hours.map(h => `${h}:00`).join(', ')}</small>
                 </div>
               )}
-              
+
               <div className="quick-actions">
-                <button 
+                <button
                   className="quick-action-btn"
                   onClick={() => addModification('close_stop')}
                 >
                   🚫 Закрыть
                 </button>
-                <button 
+                <button
                   className="quick-action-btn"
                   onClick={() => addModification('change_interval')}
                 >
                   ⏱️ Интервал
                 </button>
-                <button 
+                <button
                   className="quick-action-btn"
                   onClick={() => addModification('change_capacity')}
                 >
@@ -518,7 +518,7 @@ const SimulationPage: React.FC = () => {
               <Plus size={18} />
               Активные изменения
             </h3>
-            
+
             {modifications.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon">⚡</div>
@@ -538,16 +538,16 @@ const SimulationPage: React.FC = () => {
                         {mod.type === 'change_interval' && '⏱️ Изменение интервала'}
                         {mod.type === 'change_capacity' && '📦 Изменение вместимости'}
                       </div>
-                      
+
                       <div className="modification-actions">
-                        <button 
+                        <button
                           className="mod-action"
                           onClick={() => toggleModification(mod.id)}
                           title={mod.enabled ? 'Отключить' : 'Включить'}
                         >
                           {mod.enabled ? <Eye size={14} /> : <EyeOff size={14} />}
                         </button>
-                        <button 
+                        <button
                           className="mod-action delete"
                           onClick={() => removeModification(mod.id)}
                           title="Удалить"
@@ -556,7 +556,7 @@ const SimulationPage: React.FC = () => {
                         </button>
                       </div>
                     </div>
-                    
+
                     <div className="modification-details">
                       {mod.targetId && (
                         <span>Остановка #{mod.targetId}</span>
@@ -589,16 +589,17 @@ const SimulationPage: React.FC = () => {
           {isLoading ? (
             <div className="loading-overlay">Загрузка остановок...</div>
           ) : (
-            <MapComponent 
+            <SimulationMap
               markers={cityStops.map(stop => ({
                 ...stop,
                 color: getStopColor(stop.id)
               }))}
-              routes={[]}
               onMarkerClick={handleMarkerClick}
+              selectionMode={editMode === 'select'}
+              selectedStopId={selectedStop?.id}
             />
           )}
-          
+
           {editMode === 'select' && (
             <div className="map-overlay-hint">
               <div className="hint-box">
@@ -618,7 +619,7 @@ const SimulationPage: React.FC = () => {
                   <TrendingUp size={18} />
                   Ключевые метрики
                 </h3>
-                
+
                 <div className="metrics-comparison">
                   <div className="metric-row header">
                     <div className="metric-name">Метрика</div>
@@ -626,7 +627,7 @@ const SimulationPage: React.FC = () => {
                     <div className="metric-modified">Стало</div>
                     <div className="metric-change">Δ</div>
                   </div>
-                  
+
                   <div className="metric-row">
                     <div className="metric-name">Ср. время ожидания</div>
                     <div className="metric-base">{simState.results.baseMetrics.avgWaitTime.toFixed(1)} мин</div>
@@ -635,7 +636,7 @@ const SimulationPage: React.FC = () => {
                       {((simState.results.modifiedMetrics.avgWaitTime / simState.results.baseMetrics.avgWaitTime - 1) * 100).toFixed(1)}%
                     </div>
                   </div>
-                  
+
                   <div className="metric-row">
                     <div className="metric-name">Макс. время ожидания</div>
                     <div className="metric-base">{simState.results.baseMetrics.maxWaitTime.toFixed(1)} мин</div>
@@ -644,7 +645,7 @@ const SimulationPage: React.FC = () => {
                       {((simState.results.modifiedMetrics.maxWaitTime / simState.results.baseMetrics.maxWaitTime - 1) * 100).toFixed(1)}%
                     </div>
                   </div>
-                  
+
                   <div className="metric-row">
                     <div className="metric-name">Всего пассажиров</div>
                     <div className="metric-base">{simState.results.baseMetrics.totalPassengers.toLocaleString()}</div>
@@ -661,20 +662,20 @@ const SimulationPage: React.FC = () => {
                   <Clock size={18} />
                   Почасовая динамика
                 </h3>
-                
+
                 <div className="hourly-chart">
                   <div className="chart-bars">
                     {simState.results.hourlyData.map((data, idx) => {
                       const maxPassengers = Math.max(
                         ...simState.results!.hourlyData.map(d => Math.max(d.basePassengers, d.modifiedPassengers))
                       );
-                      
+
                       return (
                         <div key={idx} className="chart-bar-group">
                           <div className="bar-container base">
-                            <div 
+                            <div
                               className="bar-fill base"
-                              style={{ 
+                              style={{
                                 height: `${(data.basePassengers / maxPassengers) * 100}%`,
                                 opacity: selectedHour === data.hour ? 1 : 0.6
                               }}
@@ -682,16 +683,16 @@ const SimulationPage: React.FC = () => {
                             ></div>
                           </div>
                           <div className="bar-container modified">
-                            <div 
+                            <div
                               className="bar-fill modified"
-                              style={{ 
+                              style={{
                                 height: `${(data.modifiedPassengers / maxPassengers) * 100}%`,
                                 opacity: selectedHour === data.hour ? 1 : 0.6
                               }}
                               title={`С изменениями: ${Math.round(data.modifiedPassengers)} пасс.`}
                             ></div>
                           </div>
-                          <div 
+                          <div
                             className={`hour-label ${selectedHour === data.hour ? 'active' : ''}`}
                             onClick={() => setSelectedHour(data.hour)}
                           >
@@ -719,11 +720,11 @@ const SimulationPage: React.FC = () => {
                   <AlertTriangle size={18} />
                   Наиболее затронутые остановки
                 </h3>
-                
+
                 <div className="affected-stops-list">
                   {simState.results.affectedStops.map(stop => (
-                    <div 
-                      key={stop.id} 
+                    <div
+                      key={stop.id}
                       className={`affected-stop-item ${stop.status}`}
                       onClick={() => {
                         const stopData = cityStops.find(s => s.id === stop.id);
@@ -751,7 +752,7 @@ const SimulationPage: React.FC = () => {
               </div>
 
               <div className="panel-section">
-                <button 
+                <button
                   className="export-btn full-width"
                   onClick={exportResults}
                 >
