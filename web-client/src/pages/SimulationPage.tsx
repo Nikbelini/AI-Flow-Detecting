@@ -1,18 +1,36 @@
 // src/pages/SimulationPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './SimulationPage.css';
 import MapComponent from './Map/Map';
+import type { Stop } from '../api/types';
 import { 
   Play, Save, RotateCcw, Download, Eye, EyeOff,
   Clock, Users, Bus, AlertTriangle, TrendingUp,
   Plus, Trash2, Settings
 } from 'lucide-react';
 
+// ========== Типы ==========
+
+// Расширенный тип для остановки с данными из modeling-service
+interface ExtendedStop extends Stop {
+  avg_load?: number;
+  avg_count?: number;
+  avg_wait_time?: number;
+  max_count?: number;
+  cluster?: 'office' | 'shopping' | 'residential' | 'transport_hub' | 'educational' | 'unknown';
+  peak_hours?: number[];
+  avg_pattern?: number[];
+  coordinates?: [number, number];
+  color?: string;
+}
+
 interface SimulationState {
   status: 'idle' | 'running' | 'completed' | 'error';
   progress: number;
   currentHour: number;
   results: SimulationResults | null;
+  simulationId?: string;
+  errorMessage?: string;
 }
 
 interface SimulationResults {
@@ -54,6 +72,8 @@ interface Modification {
   enabled: boolean;
 }
 
+// ========== Компонент ==========
+
 const SimulationPage: React.FC = () => {
   const [simState, setSimState] = useState<SimulationState>({
     status: 'idle',
@@ -62,60 +82,122 @@ const SimulationPage: React.FC = () => {
     results: null
   });
 
-  const [modifications, setModifications] = useState<Modification[]>([
-    {
-      id: '1',
-      type: 'close_stop',
-      targetId: 15,
-      parameters: { hours: [7, 8, 9, 17, 18, 19] },
-      enabled: true
-    }
-  ]);
-
-  const [selectedStop, setSelectedStop] = useState<any>(null);
+  const [modifications, setModifications] = useState<Modification[]>([]);
+  const [selectedStop, setSelectedStop] = useState<ExtendedStop | null>(null);
   const [editMode, setEditMode] = useState<'view' | 'select'>('view');
-  const [showComparison, setShowComparison] = useState(true);
   const [selectedHour, setSelectedHour] = useState(8);
+  const [cityStops, setCityStops] = useState<ExtendedStop[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [serviceAvailable, setServiceAvailable] = useState(true);
 
-  // Симулированные результаты (для демонстрации)
+  // ID города (можно брать из контекста/роута)
+  const CITY_ID = 1;
+
+  // ========== Загрузка данных ==========
+
+  // Проверка доступности сервиса при загрузке
   useEffect(() => {
-    if (simState.status === 'completed' && !simState.results) {
-      const mockResults: SimulationResults = {
-        baseMetrics: {
-          avgWaitTime: 8.2,
-          maxWaitTime: 15.4,
-          totalPassengers: 12450,
-          avgLoad: 4.3,
-          transportUtilization: 0.68
-        },
-        modifiedMetrics: {
-          avgWaitTime: 11.4,
-          maxWaitTime: 22.1,
-          totalPassengers: 11870,
-          avgLoad: 5.8,
-          transportUtilization: 0.74
-        },
-        hourlyData: Array.from({ length: 24 }, (_, hour) => ({
-          hour,
-          basePassengers: 400 + Math.sin(hour / 3) * 200 + 300,
-          modifiedPassengers: 380 + Math.sin(hour / 3) * 220 + 280,
-          baseWaitTime: 5 + Math.sin(hour / 4) * 3 + 2,
-          modifiedWaitTime: 7 + Math.sin(hour / 4) * 4 + 3
-        })),
-        affectedStops: [
-          { id: 16, address: 'ул. Ленина, 16', loadChange: 47, waitTimeChange: 3.2, status: 'worsened' },
-          { id: 23, address: 'пр. Мира, 23', loadChange: 28, waitTimeChange: 2.1, status: 'worsened' },
-          { id: 8, address: 'ул. Советская, 8', loadChange: -15, waitTimeChange: -1.8, status: 'improved' },
-          { id: 42, address: 'пл. Победы', loadChange: 12, waitTimeChange: 0.9, status: 'worsened' }
-        ]
-      };
+    const checkService = async () => {
+      try {
+        const response = await fetch('http://localhost:8084/health');
+        const data = await response.json();
+        setServiceAvailable(data.status === 'healthy');
+        
+        if (data.status === 'healthy') {
+          loadCityStops();
+        }
+      } catch (error) {
+        console.error('Сервис моделирования недоступен:', error);
+        setServiceAvailable(false);
+      }
+    };
+    
+    checkService();
+  }, []);
+
+  // Загрузка остановок города
+  const loadCityStops = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(`http://localhost:8084/stops/${CITY_ID}`);
+      const data = await response.json();
       
-      setSimState(prev => ({ ...prev, results: mockResults }));
+      // Преобразуем в формат для карты
+      const stopsWithCoords: ExtendedStop[] = data.map((stop: any) => ({
+        id: stop.id,
+        address: stop.address,
+        lat: stop.lat,
+        lng: stop.lng,
+        url: stop.url || '',
+        count: stop.count || 0,
+        velocity: stop.velocity || 0,
+        load: stop.load || stop.avg_load || 3,
+        cityId: CITY_ID,
+        avg_load: stop.avg_load,
+        avg_count: stop.avg_count,
+        avg_wait_time: stop.avg_wait_time || 8.2,
+        max_count: stop.max_count,
+        cluster: stop.cluster,
+        peak_hours: stop.peak_hours,
+        avg_pattern: stop.avg_pattern,
+        coordinates: [stop.lng, stop.lat] as [number, number]
+      }));
+      
+      setCityStops(stopsWithCoords);
+    } catch (error) {
+      console.error('Ошибка загрузки остановок:', error);
+    } finally {
+      setIsLoading(false);
     }
-  }, [simState.status]);
+  };
+
+  // Получение деталей остановки
+  const getStopDetails = useCallback(async (stopId: number) => {
+    try {
+      const response = await fetch(`http://localhost:8084/stop/${stopId}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Ошибка загрузки деталей остановки:', error);
+      return null;
+    }
+  }, []);
+
+  // ========== Симуляция ==========
+
+  // Валидация изменений
+  const validateModifications = useCallback(async (mods: Modification[]) => {
+    try {
+      const response = await fetch('http://localhost:8084/modifications/validate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(mods.filter(m => m.enabled))
+      });
+      
+      const result = await response.json();
+      if (!result.valid) {
+        console.warn('Ошибки валидации:', result.errors);
+      }
+      return result;
+    } catch (error) {
+      console.error('Ошибка валидации:', error);
+      return { valid: false, errors: [] };
+    }
+  }, []);
 
   // Запуск симуляции
-  const runSimulation = () => {
+  const runSimulation = useCallback(async () => {
+    if (!serviceAvailable) {
+      alert('Сервис моделирования недоступен');
+      return;
+    }
+
+    if (modifications.length === 0) {
+      alert('Добавьте хотя бы одно изменение');
+      return;
+    }
+
     setSimState({
       status: 'running',
       progress: 0,
@@ -123,32 +205,57 @@ const SimulationPage: React.FC = () => {
       results: null
     });
 
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      setSimState(prev => ({ ...prev, progress }));
-      
-      if (progress >= 100) {
-        clearInterval(interval);
-        setSimState(prev => ({ ...prev, status: 'completed', progress: 100 }));
-      }
-    }, 200);
-  };
+    try {
+      // Отправляем запрос на симуляцию
+      const response = await fetch('http://localhost:8084/simulate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          city_id: CITY_ID,
+          modifications: modifications.filter(m => m.enabled),
+          simulation_hours: 24
+        })
+      });
 
-  // Сброс симуляции
-  const resetSimulation = () => {
-    setSimState({
-      status: 'idle',
-      progress: 0,
-      currentHour: 8,
-      results: null
-    });
-    setModifications([]);
-    setSelectedStop(null);
-  };
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Симулируем прогресс (так как у нас синхронный запрос)
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += 20;
+        setSimState(prev => ({ ...prev, progress }));
+        
+        if (progress >= 100) {
+          clearInterval(interval);
+          setSimState(prev => ({
+            ...prev,
+            status: 'completed',
+            progress: 100,
+            results: data.results || data
+          }));
+        }
+      }, 300);
+
+    } catch (error) {
+      console.error('Ошибка симуляции:', error);
+      setSimState(prev => ({
+        ...prev,
+        status: 'error',
+        errorMessage: error instanceof Error ? error.message : 'Неизвестная ошибка'
+      }));
+    }
+  }, [modifications, serviceAvailable, CITY_ID]);
+
+  // ========== Управление модификациями ==========
 
   // Добавление модификации
-  const addModification = (type: Modification['type']) => {
+  const addModification = async (type: Modification['type']) => {
     if (!selectedStop && type !== 'add_stop') {
       alert('Сначала выберите остановку на карте');
       return;
@@ -163,6 +270,13 @@ const SimulationPage: React.FC = () => {
                    type === 'change_capacity' ? { capacity: 50 } : {},
       enabled: true
     };
+
+    // Валидируем перед добавлением
+    const validation = await validateModifications([newMod]);
+    if (!validation.valid) {
+      alert('Изменение не прошло валидацию');
+      return;
+    }
 
     setModifications(prev => [...prev, newMod]);
   };
@@ -179,7 +293,21 @@ const SimulationPage: React.FC = () => {
     ));
   };
 
-  // Получение цвета для остановки
+  // Сброс симуляции
+  const resetSimulation = () => {
+    setSimState({
+      status: 'idle',
+      progress: 0,
+      currentHour: 8,
+      results: null
+    });
+    setModifications([]);
+    setSelectedStop(null);
+  };
+
+  // ========== Вспомогательные функции ==========
+
+  // Получение цвета для остановки (на основе результатов)
   const getStopColor = (stopId: number): string => {
     if (!simState.results) return '#10b981';
     
@@ -193,11 +321,30 @@ const SimulationPage: React.FC = () => {
 
   // Обработчик клика на маркер
   const handleMarkerClick = (marker: any) => {
-    console.log('Marker clicked in simulation page:', marker);
+    console.log('Marker clicked:', marker);
     if (editMode === 'select') {
-      setSelectedStop(marker);
+      // Ищем полные данные остановки
+      const fullStop = cityStops.find(s => s.id === marker.id);
+      setSelectedStop(fullStop || marker);
     }
   };
+
+  // Экспорт результатов
+  const exportResults = () => {
+    if (!simState.results) return;
+    
+    const dataStr = JSON.stringify(simState.results, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `simulation_results_${new Date().toISOString()}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
+  // ========== Render ==========
 
   return (
     <div className="simulation-page">
@@ -211,6 +358,13 @@ const SimulationPage: React.FC = () => {
         </div>
         
         <div className="header-right">
+          {/* Индикатор доступности сервиса */}
+          {!serviceAvailable && (
+            <div className="service-warning">
+              ⚠️ Сервис моделирования недоступен
+            </div>
+          )}
+          
           <div className="simulation-status">
             <div className={`status-badge ${simState.status}`}>
               {simState.status === 'idle' && '⚪ Готов к запуску'}
@@ -224,13 +378,17 @@ const SimulationPage: React.FC = () => {
                 <div className="progress-fill" style={{ width: `${simState.progress}%` }}></div>
               </div>
             )}
+            
+            {simState.errorMessage && (
+              <div className="error-message">{simState.errorMessage}</div>
+            )}
           </div>
           
           <div className="header-actions">
             <button 
               className="action-btn primary"
               onClick={runSimulation}
-              disabled={simState.status === 'running' || modifications.length === 0}
+              disabled={simState.status === 'running' || modifications.length === 0 || !serviceAvailable}
             >
               <Play size={18} />
               Запустить симуляцию
@@ -294,14 +452,43 @@ const SimulationPage: React.FC = () => {
                 <div className="stop-metrics">
                   <div className="stop-metric">
                     <Users size={14} />
-                    <span>Текущая загрузка: {selectedStop.load || 0}/10</span>
+                    <span>
+                      Текущая загрузка: {
+                        selectedStop.load || 
+                        selectedStop.avg_load || 
+                        0
+                      }/10
+                    </span>
                   </div>
                   <div className="stop-metric">
                     <Clock size={14} />
-                    <span>Ср. ожидание: 8.2 мин</span>
+                    <span>
+                      Ср. ожидание: {
+                        (selectedStop.avg_wait_time || 8.2).toFixed(1)
+                      } мин
+                    </span>
                   </div>
+                  {selectedStop.cluster && (
+                    <div className="stop-metric">
+                      <span className="cluster-badge">
+                        {selectedStop.cluster === 'office' && '🏢 Офис'}
+                        {selectedStop.cluster === 'shopping' && '🛍️ ТЦ'}
+                        {selectedStop.cluster === 'residential' && '🏘️ Жилой'}
+                        {selectedStop.cluster === 'transport_hub' && '🚉 Транспортный узел'}
+                        {selectedStop.cluster === 'educational' && '📚 Образовательный'}
+                        {selectedStop.cluster === 'unknown' && '❓ Неизвестно'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
+              
+              {/* Пиковые часы (если есть) */}
+              {selectedStop.peak_hours && selectedStop.peak_hours.length > 0 && (
+                <div className="stop-peak-hours">
+                  <small>Пиковые часы: {selectedStop.peak_hours.map(h => `${h}:00`).join(', ')}</small>
+                </div>
+              )}
               
               <div className="quick-actions">
                 <button 
@@ -371,15 +558,22 @@ const SimulationPage: React.FC = () => {
                     </div>
                     
                     <div className="modification-details">
-                      {mod.targetId && <span>Остановка #{mod.targetId}</span>}
-                      {mod.type === 'close_stop' && (
+                      {mod.targetId && (
+                        <span>Остановка #{mod.targetId}</span>
+                      )}
+                      {mod.type === 'close_stop' && mod.parameters.hours && (
                         <span className="mod-params">
-                          Часы: {mod.parameters.hours?.join(', ')}
+                          Часы: {mod.parameters.hours.join(', ')}
                         </span>
                       )}
-                      {mod.type === 'change_interval' && (
+                      {mod.type === 'change_interval' && mod.parameters.interval && (
                         <span className="mod-params">
                           Новый интервал: {mod.parameters.interval} мин
+                        </span>
+                      )}
+                      {mod.type === 'change_capacity' && mod.parameters.capacity && (
+                        <span className="mod-params">
+                          Вместимость: {mod.parameters.capacity}
                         </span>
                       )}
                     </div>
@@ -392,11 +586,18 @@ const SimulationPage: React.FC = () => {
 
         {/* Центральная область - карта */}
         <div className="map-area">
-          <MapComponent 
-            markers={[]}
-            routes={[]}
-            onMarkerClick={handleMarkerClick}
-          />
+          {isLoading ? (
+            <div className="loading-overlay">Загрузка остановок...</div>
+          ) : (
+            <MapComponent 
+              markers={cityStops.map(stop => ({
+                ...stop,
+                color: getStopColor(stop.id)
+              }))}
+              routes={[]}
+              onMarkerClick={handleMarkerClick}
+            />
+          )}
           
           {editMode === 'select' && (
             <div className="map-overlay-hint">
@@ -428,19 +629,28 @@ const SimulationPage: React.FC = () => {
                   
                   <div className="metric-row">
                     <div className="metric-name">Ср. время ожидания</div>
-                    <div className="metric-base">{simState.results.baseMetrics.avgWaitTime} мин</div>
-                    <div className="metric-modified">{simState.results.modifiedMetrics.avgWaitTime} мин</div>
-                    <div className="metric-change negative">
-                      +{((simState.results.modifiedMetrics.avgWaitTime / simState.results.baseMetrics.avgWaitTime - 1) * 100).toFixed(1)}%
+                    <div className="metric-base">{simState.results.baseMetrics.avgWaitTime.toFixed(1)} мин</div>
+                    <div className="metric-modified">{simState.results.modifiedMetrics.avgWaitTime.toFixed(1)} мин</div>
+                    <div className={`metric-change ${simState.results.modifiedMetrics.avgWaitTime > simState.results.baseMetrics.avgWaitTime ? 'negative' : 'positive'}`}>
+                      {((simState.results.modifiedMetrics.avgWaitTime / simState.results.baseMetrics.avgWaitTime - 1) * 100).toFixed(1)}%
                     </div>
                   </div>
                   
                   <div className="metric-row">
                     <div className="metric-name">Макс. время ожидания</div>
-                    <div className="metric-base">{simState.results.baseMetrics.maxWaitTime} мин</div>
-                    <div className="metric-modified">{simState.results.modifiedMetrics.maxWaitTime} мин</div>
-                    <div className="metric-change negative">
-                      +{((simState.results.modifiedMetrics.maxWaitTime / simState.results.baseMetrics.maxWaitTime - 1) * 100).toFixed(1)}%
+                    <div className="metric-base">{simState.results.baseMetrics.maxWaitTime.toFixed(1)} мин</div>
+                    <div className="metric-modified">{simState.results.modifiedMetrics.maxWaitTime.toFixed(1)} мин</div>
+                    <div className={`metric-change ${simState.results.modifiedMetrics.maxWaitTime > simState.results.baseMetrics.maxWaitTime ? 'negative' : 'positive'}`}>
+                      {((simState.results.modifiedMetrics.maxWaitTime / simState.results.baseMetrics.maxWaitTime - 1) * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                  
+                  <div className="metric-row">
+                    <div className="metric-name">Всего пассажиров</div>
+                    <div className="metric-base">{simState.results.baseMetrics.totalPassengers.toLocaleString()}</div>
+                    <div className="metric-modified">{simState.results.modifiedMetrics.totalPassengers.toLocaleString()}</div>
+                    <div className={`metric-change ${simState.results.modifiedMetrics.totalPassengers < simState.results.baseMetrics.totalPassengers ? 'negative' : 'positive'}`}>
+                      {((simState.results.modifiedMetrics.totalPassengers / simState.results.baseMetrics.totalPassengers - 1) * 100).toFixed(1)}%
                     </div>
                   </div>
                 </div>
@@ -454,34 +664,42 @@ const SimulationPage: React.FC = () => {
                 
                 <div className="hourly-chart">
                   <div className="chart-bars">
-                    {simState.results.hourlyData.map((data, idx) => (
-                      <div key={idx} className="chart-bar-group">
-                        <div className="bar-container base">
+                    {simState.results.hourlyData.map((data, idx) => {
+                      const maxPassengers = Math.max(
+                        ...simState.results!.hourlyData.map(d => Math.max(d.basePassengers, d.modifiedPassengers))
+                      );
+                      
+                      return (
+                        <div key={idx} className="chart-bar-group">
+                          <div className="bar-container base">
+                            <div 
+                              className="bar-fill base"
+                              style={{ 
+                                height: `${(data.basePassengers / maxPassengers) * 100}%`,
+                                opacity: selectedHour === data.hour ? 1 : 0.6
+                              }}
+                              title={`Базовый: ${Math.round(data.basePassengers)} пасс.`}
+                            ></div>
+                          </div>
+                          <div className="bar-container modified">
+                            <div 
+                              className="bar-fill modified"
+                              style={{ 
+                                height: `${(data.modifiedPassengers / maxPassengers) * 100}%`,
+                                opacity: selectedHour === data.hour ? 1 : 0.6
+                              }}
+                              title={`С изменениями: ${Math.round(data.modifiedPassengers)} пасс.`}
+                            ></div>
+                          </div>
                           <div 
-                            className="bar-fill base"
-                            style={{ 
-                              height: `${(data.basePassengers / 1500) * 100}%`,
-                              opacity: selectedHour === data.hour ? 1 : 0.6
-                            }}
-                          ></div>
+                            className={`hour-label ${selectedHour === data.hour ? 'active' : ''}`}
+                            onClick={() => setSelectedHour(data.hour)}
+                          >
+                            {data.hour}:00
+                          </div>
                         </div>
-                        <div className="bar-container modified">
-                          <div 
-                            className="bar-fill modified"
-                            style={{ 
-                              height: `${(data.modifiedPassengers / 1500) * 100}%`,
-                              opacity: selectedHour === data.hour ? 1 : 0.6
-                            }}
-                          ></div>
-                        </div>
-                        <div 
-                          className="hour-label"
-                          onClick={() => setSelectedHour(data.hour)}
-                        >
-                          {data.hour}:00
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div className="chart-legend">
                     <div className="legend-item">
@@ -504,7 +722,14 @@ const SimulationPage: React.FC = () => {
                 
                 <div className="affected-stops-list">
                   {simState.results.affectedStops.map(stop => (
-                    <div key={stop.id} className={`affected-stop-item ${stop.status}`}>
+                    <div 
+                      key={stop.id} 
+                      className={`affected-stop-item ${stop.status}`}
+                      onClick={() => {
+                        const stopData = cityStops.find(s => s.id === stop.id);
+                        if (stopData) setSelectedStop(stopData);
+                      }}
+                    >
                       <div className="stop-address">{stop.address}</div>
                       <div className="stop-changes">
                         <div className="change-badge load">
@@ -526,7 +751,10 @@ const SimulationPage: React.FC = () => {
               </div>
 
               <div className="panel-section">
-                <button className="export-btn full-width">
+                <button 
+                  className="export-btn full-width"
+                  onClick={exportResults}
+                >
                   <Download size={18} />
                   Экспортировать результаты
                 </button>
