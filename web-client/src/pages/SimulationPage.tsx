@@ -179,6 +179,44 @@ const SimulationPage: React.FC = () => {
     loadInitialData();
   }, []);
 
+  // Добавляем хук для загрузки маршрутов с сервера моделирования
+useEffect(() => {
+  const loadRoutesFromModelingService = async () => {
+    try {
+      const response = await fetch('http://localhost:8084/routes/1');
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🛤️ Маршруты из modeling-service:', data);
+        
+        // Преобразуем в формат MapRoute
+        const modelingRoutes: MapRoute[] = data.map((route: any) => ({
+          id: route.id,
+          number: route.number,
+          name: route.name,
+          path: route.path || [],
+          stops: route.stops,
+          intervalMinutes: route.interval_minutes || 15,
+          transportType: route.transport_type,
+          color: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`
+        }));
+        
+        // Объединяем с существующими маршрутами или заменяем
+        setCityRoutes(prev => {
+          const merged = [...prev, ...modelingRoutes];
+          // Убираем дубликаты по id
+          return Array.from(new Map(merged.map(r => [r.id, r])).values());
+        });
+      }
+    } catch (error) {
+      console.error('❌ Ошибка загрузки маршрутов из modeling-service:', error);
+    }
+  };
+
+  if (serviceAvailable) {
+    loadRoutesFromModelingService();
+  }
+}, [serviceAvailable]);
+
   // Функция для генерации пути маршрута из остановок
   const generateRoutePath = (stops: any[], allStops: ExtendedStop[]): [number, number][] => {
     if (!stops || stops.length === 0) return [];

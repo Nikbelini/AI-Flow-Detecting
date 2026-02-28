@@ -1,4 +1,3 @@
-// src/pages/Map/SimulationMap.tsx
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -23,22 +22,6 @@ export interface MapRoute {
   stops?: number[];
   intervalMinutes?: number;
   transportType?: string;
-  // Дополнительные поля, которые могут пригодиться
-  isActive?: boolean;
-  cityId?: number;
-}
-
-// Интерфейс для маршрута в SimulationMap
-export interface MapRoute {
-  id: number;
-  number?: string;
-  name?: string;
-  path: [number, number][];
-  color?: string;
-  stops?: number[];
-  intervalMinutes?: number;
-  transportType?: string;
-  // Дополнительные поля, которые могут пригодиться
   isActive?: boolean;
   cityId?: number;
 }
@@ -116,30 +99,35 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
     };
   }, []);
 
-  // Отрисовка маршрутов с обработчиками кликов
+  // Отрисовка маршрутов
   useEffect(() => {
     if (!map.current || !mapLoaded || routes.length === 0) return;
 
     console.log('🛤️ Отрисовка маршрутов:', routes.length);
 
     // Удаляем старые слои
-    if (map.current.getLayer('routes')) {
-      map.current.removeLayer('routes');
+    ['routes', 'routes-outline', 'routes-highlight'].forEach(layerId => {
+      if (map.current!.getLayer(layerId)) {
+        map.current!.removeLayer(layerId);
+      }
+    });
+    
+    if (map.current.getSource('routes')) {
       map.current.removeSource('routes');
     }
-    if (map.current.getLayer('routes-outline')) {
-      map.current.removeLayer('routes-outline');
-    }
-    if (map.current.getLayer('routes-highlight')) {
-      map.current.removeLayer('routes-highlight');
-    }
+
+    // Генерируем цвета для маршрутов, если не заданы
+    const routesWithColors = routes.map(route => ({
+      ...route,
+      color: route.color || `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`
+    }));
 
     // Создаём источник данных для маршрутов
-    const features = routes.map(route => ({
+    const features = routesWithColors.map(route => ({
       type: 'Feature' as const,
       properties: { 
         id: route.id, 
-        color: route.color || '#3b82f6',
+        color: route.color,
         name: route.name || `Маршрут ${route.id}`,
         number: route.number || '',
         interval: route.intervalMinutes || 15,
@@ -206,13 +194,13 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       }
     });
 
-    // Добавляем обработчики кликов на маршруты
+    // Обработчики кликов
     map.current.on('click', 'routes', (e) => {
       if (!e.features || e.features.length === 0) return;
       
       const feature = e.features[0];
       const routeId = feature.properties?.id;
-      const route = routes.find(r => r.id === routeId);
+      const route = routesWithColors.find(r => r.id === routeId);
       
       if (route && onRouteClick) {
         console.log('🖱️ Route clicked:', route);
@@ -220,10 +208,9 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       }
     });
 
-    // Добавляем hover эффекты
+    // Hover эффекты
     map.current.on('mouseenter', 'routes', () => {
       map.current!.getCanvas().style.cursor = selectionMode ? 'pointer' : 'default';
-      // Подсвечиваем маршрут при наведении
       map.current!.setPaintProperty('routes-highlight', 'line-opacity', 0.3);
     });
 
@@ -232,13 +219,13 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       map.current!.setPaintProperty('routes-highlight', 'line-opacity', 0);
     });
 
-    // Добавляем тултипы при наведении
+    // Тултипы при наведении
     map.current.on('mousemove', 'routes', (e) => {
       if (!e.features || e.features.length === 0) return;
       
       const feature = e.features[0];
       const routeId = feature.properties?.id;
-      const route = routes.find(r => r.id === routeId);
+      const route = routesWithColors.find(r => r.id === routeId);
       
       if (route && e.lngLat) {
         showRouteTooltip(route, e.lngLat);
@@ -278,7 +265,7 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
         .setLngLat([stop.lng, stop.lat])
         .addTo(map.current!);
 
-      // Добавляем обработчик клика
+      // Обработчик клика
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -297,7 +284,7 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
         });
       });
 
-      // Добавляем обработчики hover
+      // Hover эффекты
       el.addEventListener('mouseenter', () => {
         setHoveredStop(stop);
         showStopTooltip(stop);
@@ -429,9 +416,9 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
 
   // Получение цвета по загрузке
   const getColorByLoad = (load: number): string => {
-    if (load <= 3) return '#10b981'; // зелёный
-    if (load <= 7) return '#f59e0b'; // оранжевый
-    return '#ef4444'; // красный
+    if (load <= 3) return '#10b981';
+    if (load <= 7) return '#f59e0b';
+    return '#ef4444';
   };
 
   // Получение размера маркера по загрузке
