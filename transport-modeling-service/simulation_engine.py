@@ -331,8 +331,11 @@ class SimulationEngine:
             # 1. Пассажиры в этом часе
             base_passengers = stop.get("pattern", [5]*24)[hour]
             
+            # Добавляем redistributed пассажиров с закрытых остановок
+            redistributed = stop.get("redistributed", {}).get(hour, 0)
+            
             # Добавляем накопленных с прошлого часа
-            total_passengers = base_passengers + carryover.get(stop_id, 0)
+            total_passengers = base_passengers + redistributed + carryover.get(stop_id, 0)
             
             # Если остановка закрыта
             if hour in stop.get("closed_hours", []):
@@ -341,12 +344,16 @@ class SimulationEngine:
                     network, stop_id, total_passengers, hour, closed_stops
                 )
                 hour_result["stops"][stop_id] = {
-                    "passengers": 0,
+                    "passengers": total_passengers,
                     "departed": 0,
-                    "waiting": total_passengers,  # все ждут (но перераспределены)
+                    "waiting": total_passengers,
                     "wait_time": float('inf')
                 }
+                # !!! ВАЖНО: не теряем пассажиров, они перераспределены
                 hour_result["carryover"][stop_id] = 0
+                # Добавляем в общую статистику
+                hour_result["total_passengers"] += total_passengers
+                hour_result["total_waiting"] += total_passengers
                 continue
             
             # 2. Получаем маршруты этой остановки
@@ -362,6 +369,7 @@ class SimulationEngine:
                 }
                 hour_result["carryover"][stop_id] = total_passengers
                 hour_result["total_passengers"] += total_passengers
+                hour_result["total_waiting"] += total_passengers
                 continue
             
             # 3. Считаем общую пропускную способность
@@ -371,34 +379,26 @@ class SimulationEngine:
             for route_id in route_ids:
                 if route_id in network["routes"]:
                     route = network["routes"][route_id]
-                    # Пропускная способность маршрута в этот час
                     capacity = route["capacity_per_hour"]
                     total_capacity += capacity
                     route_intervals.append(route["current_interval"])
             
-            # 4. Сколько реально уедет (не больше, чем есть)
+            # 4. Сколько реально уедет
             departed = min(total_passengers, total_capacity)
             waiting = total_passengers - departed
             
-            # 5. Время ожидания (формула из теории массового обслуживания)
+            # 5. Время ожидания
             if total_capacity > 0:
-                # Коэффициент загрузки
-                utilization = departed / total_capacity if total_capacity > 0 else 1
+                utilization = departed / total_capacity
                 
-                # Средний интервал (с учётом нескольких маршрутов)
                 if route_intervals:
-                    # Эффективный интервал при нескольких маршрутах
-                    # 1/(1/t1 + 1/t2 + ...)
                     effective_interval = 1 / sum(1/i for i in route_intervals)
                 else:
                     effective_interval = 15
                 
-                # Формула Pollaczek–Khinchine для M/G/1 очереди
-                # Упрощённо: wait_time = (effective_interval/2) * (1 + utilization^2/(1-utilization))
                 if utilization < 0.95:
                     wait_time = (effective_interval / 2) * (1 + (utilization**2) / (1 - utilization))
                 else:
-                    # При высокой загрузке время растёт быстро
                     wait_time = effective_interval * 5
             else:
                 wait_time = float('inf')
@@ -429,7 +429,7 @@ class SimulationEngine:
             hour_result["avg_wait_time"] = 0
         
         return hour_result
-    
+
     def _redistribute_passengers(
         self,
         network: Dict,
