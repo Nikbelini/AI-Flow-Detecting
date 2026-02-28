@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional
 import logging
 from datetime import datetime, timedelta
 import numpy as np
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,6 @@ class DatabaseService:
     async def get_stop_history_by_address(self, city_id: int, address: str, days: int = 90) -> List[Dict]:
         """
         Получение исторических данных по адресу остановки
-        (исправлено: используем city_id + address вместо stop_id)
         """
         async with self.pool.acquire() as conn:
             cutoff = datetime.now() - timedelta(days=days)
@@ -72,13 +72,12 @@ class DatabaseService:
     async def get_stops_with_history(self, city_id: int, days: int = 90) -> List[Dict]:
         """
         Получение всех остановок города с их историческими паттернами
-        (исправлено: история ищется по адресу, а не по stop_id)
         """
         # Получаем список остановок
         stops = await self.get_stops_by_city(city_id)
         
         for stop in stops:
-            # Получаем историю по адресу (не по ID!)
+            # Получаем историю по адресу
             history = await self.get_stop_history_by_address(
                 city_id, 
                 stop["address"], 
@@ -142,73 +141,95 @@ class DatabaseService:
         
         return stops
     
-    async def get_stop_analytics(self, stop_id: int, days: int = 30) -> Optional[Dict]:
+    async def get_routes_with_path(self, city_id: int) -> List[Dict]:
         """
-        Получение аналитики по конкретной остановке
+        Получение маршрутов с остановками для построения path
+        Исправлено под твою структуру БД
         """
-        # Сначала получаем остановку
-        stop = await self.get_stop_by_id(stop_id)
-        if not stop:
-            return None
-        
-        # Получаем историю по адресу
-        history = await self.get_stop_history_by_address(
-            stop["city_id"] if "city_id" in stop else 1,
-            stop["address"],
-            days
-        )
-        
-        if not history:
-            return stop
-        
-        # Агрегируем по дням недели
-        daily_pattern = {}
-        for record in history:
-            dow = record["dow"]
-            hour = record["hour"]
-            if dow not in daily_pattern:
-                daily_pattern[dow] = {}
-            if hour not in daily_pattern[dow]:
-                daily_pattern[dow][hour] = []
-            daily_pattern[dow][hour].append(record["count"])
-        
-        # Усредняем
-        for dow in daily_pattern:
-            for hour in daily_pattern[dow]:
-                daily_pattern[dow][hour] = float(np.mean(daily_pattern[dow][hour]))
-        
-        stop["daily_pattern"] = daily_pattern
-        stop["avg_daily"] = float(np.mean([h["count"] for h in history]))
-        stop["trend"] = self._calculate_trend(history)
-        
-        return stop
+        async with self.pool.acquire() as conn:
+            # Получаем все маршруты города
+            routes = await conn.fetch("""
+                SELECT id, number, name, transport_type, 
+                       interval_minutes, operating_hours, is_active,
+                       direction_a_name, direction_b_name
+                FROM routes 
+                WHERE city_id = $1
+            """, city_id)
+            
+            result = []
+            for route in routes:
+                route_dict = dict(route)
+                
+                # Получаем остановки маршрута с координатами через route_stops
+                # Используем order_in_route для сортировки
+                stops = await conn.fetch("""
+                    SELECT s.id, s.lat, s.lng, rs.order_in_route, rs.direction
+                    FROM route_stops rs
+                    JOIN stops s ON s.id = rs.stop_id
+                    WHERE rs.route_id = $1
+                    ORDER BY rs.order_in_route
+                """, route_dict['id'])
+                
+                # Формируем path для маршрута (список координат [lng, lat])
+                path = []
+                stop_ids = []
+                
+                for stop in stops:
+                    # Безопасно конвертируем координаты
+                    lng = stop['lng']
+                    lat = stop['lat']
+                    
+                    if isinstance(lng, str):
+                        try:
+                            lng = float(lng.strip())
+                        except (ValueError, TypeError):
+                            lng = 0.0
+                    
+                    if isinstance(lat, str):
+                        try:
+                            lat = float(lat.strip())
+                        except (ValueError, TypeError):
+                            lat = 0.0
+                    
+                    path.append([float(lng), float(lat)])
+                    stop_ids.append(stop['id'])
+                
+                route_dict['path'] = path
+                route_dict['stops'] = stop_ids
+                route_dict['stops_count'] = len(stop_ids)
+                
+                # Добавляем информацию о направлениях
+                route_dict['directions'] = list(set([s['direction'] for s in stops if s['direction']]))
+                
+                result.append(route_dict)
+            
+            logger.info(f"📦 Загружено {len(result)} маршрутов")
+            return result
     
-    def _calculate_trend(self, history: List[Dict]) -> str:
-        """Определение тренда"""
-        if len(history) < 7:
-            return "insufficient_data"
-        
-        # Группируем по дням
-        by_day = {}
-        for record in history:
-            date = record["datetime"].date()
-            if date not in by_day:
-                by_day[date] = []
-            by_day[date].append(record["count"])
-        
-        # Средние по дням
-        daily_avgs = [float(np.mean(v)) for v in by_day.values()]
-        
-        if len(daily_avgs) < 3:
-            return "stable"
-        
-        # Простой линейный тренд
-        first_week = np.mean(daily_avgs[:min(7, len(daily_avgs))])
-        last_week = np.mean(daily_avgs[-min(7, len(daily_avgs)):])
-        
-        if last_week > first_week * 1.2:
-            return "growing"
-        elif last_week < first_week * 0.8:
-            return "declining"
-        else:
-            return "stable"
+    async def get_route_by_id(self, route_id: int) -> Optional[Dict]:
+        """
+        Получение конкретного маршрута по ID
+        """
+        async with self.pool.acquire() as conn:
+            route = await conn.fetchrow(
+                "SELECT id, number, name, transport_type, interval_minutes FROM routes WHERE id = $1",
+                route_id
+            )
+            
+            if not route:
+                return None
+            
+            route_dict = dict(route)
+            
+            # Получаем остановки
+            stops = await conn.fetch("""
+                SELECT s.id, s.address, s.lat, s.lng, rs.order_in_route
+                FROM route_stops rs
+                JOIN stops s ON s.id = rs.stop_id
+                WHERE rs.route_id = $1
+                ORDER BY rs.order_in_route
+            """, route_id)
+            
+            route_dict['stops'] = [dict(s) for s in stops]
+            
+            return route_dict

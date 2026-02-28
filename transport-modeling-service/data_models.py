@@ -9,19 +9,25 @@ class ModificationType(str, Enum):
     CHANGE_INTERVAL = "change_interval"
     CHANGE_CAPACITY = "change_capacity"
 
+class ModificationTarget(str, Enum):
+    STOP = "stop"
+    ROUTE = "route"
+
 class Modification(BaseModel):
     id: str
     type: ModificationType
-    target_id: Optional[int] = None
+    targetType: ModificationTarget = ModificationTarget.STOP
+    targetId: int
     parameters: Dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
+    label: Optional[str] = None
 
 class Metrics(BaseModel):
-    avgWaitTime: float = Field(..., description="Среднее время ожидания (мин)")
-    maxWaitTime: float = Field(..., description="Максимальное время ожидания (мин)")
-    totalPassengers: int = Field(..., description="Всего пассажиров")
-    avgLoad: float = Field(..., description="Средняя загрузка (0-10)")
-    transportUtilization: float = Field(..., description="Использование транспорта (0-1)")
+    avgWaitTime: float
+    maxWaitTime: float
+    totalPassengers: int
+    avgLoad: float
+    transportUtilization: float
 
 class HourlyData(BaseModel):
     hour: int
@@ -30,7 +36,7 @@ class HourlyData(BaseModel):
     baseWaitTime: float
     modifiedWaitTime: float
 
-class StopStatus(str, Enum):
+class AffectedStopStatus(str, Enum):
     IMPROVED = "improved"
     WORSENED = "worsened"
     NEUTRAL = "neutral"
@@ -38,22 +44,15 @@ class StopStatus(str, Enum):
 class AffectedStop(BaseModel):
     id: int
     address: str
-    loadChange: float = Field(..., description="Изменение нагрузки в %")
-    waitTimeChange: float = Field(..., description="Изменение времени ожидания (мин)")
-    status: StopStatus
+    loadChange: float
+    waitTimeChange: float
+    status: AffectedStopStatus
 
 class SimulationResults(BaseModel):
     baseMetrics: Metrics
     modifiedMetrics: Metrics
     hourlyData: List[HourlyData]
     affectedStops: List[AffectedStop]
-
-class SimulationState(BaseModel):
-    # ✅ ИСПРАВЛЕНО: regex -> pattern
-    status: str = Field(..., pattern="^(idle|running|completed|error)$")
-    progress: int = Field(..., ge=0, le=100)
-    currentHour: int = Field(..., ge=0, le=23)
-    results: Optional[SimulationResults] = None
 
 class SimulationRequest(BaseModel):
     city_id: int
@@ -64,14 +63,3 @@ class SimulationResponse(BaseModel):
     task_id: Optional[str] = None
     results: Optional[SimulationResults] = None
     status: str
-
-class StopInfo(BaseModel):
-    id: int
-    address: str
-    lat: float
-    lng: float
-    load: Optional[int] = None
-    avg_count: Optional[float] = None
-    avg_load: Optional[float] = None
-    avg_wait_time: Optional[float] = None
-    cluster: Optional[str] = None

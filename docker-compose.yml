@@ -141,9 +141,7 @@ services:
       load-forecast-service:
         condition: service_healthy
     volumes:
-      - ./transport-modeling-service/logs:/app/logs
-      - ./transport-modeling-service/data:/app/data
-      - ./transport-modeling-service/cache:/app/cache
+      - ./transport-modeling-service:/app
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
       interval: 30s

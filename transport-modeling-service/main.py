@@ -1,4 +1,6 @@
-# transport-modeling-service/main.py
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import redis
@@ -318,6 +320,14 @@ async def refresh_city_cache(city_id: int):
         await cache_service.save_city_stops(city_id, stops)
     
     return {"status": "refreshed", "city_id": city_id, "stops_count": len(stops)}
+
+@app.get("/routes/{city_id}")
+async def get_city_routes(city_id: int):
+    """
+    Получение маршрутов города с путями для отрисовки на карте
+    """
+    routes = await db_service.get_routes_with_path(city_id)
+    return routes
 
 # Фоновая задача для асинхронной симуляции
 async def run_simulation_background(task_id: str, request: SimulationRequest):

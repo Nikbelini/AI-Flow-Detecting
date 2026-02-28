@@ -1,6 +1,6 @@
 # transport-modeling-service/modifications.py
 from typing import Tuple, Optional
-from data_models import Modification, ModificationType
+from data_models import Modification, ModificationType, ModificationTarget
 
 class ModificationApplier:
     def validate(self, mod: Modification) -> Tuple[bool, Optional[str]]:
@@ -19,7 +19,10 @@ class ModificationApplier:
         return False, f"Неизвестный тип изменения: {mod.type}"
     
     def _validate_close_stop(self, mod: Modification) -> Tuple[bool, Optional[str]]:
-        if not mod.target_id:
+        if mod.targetType != ModificationTarget.STOP:
+            return False, "Закрытие остановки должно применяться к остановке"
+        
+        if not mod.targetId:
             return False, "Не указана остановка"
         
         hours = mod.parameters.get("hours", [])
@@ -33,8 +36,11 @@ class ModificationApplier:
         return True, None
     
     def _validate_change_interval(self, mod: Modification) -> Tuple[bool, Optional[str]]:
-        if not mod.target_id:
-            return False, "Не указана остановка"
+        if mod.targetType != ModificationTarget.ROUTE:
+            return False, "Изменение интервала должно применяться к маршруту"
+        
+        if not mod.targetId:
+            return False, "Не указан маршрут"
         
         interval = mod.parameters.get("interval")
         if not interval or not isinstance(interval, (int, float)):
@@ -46,7 +52,10 @@ class ModificationApplier:
         return True, None
     
     def _validate_change_capacity(self, mod: Modification) -> Tuple[bool, Optional[str]]:
-        if not mod.target_id:
+        if mod.targetType != ModificationTarget.STOP:
+            return False, "Изменение вместимости должно применяться к остановке"
+        
+        if not mod.targetId:
             return False, "Не указана остановка"
         
         capacity = mod.parameters.get("capacity")

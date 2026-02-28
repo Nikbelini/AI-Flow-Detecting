@@ -17,15 +17,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копирование кода
 COPY . .
 
-# Создание директорий
-RUN mkdir -p /app/logs /app/data
+# Создаём __init__.py
+RUN touch /app/__init__.py
+
+# Делаем run.py исполняемым
+RUN chmod +x /app/run.py
+
+# Устанавливаем PYTHONPATH
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 
 # Порты
 EXPOSE 8084
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8084/health || exit 1
-
-# Запуск
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8084", "--reload"]
+# ЗАПУСК ЧЕРЕЗ run.py (это решает проблему!)
+CMD ["python", "run.py"]

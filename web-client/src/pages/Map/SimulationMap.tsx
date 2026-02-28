@@ -1,3 +1,4 @@
+// src/pages/Map/SimulationMap.tsx
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -13,26 +14,63 @@ interface ExtendedStop extends Stop {
   peak_hours?: number[];
 }
 
+export interface MapRoute {
+  id: number;
+  number?: string;
+  name?: string;
+  path: [number, number][];
+  color?: string;
+  stops?: number[];
+  intervalMinutes?: number;
+  transportType?: string;
+  // Дополнительные поля, которые могут пригодиться
+  isActive?: boolean;
+  cityId?: number;
+}
+
+// Интерфейс для маршрута в SimulationMap
+export interface MapRoute {
+  id: number;
+  number?: string;
+  name?: string;
+  path: [number, number][];
+  color?: string;
+  stops?: number[];
+  intervalMinutes?: number;
+  transportType?: string;
+  // Дополнительные поля, которые могут пригодиться
+  isActive?: boolean;
+  cityId?: number;
+}
+
 interface SimulationMapProps {
   markers: ExtendedStop[];
+  routes?: MapRoute[];
   selectedStopId?: number | null;
+  selectedRouteId?: number | null;
   onMarkerClick?: (marker: ExtendedStop) => void;
+  onRouteClick?: (route: MapRoute) => void;
   selectionMode?: boolean;
 }
 
 const SimulationMap: React.FC<SimulationMapProps> = ({
   markers,
+  routes = [],
   selectedStopId,
+  selectedRouteId,
   onMarkerClick,
+  onRouteClick,
   selectionMode = false
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const routePopupRef = useRef<maplibregl.Popup | null>(null);
   
   const [mapLoaded, setMapLoaded] = useState(false);
   const [hoveredStop, setHoveredStop] = useState<ExtendedStop | null>(null);
+  const [hoveredRoute, setHoveredRoute] = useState<MapRoute | null>(null);
 
   // Инициализация карты
   useEffect(() => {
@@ -66,7 +104,7 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
     map.current.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }));
 
     map.current.on('load', () => {
-      console.log('Simulation map loaded');
+      console.log('✅ Simulation map loaded');
       setMapLoaded(true);
     });
 
@@ -78,9 +116,151 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
     };
   }, []);
 
+  // Отрисовка маршрутов с обработчиками кликов
+  useEffect(() => {
+    if (!map.current || !mapLoaded || routes.length === 0) return;
+
+    console.log('🛤️ Отрисовка маршрутов:', routes.length);
+
+    // Удаляем старые слои
+    if (map.current.getLayer('routes')) {
+      map.current.removeLayer('routes');
+      map.current.removeSource('routes');
+    }
+    if (map.current.getLayer('routes-outline')) {
+      map.current.removeLayer('routes-outline');
+    }
+    if (map.current.getLayer('routes-highlight')) {
+      map.current.removeLayer('routes-highlight');
+    }
+
+    // Создаём источник данных для маршрутов
+    const features = routes.map(route => ({
+      type: 'Feature' as const,
+      properties: { 
+        id: route.id, 
+        color: route.color || '#3b82f6',
+        name: route.name || `Маршрут ${route.id}`,
+        number: route.number || '',
+        interval: route.intervalMinutes || 15,
+        transportType: route.transportType || 'BUS',
+        isSelected: route.id === selectedRouteId
+      },
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: route.path
+      }
+    }));
+
+    map.current.addSource('routes', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features
+      }
+    });
+
+    // Добавляем обводку для лучшей видимости
+    map.current.addLayer({
+      id: 'routes-outline',
+      type: 'line',
+      source: 'routes',
+      paint: {
+        'line-color': '#ffffff',
+        'line-width': 8,
+        'line-opacity': 0.4
+      }
+    });
+
+    // Добавляем слой для маршрутов (основной)
+    map.current.addLayer({
+      id: 'routes',
+      type: 'line',
+      source: 'routes',
+      paint: {
+        'line-color': [
+          'case',
+          ['==', ['get', 'isSelected'], true],
+          '#f97316', // оранжевый для выбранного
+          ['get', 'color']
+        ],
+        'line-width': [
+          'case',
+          ['==', ['get', 'isSelected'], true],
+          6,
+          4
+        ],
+        'line-opacity': 0.8
+      }
+    });
+
+    // Добавляем слой для подсветки при наведении
+    map.current.addLayer({
+      id: 'routes-highlight',
+      type: 'line',
+      source: 'routes',
+      paint: {
+        'line-color': '#ffaa00',
+        'line-width': 8,
+        'line-opacity': 0
+      }
+    });
+
+    // Добавляем обработчики кликов на маршруты
+    map.current.on('click', 'routes', (e) => {
+      if (!e.features || e.features.length === 0) return;
+      
+      const feature = e.features[0];
+      const routeId = feature.properties?.id;
+      const route = routes.find(r => r.id === routeId);
+      
+      if (route && onRouteClick) {
+        console.log('🖱️ Route clicked:', route);
+        onRouteClick(route);
+      }
+    });
+
+    // Добавляем hover эффекты
+    map.current.on('mouseenter', 'routes', () => {
+      map.current!.getCanvas().style.cursor = selectionMode ? 'pointer' : 'default';
+      // Подсвечиваем маршрут при наведении
+      map.current!.setPaintProperty('routes-highlight', 'line-opacity', 0.3);
+    });
+
+    map.current.on('mouseleave', 'routes', () => {
+      map.current!.getCanvas().style.cursor = '';
+      map.current!.setPaintProperty('routes-highlight', 'line-opacity', 0);
+    });
+
+    // Добавляем тултипы при наведении
+    map.current.on('mousemove', 'routes', (e) => {
+      if (!e.features || e.features.length === 0) return;
+      
+      const feature = e.features[0];
+      const routeId = feature.properties?.id;
+      const route = routes.find(r => r.id === routeId);
+      
+      if (route && e.lngLat) {
+        showRouteTooltip(route, e.lngLat);
+        setHoveredRoute(route);
+      }
+    });
+
+    map.current.on('mouseleave', 'routes', () => {
+      if (routePopupRef.current) {
+        routePopupRef.current.remove();
+        routePopupRef.current = null;
+      }
+      setHoveredRoute(null);
+    });
+
+  }, [routes, mapLoaded, selectedRouteId, onRouteClick, selectionMode]);
+
   // Отрисовка маркеров
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
+
+    console.log('📍 Отрисовка маркеров:', markers.length);
 
     // Удаляем старые маркеры
     markersRef.current.forEach(marker => marker.remove());
@@ -98,17 +278,29 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
         .setLngLat([stop.lng, stop.lat])
         .addTo(map.current!);
 
-      // Добавляем обработчики
+      // Добавляем обработчик клика
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
-        console.log('Marker clicked:', stop);
-        onMarkerClick?.(stop);
+        
+        console.log('✅ Marker clicked:', stop.id, stop.address);
+        
+        onMarkerClick?.({
+          ...stop,
+          id: stop.id,
+          address: stop.address,
+          lat: stop.lat,
+          lng: stop.lng,
+          load: stop.load || stop.avg_load || 3,
+          avg_load: stop.avg_load,
+          avg_wait_time: stop.avg_wait_time || 8.2
+        });
       });
 
+      // Добавляем обработчики hover
       el.addEventListener('mouseenter', () => {
         setHoveredStop(stop);
-        showTooltip(stop);
+        showStopTooltip(stop);
       });
 
       el.addEventListener('mouseleave', () => {
@@ -136,7 +328,8 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
 
   }, [markers, mapLoaded, selectedStopId, onMarkerClick]);
 
-  const showTooltip = (stop: ExtendedStop) => {
+  // Показать тултип для остановки
+  const showStopTooltip = (stop: ExtendedStop) => {
     if (!map.current) return;
 
     if (popupRef.current) {
@@ -155,6 +348,7 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
           Загрузка: ${stop.load || stop.avg_load || 0}/10<br/>
           Время ожидания: ${(stop.avg_wait_time || 8.2).toFixed(1)} мин
           ${stop.cluster ? `<br/><small>${getClusterLabel(stop.cluster)}</small>` : ''}
+          ${stop.peak_hours?.length ? `<br/><small>Пик: ${stop.peak_hours.map(h => `${h}:00`).join(', ')}</small>` : ''}
         </div>
       `)
       .addTo(map.current);
@@ -162,6 +356,40 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
     popupRef.current = popup;
   };
 
+  // Показать тултип для маршрута
+  const showRouteTooltip = (route: MapRoute, lngLat: maplibregl.LngLat) => {
+    if (!map.current) return;
+
+    if (routePopupRef.current) {
+      routePopupRef.current.remove();
+    }
+
+    const transportIcon = 
+      route.transportType === 'BUS' ? '🚌' :
+      route.transportType === 'TROLLEYBUS' ? '🚎' :
+      route.transportType === 'TRAM' ? '🚊' :
+      route.transportType === 'MINIBUS' ? '🚐' : '🚌';
+
+    const popup = new maplibregl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      offset: [0, -10]
+    })
+      .setLngLat(lngLat)
+      .setHTML(`
+        <div class="route-tooltip">
+          <strong>${transportIcon} Маршрут ${route.number || route.id}</strong><br/>
+          ${route.name ? `<span>${route.name}</span><br/>` : ''}
+          Интервал: ${route.intervalMinutes || 15} мин<br/>
+          Остановок: ${route.stops?.length || 0}
+        </div>
+      `)
+      .addTo(map.current);
+
+    routePopupRef.current = popup;
+  };
+
+  // Создание элемента маркера
   const createMarkerElement = (stop: ExtendedStop): HTMLDivElement => {
     const el = document.createElement('div');
     const size = getMarkerSize(stop.load || stop.avg_load || 3);
@@ -187,34 +415,41 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
     el.style.textShadow = '0 1px 2px rgba(0,0,0,0.3)';
 
     // Отображаем загрузку или пиковый час
-    if (stop.peak_hours?.includes(new Date().getHours())) {
+    const currentHour = new Date().getHours();
+    if (stop.peak_hours?.includes(currentHour)) {
       el.textContent = '⚡';
+      el.style.fontSize = `${size * 0.6}px`;
     } else {
       el.textContent = String(stop.load || stop.avg_load || 0);
+      el.style.fontSize = `${size * 0.5}px`;
     }
 
     return el;
   };
 
+  // Получение цвета по загрузке
   const getColorByLoad = (load: number): string => {
-    if (load <= 3) return '#10b981';
-    if (load <= 7) return '#f59e0b';
-    return '#ef4444';
+    if (load <= 3) return '#10b981'; // зелёный
+    if (load <= 7) return '#f59e0b'; // оранжевый
+    return '#ef4444'; // красный
   };
 
+  // Получение размера маркера по загрузке
   const getMarkerSize = (load: number): number => {
     if (load <= 3) return 32;
     if (load <= 7) return 40;
     return 48;
   };
 
+  // Получение метки кластера
   const getClusterLabel = (cluster: string): string => {
     const labels: Record<string, string> = {
       'office': '🏢 Офисный район',
       'shopping': '🛍️ ТЦ',
       'residential': '🏘️ Жилой район',
       'transport_hub': '🚉 Транспортный узел',
-      'educational': '📚 Образовательный'
+      'educational': '📚 Образовательный',
+      'unknown': '❓ Неизвестно'
     };
     return labels[cluster] || cluster;
   };
@@ -226,12 +461,12 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       {selectionMode && (
         <div className="simulation-map-hint">
           <MapPin size={16} />
-          <span>Кликните на остановку для выбора</span>
+          <span>Кликните на остановку или маршрут для выбора</span>
         </div>
       )}
 
       {hoveredStop && (
-        <div className="simulation-map-mini-info">
+        <div className="simulation-map-mini-info stop">
           <strong>{hoveredStop.address}</strong>
           <div className="mini-stats">
             <span><Users size={12} /> {hoveredStop.load || hoveredStop.avg_load || 0}/10</span>
@@ -239,6 +474,51 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
           </div>
         </div>
       )}
+
+      {hoveredRoute && !hoveredStop && (
+        <div className="simulation-map-mini-info route">
+          <strong>
+            {hoveredRoute.transportType === 'BUS' && '🚌'}
+            {hoveredRoute.transportType === 'TROLLEYBUS' && '🚎'}
+            {hoveredRoute.transportType === 'TRAM' && '🚊'}
+            {hoveredRoute.transportType === 'MINIBUS' && '🚐'}
+            {' '}Маршрут {hoveredRoute.number || hoveredRoute.id}
+          </strong>
+          <div className="mini-stats">
+            <span>⏱️ {hoveredRoute.intervalMinutes || 15} мин</span>
+            <span>🛑 {hoveredRoute.stops?.length || 0} ост.</span>
+          </div>
+        </div>
+      )}
+
+      {/* Легенда */}
+      <div className="map-legend">
+        <div className="legend-title">Загрузка</div>
+        <div className="legend-item">
+          <div className="legend-color" style={{ backgroundColor: '#10b981' }}></div>
+          <span>Низкая (0-3)</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-color" style={{ backgroundColor: '#f59e0b' }}></div>
+          <span>Средняя (4-7)</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-color" style={{ backgroundColor: '#ef4444' }}></div>
+          <span>Высокая (8-10)</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-color" style={{ backgroundColor: '#3b82f6' }}></div>
+          <span>Маршруты</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-color" style={{ backgroundColor: '#f97316' }}></div>
+          <span>Выбранный маршрут</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-icon">⚡</div>
+          <span>Пиковый час</span>
+        </div>
+      </div>
     </div>
   );
 };
