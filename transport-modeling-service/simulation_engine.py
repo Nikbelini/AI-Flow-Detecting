@@ -5,10 +5,13 @@ import copy
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 import math
+import random
+from collections import defaultdict
 
 from data_models import (
     SimulationResults, Metrics, HourlyData, AffectedStop,
-    Modification, ModificationTarget, ModificationType, AffectedStopStatus
+    Modification, ModificationTarget, ModificationType, AffectedStopStatus,
+    # Новые модели для метрик
 )
 
 logger = logging.getLogger(__name__)
@@ -24,6 +27,7 @@ class SimulationEngine:
         # Константы
         self.BUS_CAPACITY = 50  # вместимость одного автобуса
         self.WALKING_RADIUS = 500  # метров, радиус перераспределения
+        self.AGENT_SAMPLE_RATE = 0.5  # 50% пассажиров моделируем как агентов
     
     async def run(
         self,
@@ -53,25 +57,39 @@ class SimulationEngine:
         # 2. Применяем изменения к сети
         modified_network = self._apply_modifications(network, active_mods)
         
-        # 3. Запускаем почасовую симуляцию
-        base_hourly, modified_hourly = self._simulate_day(
-            network, 
-            modified_network,
+        # 3. Запускаем почасовую симуляцию с агентами
+        base_hourly, base_agents = self._simulate_day_with_agents(network, [])
+        modified_hourly, modified_agents = self._simulate_day_with_agents(
+            modified_network, 
             active_mods
         )
         
-        # 4. Считаем метрики
+        # 4. Считаем базовые метрики
         base_metrics = self._calculate_metrics_from_hourly(base_hourly, network)
         modified_metrics = self._calculate_metrics_from_hourly(modified_hourly, modified_network)
         
-        # 5. Находим наиболее затронутые остановки
+        # 5. Считаем НОВЫЕ метрики пропускной способности
+        base_throughput = self._calculate_passenger_throughput(base_hourly, network)
+        modified_throughput = self._calculate_passenger_throughput(modified_hourly, modified_network)
+        
+        # 6. Считаем распределение времени ожидания (из агентов)
+        base_wait_distribution = self._calculate_wait_time_distribution(base_agents)
+        modified_wait_distribution = self._calculate_wait_time_distribution(modified_agents)
+        
+        # 7. Считаем метрики по каждой остановке
+        base_stop_metrics = self._calculate_stop_metrics(base_hourly, network)
+        modified_stop_metrics = self._calculate_stop_metrics(modified_hourly, modified_network)
+        
+        # 8. Находим наиболее затронутые остановки
         affected_stops = self._find_affected_stops(
             network,
             modified_network,
-            stops_data
+            stops_data,
+            base_stop_metrics,
+            modified_stop_metrics
         )
         
-        # 6. Формируем почасовые данные для графика
+        # 9. Формируем почасовые данные для графика
         hourly_data = []
         for hour in range(24):
             hourly_data.append(HourlyData(
@@ -82,14 +100,24 @@ class SimulationEngine:
                 modifiedWaitTime=float(modified_hourly[hour]["avg_wait_time"])
             ))
         
+        # Расширяем SimulationResults новыми полями
         results = SimulationResults(
             baseMetrics=base_metrics,
             modifiedMetrics=modified_metrics,
             hourlyData=hourly_data,
-            affectedStops=affected_stops
+            affectedStops=affected_stops,
+            # Новые поля
+            baseThroughput=base_throughput,
+            modifiedThroughput=modified_throughput,
+            baseWaitDistribution=base_wait_distribution,
+            modifiedWaitDistribution=modified_wait_distribution,
+            baseStopMetrics=base_stop_metrics,
+            modifiedStopMetrics=modified_stop_metrics
         )
         
         logger.info(f"✅ Симуляция завершена")
+        logger.info(f"📊 Среднее время ожидания: {base_metrics.avgWaitTime:.1f} → {modified_metrics.avgWaitTime:.1f} мин")
+        logger.info(f"📊 Пропускная способность: {base_throughput['peak_hour_passengers']} → {modified_throughput['peak_hour_passengers']} пасс/час")
         
         return results
     
@@ -101,7 +129,8 @@ class SimulationEngine:
             "stops": {},
             "routes": {},
             "stop_connections": {},  # связи между остановками
-            "stop_routes": {}        # какие маршруты через остановку
+            "stop_routes": {},        # какие маршруты через остановку
+            "redistributed": {}       # перераспределённые пассажиры
         }
         
         # 1. Добавляем остановки
@@ -137,7 +166,9 @@ class SimulationEngine:
                 "cluster": stop.get("cluster", "unknown"),
                 "peak_hours": stop.get("peak_hours", []),
                 "capacity": 50,  # базовая вместимость остановки
-                "routes": []      # будет заполнено позже
+                "routes": [],      # будет заполнено позже
+                "theoretical_capacity": 0,  # будет рассчитано
+                "redistributed": {}  # перераспределённые пассажиры
             }
         
         # 2. Добавляем маршруты и строим связи
@@ -156,7 +187,8 @@ class SimulationEngine:
                 "stops": route_stops,
                 "transport_type": route.get("transport_type", "BUS"),
                 "frequency": 60 / max(interval, 1),  # транспорта в час
-                "capacity_per_hour": (60 / max(interval, 1)) * self.BUS_CAPACITY
+                "capacity_per_hour": (60 / max(interval, 1)) * self.BUS_CAPACITY,
+                "vehicle_capacity": self.BUS_CAPACITY
             }
             
             # Добавляем маршрут к каждой остановке
@@ -169,7 +201,8 @@ class SimulationEngine:
                     route_info = {
                         "route_id": route_id,
                         "order": i,
-                        "interval": interval
+                        "interval": interval,
+                        "capacity_per_hour": network["routes"][route_id]["capacity_per_hour"]
                     }
                     network["stops"][stop_id]["routes"].append(route_info)
                     
@@ -178,7 +211,16 @@ class SimulationEngine:
                         network["stop_routes"][stop_id] = []
                     network["stop_routes"][stop_id].append(route_id)
         
-        # 3. Строим связи между остановками (кто с кем соединён маршрутами)
+        # Рассчитываем теоретическую пропускную способность каждой остановки
+        for stop_id, stop in network["stops"].items():
+            route_ids = network["stop_routes"].get(stop_id, [])
+            theoretical_capacity = 0
+            for route_id in route_ids:
+                if route_id in network["routes"]:
+                    theoretical_capacity += network["routes"][route_id]["capacity_per_hour"]
+            stop["theoretical_capacity"] = theoretical_capacity
+        
+        # 3. Строим связи между остановками
         for route_id, route in network["routes"].items():
             stops = route["stops"]
             for i in range(len(stops) - 1):
@@ -202,239 +244,224 @@ class SimulationEngine:
         
         return network
     
-    def _apply_modifications(self, network: Dict, modifications: List[Modification]) -> Dict:
-        """
-        Применение изменений к сети (создаём копию с изменениями)
-        """
-        # Глубокое копирование
-        modified = copy.deepcopy(network)
-        
-        for mod in modifications:
-            if mod.type == ModificationType.CLOSE_STOP:
-                self._apply_close_stop(modified, mod)
-            
-            elif mod.type == ModificationType.CHANGE_INTERVAL:
-                self._apply_change_interval(modified, mod)
-            
-            elif mod.type == ModificationType.CHANGE_CAPACITY:
-                self._apply_change_capacity(modified, mod)
-        
-        return modified
-    
-    def _apply_close_stop(self, network: Dict, mod: Modification):
-        """
-        Применение закрытия остановки
-        """
-        stop_id = mod.targetId
-        hours = mod.parameters.get("hours", [7, 8, 9, 17, 18, 19])
-        
-        if stop_id in network["stops"]:
-            network["stops"][stop_id]["closed_hours"] = hours
-            logger.info(f"🚫 Закрыта остановка {stop_id} в часы {hours}")
-    
-    def _apply_change_interval(self, network: Dict, mod: Modification):
-        """
-        Изменение интервала маршрута
-        """
-        route_id = mod.targetId
-        new_interval = mod.parameters.get("interval", 15)
-        
-        if route_id in network["routes"]:
-            old_interval = network["routes"][route_id]["current_interval"]
-            network["routes"][route_id]["current_interval"] = new_interval
-            network["routes"][route_id]["frequency"] = 60 / max(new_interval, 1)
-            network["routes"][route_id]["capacity_per_hour"] = (60 / max(new_interval, 1)) * self.BUS_CAPACITY
-            
-            logger.info(f"⏱️ Маршрут {route_id}: интервал {old_interval} → {new_interval} мин")
-    
-    def _apply_change_capacity(self, network: Dict, mod: Modification):
-        """
-        Изменение вместимости остановки
-        """
-        stop_id = mod.targetId
-        new_capacity = mod.parameters.get("capacity", 50)
-        
-        if stop_id in network["stops"]:
-            network["stops"][stop_id]["capacity"] = new_capacity
-            logger.info(f"📦 Остановка {stop_id}: вместимость → {new_capacity}")
-    
-    def _simulate_day(
-        self, 
-        base_network: Dict, 
-        modified_network: Dict,
+    def _simulate_day_with_agents(
+        self,
+        network: Dict,
         modifications: List[Modification]
     ) -> Tuple[List[Dict], List[Dict]]:
         """
-        Почасовая симуляция всего дня
-        Возвращает почасовые метрики для базового и изменённого сценариев
+        Почасовая симуляция с агентами для точного измерения времени ожидания
         """
-        base_hourly = []
-        modified_hourly = []
+        hourly_results = []
         
-        # Состояние накопленных пассажиров (кто не уехал)
-        base_carryover = {stop_id: 0 for stop_id in base_network["stops"]}
-        modified_carryover = {stop_id: 0 for stop_id in modified_network["stops"]}
+        # Состояние агентов (каждый агент = один пассажир)
+        agents = []  # список активных агентов
+        completed_agents = []  # агенты, которые已完成 поездку
         
         for hour in range(24):
-            # Базовый сценарий
-            base_result = self._simulate_hour(
-                base_network,
-                hour,
-                base_carryover,
-                modifications=[]
-            )
-            base_hourly.append(base_result)
-            base_carryover = base_result["carryover"]
+            # Новые агенты, появившиеся в этом часе
+            new_agents = self._generate_agents_for_hour(network, hour)
             
-            # Модифицированный сценарий
-            modified_result = self._simulate_hour(
-                modified_network,
+            # Текущие агенты = новые + накопленные с прошлого часа
+            current_agents = agents + new_agents
+            
+            # Симулируем час
+            hour_result, remaining_agents, completed_in_hour = self._simulate_hour_with_agents(
+                network,
                 hour,
-                modified_carryover,
-                modifications=[m for m in modifications if m.enabled]
+                current_agents,
+                modifications
             )
-            modified_hourly.append(modified_result)
-            modified_carryover = modified_result["carryover"]
+            
+            # Сохраняем результаты часа
+            hourly_results.append(hour_result)
+            
+            # Обновляем состояние
+            agents = remaining_agents
+            completed_agents.extend(completed_in_hour)
         
-        return base_hourly, modified_hourly
+        return hourly_results, completed_agents
     
-    def _simulate_hour(
+    def _generate_agents_for_hour(self, network: Dict, hour: int) -> List[Dict]:
+        """
+        Генерация агентов-пассажиров для часа
+        """
+        agents = []
+        agent_id_counter = 0
+        
+        for stop_id, stop in network["stops"].items():
+            # Базовое количество пассажиров из паттерна
+            base_count = stop.get("pattern", [5]*24)[hour]
+            
+            # ВАЖНО: Добавляем redistributed пассажиров
+            redistributed = stop.get("redistributed", {}).get(hour, 0)
+            
+            total_passengers = int(base_count + redistributed)
+            
+            # Создаём агентов
+            for _ in range(total_passengers):
+                agent = {
+                    "id": agent_id_counter,
+                    "start_stop": stop_id,
+                    "start_hour": hour,
+                    "start_minute": random.randint(0, 59),
+                    "wait_time": 0,
+                    "status": "waiting"
+                }
+                agents.append(agent)
+                agent_id_counter += 1
+        
+        return agents
+    
+    def _simulate_hour_with_agents(
         self,
         network: Dict,
         hour: int,
-        carryover: Dict[int, float],
+        agents: List[Dict],
         modifications: List[Modification]
-    ) -> Dict:
+    ) -> Tuple[Dict, List[Dict], List[Dict]]:
         """
-        Симуляция одного часа
+        Симуляция часа с агентами
         """
         hour_result = {
-            "total_passengers": 0,
+            "total_passengers": len(agents),
             "total_departed": 0,
             "total_waiting": 0,
             "avg_wait_time": 0,
-            "stops": {},
-            "carryover": {}
+            "stops": defaultdict(lambda: {
+                "passengers": 0,
+                "departed": 0,
+                "waiting": 0,
+                "wait_times": []
+            })
         }
         
-        wait_times = []
+        # Группируем агентов по остановкам
+        agents_by_stop = defaultdict(list)
+        for agent in agents:
+            agents_by_stop[agent["start_stop"]].append(agent)
         
-        # Сначала собираем информацию о закрытых остановках
+        # Определяем закрытые остановки
         closed_stops = []
         for stop_id, stop in network["stops"].items():
             closed_hours = stop.get("closed_hours", [])
             if hour in closed_hours:
                 closed_stops.append(stop_id)
         
-        # Для каждой остановки считаем пассажиров и отток
-        for stop_id, stop in network["stops"].items():
-            # 1. Пассажиры в этом часе
-            base_passengers = stop.get("pattern", [5]*24)[hour]
-            
-            # Добавляем redistributed пассажиров с закрытых остановок
-            redistributed = stop.get("redistributed", {}).get(hour, 0)
-            
-            # Добавляем накопленных с прошлого часа
-            total_passengers = base_passengers + redistributed + carryover.get(stop_id, 0)
+        remaining_agents = []
+        completed_agents = []
+        
+        # Обрабатываем каждую остановку
+        for stop_id, stop_agents in agents_by_stop.items():
+            stop = network["stops"].get(stop_id, {})
             
             # Если остановка закрыта
-            if hour in stop.get("closed_hours", []):
-                # Пассажиры перераспределяются на соседние остановки
+            if stop_id in closed_stops:
+                # ВАЖНО: Перераспределяем пассажиров
+                total_passengers = len(stop_agents)
                 self._redistribute_passengers(
                     network, stop_id, total_passengers, hour, closed_stops
                 )
-                hour_result["stops"][stop_id] = {
-                    "passengers": total_passengers,
-                    "departed": 0,
-                    "waiting": total_passengers,
-                    "wait_time": float('inf')
-                }
-                # !!! ВАЖНО: не теряем пассажиров, они перераспределены
-                hour_result["carryover"][stop_id] = 0
-                # Добавляем в общую статистику
-                hour_result["total_passengers"] += total_passengers
+                
+                # Агенты переходят в waiting (будут обработаны в следующие часы)
+                for agent in stop_agents:
+                    agent["wait_time"] += 60
+                    agent["status"] = "waiting"
+                    remaining_agents.append(agent)
+                
+                hour_result["stops"][stop_id]["passengers"] += total_passengers
+                hour_result["stops"][stop_id]["waiting"] += total_passengers
                 hour_result["total_waiting"] += total_passengers
                 continue
             
-            # 2. Получаем маршруты этой остановки
+            # Получаем маршруты этой остановки
             route_ids = network["stop_routes"].get(stop_id, [])
             
             if not route_ids:
-                # Нет маршрутов - никто не уезжает
-                hour_result["stops"][stop_id] = {
-                    "passengers": total_passengers,
-                    "departed": 0,
-                    "waiting": total_passengers,
-                    "wait_time": float('inf')
-                }
-                hour_result["carryover"][stop_id] = total_passengers
-                hour_result["total_passengers"] += total_passengers
-                hour_result["total_waiting"] += total_passengers
+                # Нет маршрутов - все ждут
+                for agent in stop_agents:
+                    agent["wait_time"] += 60
+                    remaining_agents.append(agent)
+                
+                hour_result["stops"][stop_id]["passengers"] += len(stop_agents)
+                hour_result["stops"][stop_id]["waiting"] += len(stop_agents)
+                hour_result["total_waiting"] += len(stop_agents)
                 continue
             
-            # 3. Считаем общую пропускную способность
+            # Считаем пропускную способность
             total_capacity = 0
-            route_intervals = []
-            
             for route_id in route_ids:
                 if route_id in network["routes"]:
                     route = network["routes"][route_id]
-                    capacity = route["capacity_per_hour"]
-                    total_capacity += capacity
-                    route_intervals.append(route["current_interval"])
+                    total_capacity += route["capacity_per_hour"]
             
-            # 4. Сколько реально уедет
-            departed = min(total_passengers, total_capacity)
-            waiting = total_passengers - departed
+            # Сколько может уехать
+            can_depart = min(len(stop_agents), int(total_capacity))
             
-            # 5. Время ожидания
-            if total_capacity > 0:
-                utilization = departed / total_capacity
+            # Сортируем агентов по времени ожидания
+            stop_agents.sort(key=lambda a: a["wait_time"], reverse=True)
+            
+            # Отправляем агентов
+            departing = stop_agents[:can_depart]
+            waiting = stop_agents[can_depart:]
+            
+            # Обрабатываем уехавших
+            for agent in departing:
+                agent["status"] = "departed"
+                agent["departure_hour"] = hour
+                completed_agents.append(agent)
                 
-                if route_intervals:
-                    effective_interval = 1 / sum(1/i for i in route_intervals)
-                else:
-                    effective_interval = 15
+                # Добавляем время ожидания
+                if route_ids:
+                    intervals = [network["routes"][r]["current_interval"] for r in route_ids if r in network["routes"]]
+                    wait_time = self._calculate_agent_wait_time(intervals)
+                    agent["wait_time"] += wait_time
                 
-                if utilization < 0.95:
-                    wait_time = (effective_interval / 2) * (1 + (utilization**2) / (1 - utilization))
-                else:
-                    wait_time = effective_interval * 5
-            else:
-                wait_time = float('inf')
+                hour_result["stops"][stop_id]["wait_times"].append(agent["wait_time"])
             
-            # Сохраняем результаты
-            hour_result["stops"][stop_id] = {
-                "passengers": total_passengers,
-                "departed": departed,
-                "waiting": waiting,
-                "wait_time": wait_time,
-                "utilization": departed / total_capacity if total_capacity > 0 else 0
-            }
+            # Обрабатываем оставшихся
+            for agent in waiting:
+                agent["wait_time"] += 60
+                remaining_agents.append(agent)
             
-            hour_result["total_passengers"] += total_passengers
-            hour_result["total_departed"] += departed
-            hour_result["total_waiting"] += waiting
+            # Заполняем результаты
+            hour_result["stops"][stop_id]["passengers"] += len(stop_agents)
+            hour_result["stops"][stop_id]["departed"] += len(departing)
+            hour_result["stops"][stop_id]["waiting"] += len(waiting)
             
-            if not math.isinf(wait_time) and wait_time > 0:
-                wait_times.append(wait_time)
-            
-            # Накопленные пассажиры переходят на следующий час
-            hour_result["carryover"][stop_id] = waiting
+            hour_result["total_departed"] += len(departing)
+            hour_result["total_waiting"] += len(waiting)
         
         # Среднее время ожидания
-        if wait_times:
-            hour_result["avg_wait_time"] = np.mean(wait_times)
-        else:
-            hour_result["avg_wait_time"] = 0
+        all_wait_times = []
+        for stop_result in hour_result["stops"].values():
+            all_wait_times.extend(stop_result.get("wait_times", []))
         
-        return hour_result
-
+        if all_wait_times:
+            hour_result["avg_wait_time"] = np.mean(all_wait_times)
+        
+        return hour_result, remaining_agents, completed_agents
+    
+    def _calculate_agent_wait_time(self, route_intervals: List[int]) -> float:
+        """
+        Расчёт времени ожидания для одного агента
+        """
+        if not route_intervals:
+            return 30  # полчаса по умолчанию
+        
+        # Эффективный интервал
+        effective_interval = 1 / sum(1/i for i in route_intervals)
+        
+        # Случайное время ожидания (равномерное распределение от 0 до интервала)
+        wait_time = random.uniform(0, effective_interval)
+        
+        return wait_time
+    
     def _redistribute_passengers(
         self,
         network: Dict,
         closed_stop_id: int,
-        passengers: float,
+        passengers: int,
         hour: int,
         all_closed_stops: List[int]
     ):
@@ -448,23 +475,21 @@ class SimulationEngine:
         if not closed_stop:
             return
         
-        # Ищем соседние остановки (упрощённо - по координатам)
+        # Ищем соседние остановки
         nearby_stops = self._find_nearby_stops(network, closed_stop_id, radius=self.WALKING_RADIUS)
         
         # Исключаем закрытые остановки
         nearby_stops = [s for s in nearby_stops if s not in all_closed_stops]
         
         if not nearby_stops:
-            # Нет соседних остановок - пассажиры никуда не идут
             return
         
         # Считаем общую вместимость соседей
         total_capacity = 0
         for stop_id in nearby_stops:
             if stop_id in network["stops"]:
-                # Вместимость зависит от количества маршрутов
                 route_count = len(network["stop_routes"].get(stop_id, []))
-                total_capacity += route_count * 50  # пропорционально маршрутам
+                total_capacity += route_count * 50
         
         if total_capacity == 0:
             return
@@ -476,8 +501,6 @@ class SimulationEngine:
                 stop_capacity = route_count * 50
                 share = stop_capacity / total_capacity
                 
-                # Добавляем пассажиров к паттерну этого часа
-                # (в реальности это сложнее, но для симуляции - ок)
                 if "redistributed" not in network["stops"][stop_id]:
                     network["stops"][stop_id]["redistributed"] = {}
                 
@@ -486,11 +509,11 @@ class SimulationEngine:
                 
                 network["stops"][stop_id]["redistributed"][hour] += passengers * share
         
-        logger.debug(f"🔄 Перераспределено {passengers:.0f} пассажиров с {closed_stop_id} на {len(nearby_stops)} остановок")
+        logger.debug(f"🔄 Перераспределено {passengers} пассажиров с {closed_stop_id}")
     
     def _find_nearby_stops(self, network: Dict, stop_id: int, radius: float) -> List[int]:
         """
-        Поиск остановок в радиусе (по координатам)
+        Поиск остановок в радиусе
         """
         stop = network["stops"].get(stop_id)
         if not stop:
@@ -501,7 +524,6 @@ class SimulationEngine:
         
         nearby = []
         
-        # Проходим по всем остановкам
         for sid, s in network["stops"].items():
             if sid == stop_id:
                 continue
@@ -509,8 +531,7 @@ class SimulationEngine:
             s_lat = s.get("lat", 0)
             s_lng = s.get("lng", 0)
             
-            # Грубое расстояние (градусы -> метры: 1 градус ~ 111 км)
-            # Для простоты используем манхэттенское расстояние
+            # Грубое расстояние
             lat_diff = abs(stop_lat - s_lat) * 111000
             lng_diff = abs(stop_lng - s_lng) * 111000 * math.cos(math.radians(stop_lat))
             distance = math.sqrt(lat_diff**2 + lng_diff**2)
@@ -518,11 +539,217 @@ class SimulationEngine:
             if distance <= radius:
                 nearby.append(sid)
         
-        return nearby[:5]  # не больше 5 соседей
+        return nearby[:5]
+    
+    def _calculate_passenger_throughput(self, hourly_data: List[Dict], network: Dict) -> Dict:
+        """
+        Расчёт пропускной способности
+        """
+        hourly_throughput = []
+        for hour, data in enumerate(hourly_data):
+            throughput = {
+                "hour": hour,
+                "passengers_arrived": int(data["total_passengers"]),
+                "passengers_departed": int(data["total_departed"]),
+                "passengers_waiting": int(data["total_waiting"])
+            }
+            hourly_throughput.append(throughput)
+        
+        if not hourly_throughput:
+            return {
+                "hourly_throughput": [],
+                "peak_hour": 0,
+                "peak_hour_passengers": 0,
+                "theoretical_capacity": 0,
+                "utilization_rate": 0,
+                "stop_throughput": {}
+            }
+        
+        peak_hour = max(
+            range(len(hourly_throughput)),
+            key=lambda h: hourly_throughput[h]["passengers_arrived"]
+        )
+        
+        theoretical_capacity = sum(
+            stop.get("theoretical_capacity", 0) 
+            for stop in network["stops"].values()
+        )
+        
+        peak_hour_throughput = hourly_throughput[peak_hour]["passengers_departed"]
+        
+        utilization_rate = peak_hour_throughput / theoretical_capacity if theoretical_capacity > 0 else 0
+        
+        stop_throughput = {}
+        for stop_id, stop in network["stops"].items():
+            theoretical = stop.get("theoretical_capacity", 0)
+            stop_throughput[stop_id] = {
+                "theoretical": theoretical,
+                "estimated_actual": theoretical * 0.8
+            }
+        
+        return {
+            "hourly_throughput": hourly_throughput,
+            "peak_hour": peak_hour,
+            "peak_hour_passengers": peak_hour_throughput,
+            "theoretical_capacity": int(theoretical_capacity),
+            "utilization_rate": float(utilization_rate),
+            "stop_throughput": stop_throughput
+        }
+    
+    def _calculate_wait_time_distribution(self, agents: List[Dict]) -> Dict:
+        """
+        Расчёт распределения времени ожидания
+        """
+        if not agents:
+            return {
+                "buckets": [],
+                "counts": [],
+                "percentiles": {},
+                "average": 0,
+                "median": 0,
+                "p95": 0,
+                "p99": 0
+            }
+        
+        wait_times = [a["wait_time"] for a in agents if a["wait_time"] > 0]
+        
+        if not wait_times:
+            return {
+                "buckets": [],
+                "counts": [],
+                "percentiles": {},
+                "average": 0,
+                "median": 0,
+                "p95": 0,
+                "p99": 0
+            }
+        
+        max_wait = max(wait_times)
+        buckets = list(range(0, int(max_wait) + 5, 5))
+        counts, _ = np.histogram(wait_times, bins=buckets)
+        
+        percentiles = {
+            "p50": np.percentile(wait_times, 50),
+            "p75": np.percentile(wait_times, 75),
+            "p90": np.percentile(wait_times, 90),
+            "p95": np.percentile(wait_times, 95),
+            "p99": np.percentile(wait_times, 99)
+        }
+        
+        return {
+            "buckets": [int(b) for b in buckets[:-1]],
+            "counts": [int(c) for c in counts],
+            "percentiles": {k: float(v) for k, v in percentiles.items()},
+            "average": float(np.mean(wait_times)),
+            "median": float(np.median(wait_times)),
+            "p95": float(percentiles["p95"]),
+            "p99": float(percentiles["p99"])
+        }
+    
+    def _calculate_stop_metrics(self, hourly_data: List[Dict], network: Dict) -> Dict:
+        """
+        Расчёт метрик по каждой остановке
+        """
+        stop_metrics = {}
+        
+        for stop_id, stop in network["stops"].items():
+            stop_hourly = []
+            total_passengers = 0
+            total_departed = 0
+            wait_times = []
+            
+            for hour_data in hourly_data:
+                if "stops" in hour_data and stop_id in hour_data["stops"]:
+                    stop_result = hour_data["stops"][stop_id]
+                    stop_hourly.append({
+                        "hour": len(stop_hourly),
+                        "passengers": stop_result.get("passengers", 0),
+                        "departed": stop_result.get("departed", 0),
+                        "waiting": stop_result.get("waiting", 0),
+                        "avg_wait": stop_result.get("avg_wait", 0)
+                    })
+                    total_passengers += stop_result.get("passengers", 0)
+                    total_departed += stop_result.get("departed", 0)
+                    if "avg_wait" in stop_result and stop_result["avg_wait"] > 0:
+                        wait_times.append(stop_result["avg_wait"])
+            
+            theoretical = stop.get("theoretical_capacity", 0)
+            
+            if stop_hourly:
+                peak_hour = max(
+                    range(len(stop_hourly)),
+                    key=lambda h: stop_hourly[h]["passengers"]
+                )
+                peak_passengers = stop_hourly[peak_hour]["passengers"]
+            else:
+                peak_hour = 0
+                peak_passengers = 0
+            
+            stop_metrics[stop_id] = {
+                "id": stop_id,
+                "address": stop.get("address", f"Остановка {stop_id}"),
+                "hourly": stop_hourly,
+                "total_passengers": total_passengers,
+                "total_departed": total_departed,
+                "avg_departure_rate": total_departed / 24 if total_departed > 0 else 0,
+                "avg_wait_time": np.mean(wait_times) if wait_times else 0,
+                "theoretical_capacity": theoretical,
+                "peak_hour": peak_hour,
+                "peak_passengers": peak_passengers,
+                "utilization": peak_passengers / theoretical if theoretical > 0 else 0
+            }
+        
+        return stop_metrics
+    
+    def _apply_modifications(self, network: Dict, modifications: List[Modification]) -> Dict:
+        """
+        Применение изменений к сети
+        """
+        modified = copy.deepcopy(network)
+        
+        for mod in modifications:
+            if mod.type == ModificationType.CLOSE_STOP:
+                self._apply_close_stop(modified, mod)
+            elif mod.type == ModificationType.CHANGE_INTERVAL:
+                self._apply_change_interval(modified, mod)
+            elif mod.type == ModificationType.CHANGE_CAPACITY:
+                self._apply_change_capacity(modified, mod)
+        
+        return modified
+    
+    def _apply_close_stop(self, network: Dict, mod: Modification):
+        """Закрытие остановки"""
+        stop_id = mod.targetId
+        hours = mod.parameters.get("hours", [7, 8, 9, 17, 18, 19])
+        
+        if stop_id in network["stops"]:
+            network["stops"][stop_id]["closed_hours"] = hours
+            logger.info(f"🚫 Закрыта остановка {stop_id}")
+    
+    def _apply_change_interval(self, network: Dict, mod: Modification):
+        """Изменение интервала маршрута"""
+        route_id = mod.targetId
+        new_interval = mod.parameters.get("interval", 15)
+        
+        if route_id in network["routes"]:
+            old_interval = network["routes"][route_id]["current_interval"]
+            network["routes"][route_id]["current_interval"] = new_interval
+            network["routes"][route_id]["frequency"] = 60 / max(new_interval, 1)
+            network["routes"][route_id]["capacity_per_hour"] = (60 / max(new_interval, 1)) * self.BUS_CAPACITY
+            logger.info(f"⏱️ Маршрут {route_id}: {old_interval} → {new_interval} мин")
+    
+    def _apply_change_capacity(self, network: Dict, mod: Modification):
+        """Изменение вместимости"""
+        stop_id = mod.targetId
+        new_capacity = mod.parameters.get("capacity", 50)
+        
+        if stop_id in network["stops"]:
+            network["stops"][stop_id]["capacity"] = new_capacity
+            logger.info(f"📦 Остановка {stop_id}: вместимость → {new_capacity}")
     
     def _calculate_metrics_from_hourly(self, hourly_data: List[Dict], network: Dict) -> Metrics:
         """
-        Расчёт метрик из почасовых данных
+        Расчёт базовых метрик
         """
         if not hourly_data:
             return Metrics(
@@ -533,8 +760,8 @@ class SimulationEngine:
                 transportUtilization=0
             )
         
-        # Среднее время ожидания (средневзвешенное по пассажирам)
         total_passengers = sum(h["total_passengers"] for h in hourly_data)
+        
         if total_passengers > 0:
             weighted_wait = sum(
                 h["avg_wait_time"] * h["total_passengers"] 
@@ -543,91 +770,50 @@ class SimulationEngine:
         else:
             weighted_wait = 0
         
-        # Максимальное время ожидания
         max_wait = max((h["avg_wait_time"] for h in hourly_data if h["avg_wait_time"] != float('inf')), default=0)
-        
-        # Общее количество пассажиров
         total_pass = int(total_passengers)
         
-        # Средняя загрузка (из состояния остановок)
         loads = [stop.get("base_load", 3) for stop in network["stops"].values()]
         avg_load = np.mean(loads) if loads else 0
-        
-        # Использование транспорта
-        utilizations = []
-        for hour_data in hourly_data:
-            for stop_result in hour_data["stops"].values():
-                if "utilization" in stop_result:
-                    utilizations.append(stop_result["utilization"])
-        
-        avg_util = np.mean(utilizations) if utilizations else 0.5
         
         return Metrics(
             avgWaitTime=float(weighted_wait),
             maxWaitTime=float(max_wait),
             totalPassengers=total_pass,
             avgLoad=float(avg_load),
-            transportUtilization=float(avg_util)
+            transportUtilization=float(avg_load / 10)
         )
     
     def _find_affected_stops(
         self,
         base_network: Dict,
         modified_network: Dict,
-        stops_data: List[Dict]
+        stops_data: List[Dict],
+        base_stop_metrics: Dict = None,
+        modified_stop_metrics: Dict = None
     ) -> List[AffectedStop]:
         """
-        Поиск остановок, наиболее затронутых изменениями
+        Поиск затронутых остановок
         """
         affected = []
         
         for stop_data in stops_data:
             stop_id = stop_data["id"]
             
-            # Базовая пропускная способность
-            base_routes = base_network["stop_routes"].get(stop_id, [])
-            base_capacity = sum(
-                base_network["routes"][r]["capacity_per_hour"] 
-                for r in base_routes if r in base_network["routes"]
-            )
-            
-            # Модифицированная пропускная способность
-            mod_routes = modified_network["stop_routes"].get(stop_id, [])
-            mod_capacity = sum(
-                modified_network["routes"][r]["capacity_per_hour"] 
-                for r in mod_routes if r in modified_network["routes"]
-            )
-            
-            # Изменение пропускной способности
-            if base_capacity > 0:
-                capacity_change = ((mod_capacity - base_capacity) / base_capacity) * 100
+            if base_stop_metrics and modified_stop_metrics and stop_id in base_stop_metrics and stop_id in modified_stop_metrics:
+                base_wait = base_stop_metrics[stop_id].get("avg_wait_time", 0)
+                mod_wait = modified_stop_metrics[stop_id].get("avg_wait_time", 0)
+                wait_change = mod_wait - base_wait
+                
+                base_load = base_stop_metrics[stop_id].get("utilization", 0)
+                mod_load = modified_stop_metrics[stop_id].get("utilization", 0)
+                load_change = (mod_load - base_load) * 100
             else:
-                capacity_change = 0
-            
-            # Загрузка (упрощённо)
-            base_load = stop_data.get("avg_load", 3)
-            # Предполагаем, что загрузка обратно пропорциональна пропускной способности
-            if mod_capacity > 0 and base_capacity > 0:
-                load_change = base_load * (base_capacity / mod_capacity - 1)
-            else:
+                wait_change = 0
                 load_change = 0
             
-            # Время ожидания
-            wait_change = 0
-            if base_capacity > 0 and mod_capacity > 0:
-                # Грубая оценка: время ожидания обратно пропорционально пропускной способности
-                wait_change = 8 * (base_capacity / mod_capacity - 1)
-            
-            # Определяем статус
-            if load_change < -1:
-                status = AffectedStopStatus.IMPROVED
-            elif load_change > 1:
-                status = AffectedStopStatus.WORSENED
-            else:
-                status = AffectedStopStatus.NEUTRAL
-            
-            # Берём только значительные изменения
-            if abs(capacity_change) > 10 or abs(load_change) > 1:
+            if abs(load_change) > 5 or abs(wait_change) > 2:
+                status = AffectedStopStatus.WORSENED if load_change > 0 else AffectedStopStatus.IMPROVED
                 affected.append(AffectedStop(
                     id=stop_id,
                     address=stop_data.get("address", f"Остановка {stop_id}"),
@@ -636,7 +822,5 @@ class SimulationEngine:
                     status=status
                 ))
         
-        # Сортируем по убыванию влияния
         affected.sort(key=lambda x: abs(x.loadChange), reverse=True)
-        
         return affected[:10]

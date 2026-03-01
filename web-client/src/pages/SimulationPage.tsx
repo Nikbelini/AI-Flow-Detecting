@@ -1,46 +1,79 @@
 // src/pages/SimulationPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import './SimulationPage.css';
-import SimulationMap, { type MapRoute } from './Map/SimulationMap'; // Импортируем тип
+import SimulationMap, { type MapRoute } from './Map/SimulationMap';
 import { useStops } from '../hooks/api/useStops';
 import { useRoutes } from '../hooks/api/useRoutes';
-import type { Stop, Route as ApiRoute } from '../api/types';
 import {
   Play, Save, RotateCcw, Download, Eye, EyeOff,
   Clock, Users, Bus, AlertTriangle, TrendingUp,
-  Plus, Trash2, Settings, Route as RouteIcon
+  Plus, Trash2, Settings, Route as RouteIcon,
+  BarChart, PieChart, Activity, Target
 } from 'lucide-react';
+import type { Stop } from '../api/types';
+import StopMetricsModal from '../components/modal/StopMetricsModal';
+import ThroughputMetrics from '../components/ThroughputMetrics';
+import WaitTimeDistributionChart from '../components/WaitTimeDistributionChart';
 
-// ========== Типы ==========
+// ========== ТИПЫ ==========
 
-// Расширенный тип для остановки
-interface ExtendedStop extends Stop {
-  avg_load?: number;
-  avg_count?: number;
-  avg_wait_time?: number;
-  max_count?: number;
-  cluster?: 'office' | 'shopping' | 'residential' | 'transport_hub' | 'educational' | 'unknown';
-  peak_hours?: number[];
-  avg_pattern?: number[];
-  color?: string;
+interface WaitTimeDistribution {
+  buckets: number[];      // границы бинов (0, 5, 10, ... минут)
+  counts: number[];       // количество агентов в каждом бине
+  percentiles: {
+    p50: number;
+    p75: number;
+    p90: number;
+    p95: number;
+    p99: number;
+  };
+  average: number;
+  median: number;
+  p95: number;
+  p99: number;
 }
 
-// НЕ создаём отдельный ExtendedRoute - используем MapRoute из SimulationMap
-
-interface SimulationState {
-  status: 'idle' | 'running' | 'completed' | 'error';
-  progress: number;
-  currentHour: number;
-  results: SimulationResults | null;
-  simulationId?: string;
-  errorMessage?: string;
+interface HourlyThroughput {
+  hour: number;
+  passengers_arrived: number;
+  passengers_departed: number;
+  passengers_waiting: number;
 }
 
-interface SimulationResults {
-  baseMetrics: Metrics;
-  modifiedMetrics: Metrics;
-  hourlyData: HourlyData[];
-  affectedStops: AffectedStop[];
+interface StopThroughput {
+  theoretical: number;
+  estimated_actual: number;
+}
+
+interface PassengerThroughput {
+  hourly_throughput: HourlyThroughput[];
+  peak_hour: number;
+  peak_hour_passengers: number;
+  theoretical_capacity: number;
+  utilization_rate: number;
+  stop_throughput: Record<number, StopThroughput>;
+}
+
+interface StopHourlyMetric {
+  hour: number;
+  passengers: number;
+  departed: number;
+  waiting: number;
+  avg_wait?: number;
+}
+
+interface StopMetricsDetail {
+  id: number;
+  address: string;
+  hourly: StopHourlyMetric[];
+  total_passengers: number;
+  total_departed: number;
+  avg_departure_rate: number;
+  avg_wait_time: number;
+  theoretical_capacity: number;
+  peak_hour: number;
+  peak_passengers: number;
+  utilization: number;
 }
 
 interface Metrics {
@@ -67,6 +100,21 @@ interface AffectedStop {
   status: 'improved' | 'worsened' | 'neutral';
 }
 
+interface SimulationResults {
+  baseMetrics: Metrics;
+  modifiedMetrics: Metrics;
+  hourlyData: HourlyData[];
+  affectedStops: AffectedStop[];
+  
+  // Новые поля
+  baseThroughput?: PassengerThroughput;
+  modifiedThroughput?: PassengerThroughput;
+  baseWaitDistribution?: WaitTimeDistribution;
+  modifiedWaitDistribution?: WaitTimeDistribution;
+  baseStopMetrics?: Record<number, StopMetricsDetail>;
+  modifiedStopMetrics?: Record<number, StopMetricsDetail>;
+}
+
 type ModificationType = 'close_stop' | 'add_stop' | 'change_interval' | 'change_capacity';
 
 interface Modification {
@@ -79,7 +127,28 @@ interface Modification {
   label?: string;
 }
 
-// ========== Компонент ==========
+interface ExtendedStop extends Stop {
+  avg_load?: number;
+  avg_count?: number;
+  avg_wait_time?: number;
+  max_count?: number;
+  cluster?: 'office' | 'shopping' | 'residential' | 'transport_hub' | 'educational' | 'unknown';
+  peak_hours?: number[];
+  avg_pattern?: number[];
+  color?: string;
+}
+
+// ========== ДОБАВЛЯЕМ ОТСУТСТВУЮЩИЙ ИНТЕРФЕЙС ==========
+interface SimulationState {
+  status: 'idle' | 'running' | 'completed' | 'error';
+  progress: number;
+  currentHour: number;
+  results: SimulationResults | null;
+  simulationId?: string;
+  errorMessage?: string;
+}
+
+// ========== КОМПОНЕНТ ==========
 
 const SimulationPage: React.FC = () => {
   const [simState, setSimState] = useState<SimulationState>({
@@ -91,13 +160,18 @@ const SimulationPage: React.FC = () => {
 
   const [modifications, setModifications] = useState<Modification[]>([]);
   const [selectedStop, setSelectedStop] = useState<ExtendedStop | null>(null);
-  const [selectedRoute, setSelectedRoute] = useState<MapRoute | null>(null); // Используем MapRoute
+  const [selectedRoute, setSelectedRoute] = useState<MapRoute | null>(null);
   const [editMode, setEditMode] = useState<'view' | 'select_stop' | 'select_route'>('view');
   const [selectedHour, setSelectedHour] = useState(8);
   const [cityStops, setCityStops] = useState<ExtendedStop[]>([]);
-  const [cityRoutes, setCityRoutes] = useState<MapRoute[]>([]); // Тип MapRoute[]
+  const [cityRoutes, setCityRoutes] = useState<MapRoute[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [serviceAvailable, setServiceAvailable] = useState(true);
+  
+  // Новые состояния
+  const [showWaitDistribution, setShowWaitDistribution] = useState(false);
+  const [selectedStopForMetrics, setSelectedStopForMetrics] = useState<number | null>(null);
+  const [activeMetricTab, setActiveMetricTab] = useState<'basic' | 'throughput' | 'distribution'>('basic');
 
   const CITY_ID = 1;
 
@@ -143,7 +217,6 @@ const SimulationPage: React.FC = () => {
 
         // Преобразуем маршруты в формат MapRoute
         const routesForMap: MapRoute[] = routesData.map((route: any) => {
-          // Генерируем путь из остановок
           const path = generateRoutePath(route.stops || [], stopsWithCoords);
           
           return {
@@ -155,14 +228,13 @@ const SimulationPage: React.FC = () => {
             stops: route.stops?.map((s: any) => s.stopId || s.id) || [],
             intervalMinutes: route.intervalMinutes || 15,
             transportType: route.transportType || 'BUS',
-            // Добавляем поля, которые могут понадобиться
             isActive: route.isActive,
             cityId: route.cityId
           };
         });
 
         setCityStops(stopsWithCoords);
-        setCityRoutes(routesForMap); // ✅ Теперь типы совпадают
+        setCityRoutes(routesForMap);
         
         console.log('✅ Загружено:', {
           stops: stopsWithCoords.length,
@@ -179,43 +251,40 @@ const SimulationPage: React.FC = () => {
     loadInitialData();
   }, []);
 
-  // Добавляем хук для загрузки маршрутов с сервера моделирования
-useEffect(() => {
-  const loadRoutesFromModelingService = async () => {
-    try {
-      const response = await fetch('http://localhost:8084/routes/1');
-      if (response.ok) {
-        const data = await response.json();
-        console.log('🛤️ Маршруты из modeling-service:', data);
-        
-        // Преобразуем в формат MapRoute
-        const modelingRoutes: MapRoute[] = data.map((route: any) => ({
-          id: route.id,
-          number: route.number,
-          name: route.name,
-          path: route.path || [],
-          stops: route.stops,
-          intervalMinutes: route.interval_minutes || 15,
-          transportType: route.transport_type,
-          color: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`
-        }));
-        
-        // Объединяем с существующими маршрутами или заменяем
-        setCityRoutes(prev => {
-          const merged = [...prev, ...modelingRoutes];
-          // Убираем дубликаты по id
-          return Array.from(new Map(merged.map(r => [r.id, r])).values());
-        });
+  // Загрузка маршрутов из modeling service
+  useEffect(() => {
+    const loadRoutesFromModelingService = async () => {
+      try {
+        const response = await fetch('http://localhost:8084/routes/1');
+        if (response.ok) {
+          const data = await response.json();
+          console.log('🛤️ Маршруты из modeling-service:', data);
+          
+          const modelingRoutes: MapRoute[] = data.map((route: any) => ({
+            id: route.id,
+            number: route.number,
+            name: route.name,
+            path: route.path || [],
+            stops: route.stops,
+            intervalMinutes: route.interval_minutes || 15,
+            transportType: route.transport_type,
+            color: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`
+          }));
+          
+          setCityRoutes(prev => {
+            const merged = [...prev, ...modelingRoutes];
+            return Array.from(new Map(merged.map(r => [r.id, r])).values());
+          });
+        }
+      } catch (error) {
+        console.error('❌ Ошибка загрузки маршрутов из modeling-service:', error);
       }
-    } catch (error) {
-      console.error('❌ Ошибка загрузки маршрутов из modeling-service:', error);
-    }
-  };
+    };
 
-  if (serviceAvailable) {
-    loadRoutesFromModelingService();
-  }
-}, [serviceAvailable]);
+    if (serviceAvailable) {
+      loadRoutesFromModelingService();
+    }
+  }, [serviceAvailable]);
 
   // Функция для генерации пути маршрута из остановок
   const generateRoutePath = (stops: any[], allStops: ExtendedStop[]): [number, number][] => {
@@ -291,6 +360,7 @@ useEffect(() => {
       }
 
       const data = await response.json();
+      console.log('📊 Получены результаты:', data);
 
       let progress = 0;
       const interval = setInterval(() => {
@@ -439,6 +509,11 @@ useEffect(() => {
         console.log('✅ Найдены полные данные остановки:', fullStop);
         setSelectedStop(fullStop);
         setSelectedRoute(null);
+        
+        // Если есть детальные метрики для этой остановки - показываем
+        if (simState.results?.baseStopMetrics?.[fullStop.id]) {
+          setSelectedStopForMetrics(fullStop.id);
+        }
       } else {
         console.warn('⚠️ Полные данные не найдены');
         alert('❌ Ошибка: данные остановки не найдены');
@@ -488,6 +563,11 @@ useEffect(() => {
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
     linkElement.click();
+  };
+
+  // Функция форматирования процентов
+  const formatPercent = (value: number): string => {
+    return (value * 100).toFixed(1) + '%';
   };
 
   return (
@@ -661,6 +741,17 @@ useEffect(() => {
                   📦 Вместимость
                 </button>
               </div>
+
+              {/* Кнопка детальной статистики остановки */}
+              {simState.results?.baseStopMetrics?.[selectedStop.id] && (
+                <button
+                  className="quick-action-btn details"
+                  onClick={() => setSelectedStopForMetrics(selectedStop.id)}
+                >
+                  <BarChart size={14} />
+                  Детальная статистика
+                </button>
+              )}
             </div>
           )}
 
@@ -781,7 +872,7 @@ useEffect(() => {
                 ...stop,
                 color: getStopColor(stop.id)
               }))}
-              routes={cityRoutes} // ✅ Теперь cityRoutes имеет тип MapRoute[]
+              routes={cityRoutes}
               onMarkerClick={handleMarkerClick}
               onRouteClick={handleRouteClick}
               selectionMode={editMode !== 'view'}
@@ -808,134 +899,190 @@ useEffect(() => {
         <div className="right-panel">
           {simState.results ? (
             <>
-              <div className="panel-section">
-                <h3 className="panel-title">
-                  <TrendingUp size={18} />
-                  Ключевые метрики
-                </h3>
-
-                <div className="metrics-comparison">
-                  <div className="metric-row header">
-                    <div className="metric-name">Метрика</div>
-                    <div className="metric-base">Было</div>
-                    <div className="metric-modified">Стало</div>
-                    <div className="metric-change">Δ</div>
-                  </div>
-
-                  <div className="metric-row">
-                    <div className="metric-name">Ср. время ожидания</div>
-                    <div className="metric-base">{simState.results.baseMetrics.avgWaitTime.toFixed(1)} мин</div>
-                    <div className="metric-modified">{simState.results.modifiedMetrics.avgWaitTime.toFixed(1)} мин</div>
-                    <div className={`metric-change ${simState.results.modifiedMetrics.avgWaitTime > simState.results.baseMetrics.avgWaitTime ? 'negative' : 'positive'}`}>
-                      {((simState.results.modifiedMetrics.avgWaitTime / simState.results.baseMetrics.avgWaitTime - 1) * 100).toFixed(1)}%
-                    </div>
-                  </div>
-
-                  <div className="metric-row">
-                    <div className="metric-name">Макс. время ожидания</div>
-                    <div className="metric-base">{simState.results.baseMetrics.maxWaitTime.toFixed(1)} мин</div>
-                    <div className="metric-modified">{simState.results.modifiedMetrics.maxWaitTime.toFixed(1)} мин</div>
-                    <div className={`metric-change ${simState.results.modifiedMetrics.maxWaitTime > simState.results.baseMetrics.maxWaitTime ? 'negative' : 'positive'}`}>
-                      {((simState.results.modifiedMetrics.maxWaitTime / simState.results.baseMetrics.maxWaitTime - 1) * 100).toFixed(1)}%
-                    </div>
-                  </div>
-                </div>
+              {/* Табы для метрик */}
+              <div className="metric-tabs">
+                <button
+                  className={`metric-tab ${activeMetricTab === 'basic' ? 'active' : ''}`}
+                  onClick={() => setActiveMetricTab('basic')}
+                >
+                  <Activity size={16} />
+                  Основные
+                </button>
+                <button
+                  className={`metric-tab ${activeMetricTab === 'throughput' ? 'active' : ''}`}
+                  onClick={() => setActiveMetricTab('throughput')}
+                >
+                  <Target size={16} />
+                  Пропускная способность
+                </button>
+                <button
+                  className={`metric-tab ${activeMetricTab === 'distribution' ? 'active' : ''}`}
+                  onClick={() => setActiveMetricTab('distribution')}
+                >
+                  <PieChart size={16} />
+                  Распределение
+                </button>
               </div>
 
-              <div className="panel-section">
-                <h3 className="panel-title">
-                  <Clock size={18} />
-                  Почасовая динамика
-                </h3>
+              {/* ВКЛАДКА 1: Базовые метрики */}
+              {activeMetricTab === 'basic' && (
+                <>
+                  <div className="panel-section">
+                    <h3 className="panel-title">
+                      <TrendingUp size={18} />
+                      Ключевые метрики
+                    </h3>
 
-                <div className="hourly-chart">
-                  <div className="chart-bars">
-                    {simState.results.hourlyData.map((data, idx) => {
-                      const maxPassengers = Math.max(
-                        ...simState.results!.hourlyData.map(d => Math.max(d.basePassengers, d.modifiedPassengers))
-                      );
+                    <div className="metrics-comparison">
+                      <div className="metric-row header">
+                        <div className="metric-name">Метрика</div>
+                        <div className="metric-base">Было</div>
+                        <div className="metric-modified">Стало</div>
+                        <div className="metric-change">Δ</div>
+                      </div>
 
-                      return (
-                        <div key={idx} className="chart-bar-group">
-                          <div className="bar-container base">
-                            <div
-                              className="bar-fill base"
-                              style={{
-                                height: `${(data.basePassengers / maxPassengers) * 100}%`,
-                                opacity: selectedHour === data.hour ? 1 : 0.6
-                              }}
-                              title={`Базовый: ${Math.round(data.basePassengers)} пасс.`}
-                            ></div>
-                          </div>
-                          <div className="bar-container modified">
-                            <div
-                              className="bar-fill modified"
-                              style={{
-                                height: `${(data.modifiedPassengers / maxPassengers) * 100}%`,
-                                opacity: selectedHour === data.hour ? 1 : 0.6
-                              }}
-                              title={`С изменениями: ${Math.round(data.modifiedPassengers)} пасс.`}
-                            ></div>
-                          </div>
-                          <div
-                            className={`hour-label ${selectedHour === data.hour ? 'active' : ''}`}
-                            onClick={() => setSelectedHour(data.hour)}
-                          >
-                            {data.hour}:00
-                          </div>
+                      <div className="metric-row">
+                        <div className="metric-name">Ср. время ожидания</div>
+                        <div className="metric-base">{simState.results.baseMetrics.avgWaitTime.toFixed(1)} мин</div>
+                        <div className="metric-modified">{simState.results.modifiedMetrics.avgWaitTime.toFixed(1)} мин</div>
+                        <div className={`metric-change ${simState.results.modifiedMetrics.avgWaitTime > simState.results.baseMetrics.avgWaitTime ? 'negative' : 'positive'}`}>
+                          {((simState.results.modifiedMetrics.avgWaitTime / simState.results.baseMetrics.avgWaitTime - 1) * 100).toFixed(1)}%
                         </div>
-                      );
-                    })}
-                  </div>
-                  <div className="chart-legend">
-                    <div className="legend-item">
-                      <div className="legend-color base"></div>
-                      <span>Базовый сценарий</span>
-                    </div>
-                    <div className="legend-item">
-                      <div className="legend-color modified"></div>
-                      <span>С изменениями</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                      </div>
 
-              <div className="panel-section">
-                <h3 className="panel-title">
-                  <AlertTriangle size={18} />
-                  Наиболее затронутые остановки
-                </h3>
-
-                <div className="affected-stops-list">
-                  {simState.results.affectedStops.map(stop => (
-                    <div
-                      key={stop.id}
-                      className={`affected-stop-item ${stop.status}`}
-                      onClick={() => {
-                        const stopData = cityStops.find(s => s.id === stop.id);
-                        if (stopData) setSelectedStop(stopData);
-                      }}
-                    >
-                      <div className="stop-address">{stop.address}</div>
-                      <div className="stop-changes">
-                        <div className="change-badge load">
-                          <span className="change-label">Нагрузка</span>
-                          <span className={`change-value ${stop.loadChange > 0 ? 'up' : 'down'}`}>
-                            {stop.loadChange > 0 ? '↑' : '↓'} {Math.abs(stop.loadChange)}%
-                          </span>
+                      <div className="metric-row">
+                        <div className="metric-name">Макс. время ожидания</div>
+                        <div className="metric-base">{simState.results.baseMetrics.maxWaitTime.toFixed(1)} мин</div>
+                        <div className="metric-modified">{simState.results.modifiedMetrics.maxWaitTime.toFixed(1)} мин</div>
+                        <div className={`metric-change ${simState.results.modifiedMetrics.maxWaitTime > simState.results.baseMetrics.maxWaitTime ? 'negative' : 'positive'}`}>
+                          {((simState.results.modifiedMetrics.maxWaitTime / simState.results.baseMetrics.maxWaitTime - 1) * 100).toFixed(1)}%
                         </div>
-                        <div className="change-badge wait">
-                          <span className="change-label">Ожидание</span>
-                          <span className={`change-value ${stop.waitTimeChange > 0 ? 'up' : 'down'}`}>
-                            {stop.waitTimeChange > 0 ? '↑' : '↓'} {Math.abs(stop.waitTimeChange)} мин
-                          </span>
+                      </div>
+
+                      <div className="metric-row">
+                        <div className="metric-name">Всего пассажиров</div>
+                        <div className="metric-base">{simState.results.baseMetrics.totalPassengers}</div>
+                        <div className="metric-modified">{simState.results.modifiedMetrics.totalPassengers}</div>
+                        <div className={`metric-change ${simState.results.modifiedMetrics.totalPassengers > simState.results.baseMetrics.totalPassengers ? 'positive' : 'negative'}`}>
+                          {((simState.results.modifiedMetrics.totalPassengers / simState.results.baseMetrics.totalPassengers - 1) * 100).toFixed(1)}%
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
 
+                  <div className="panel-section">
+                    <h3 className="panel-title">
+                      <Clock size={18} />
+                      Почасовая динамика
+                    </h3>
+
+                    <div className="hourly-chart">
+                      <div className="chart-bars">
+                        {simState.results.hourlyData.map((data, idx) => {
+                          const maxPassengers = Math.max(
+                            ...simState.results!.hourlyData.map(d => Math.max(d.basePassengers, d.modifiedPassengers))
+                          );
+
+                          return (
+                            <div key={idx} className="chart-bar-group">
+                              <div className="bar-container base">
+                                <div
+                                  className="bar-fill base"
+                                  style={{
+                                    height: `${(data.basePassengers / maxPassengers) * 100}%`,
+                                    opacity: selectedHour === data.hour ? 1 : 0.6
+                                  }}
+                                  title={`Базовый: ${Math.round(data.basePassengers)} пасс.`}
+                                ></div>
+                              </div>
+                              <div className="bar-container modified">
+                                <div
+                                  className="bar-fill modified"
+                                  style={{
+                                    height: `${(data.modifiedPassengers / maxPassengers) * 100}%`,
+                                    opacity: selectedHour === data.hour ? 1 : 0.6
+                                  }}
+                                  title={`С изменениями: ${Math.round(data.modifiedPassengers)} пасс.`}
+                                ></div>
+                              </div>
+                              <div
+                                className={`hour-label ${selectedHour === data.hour ? 'active' : ''}`}
+                                onClick={() => setSelectedHour(data.hour)}
+                              >
+                                {data.hour}:00
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="chart-legend">
+                        <div className="legend-item">
+                          <div className="legend-color base"></div>
+                          <span>Базовый сценарий</span>
+                        </div>
+                        <div className="legend-item">
+                          <div className="legend-color modified"></div>
+                          <span>С изменениями</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="panel-section">
+                    <h3 className="panel-title">
+                      <AlertTriangle size={18} />
+                      Наиболее затронутые остановки
+                    </h3>
+
+                    <div className="affected-stops-list">
+                      {simState.results.affectedStops.map(stop => (
+                        <div
+                          key={stop.id}
+                          className={`affected-stop-item ${stop.status}`}
+                          onClick={() => {
+                            const stopData = cityStops.find(s => s.id === stop.id);
+                            if (stopData) setSelectedStop(stopData);
+                          }}
+                        >
+                          <div className="stop-address">{stop.address}</div>
+                          <div className="stop-changes">
+                            <div className="change-badge load">
+                              <span className="change-label">Нагрузка</span>
+                              <span className={`change-value ${stop.loadChange > 0 ? 'up' : 'down'}`}>
+                                {stop.loadChange > 0 ? '↑' : '↓'} {Math.abs(stop.loadChange)}%
+                              </span>
+                            </div>
+                            <div className="change-badge wait">
+                              <span className="change-label">Ожидание</span>
+                              <span className={`change-value ${stop.waitTimeChange > 0 ? 'up' : 'down'}`}>
+                                {stop.waitTimeChange > 0 ? '↑' : '↓'} {Math.abs(stop.waitTimeChange)} мин
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* ВКЛАДКА 2: Пропускная способность */}
+              {activeMetricTab === 'throughput' && simState.results.baseThroughput && (
+                <ThroughputMetrics
+                  baseThroughput={simState.results.baseThroughput}
+                  modifiedThroughput={simState.results.modifiedThroughput}
+                />
+              )}
+
+              {/* ВКЛАДКА 3: Распределение времени ожидания */}
+              {activeMetricTab === 'distribution' && simState.results.baseWaitDistribution && (
+                <WaitTimeDistributionChart
+                  baseDistribution={simState.results.baseWaitDistribution}
+                  modifiedDistribution={simState.results.modifiedWaitDistribution}
+                />
+              )}
+
+              {/* Кнопка экспорта */}
               <div className="panel-section">
                 <button
                   className="export-btn full-width"
@@ -955,6 +1102,16 @@ useEffect(() => {
           )}
         </div>
       </div>
+
+      {/* МОДАЛЬНОЕ ОКНО С ДЕТАЛЬНОЙ СТАТИСТИКОЙ ОСТАНОВКИ */}
+      {selectedStopForMetrics && simState.results?.baseStopMetrics && (
+        <StopMetricsModal
+          stopId={selectedStopForMetrics}
+          baseMetrics={simState.results.baseStopMetrics[selectedStopForMetrics]}
+          modifiedMetrics={simState.results.modifiedStopMetrics?.[selectedStopForMetrics]}
+          onClose={() => setSelectedStopForMetrics(null)}
+        />
+      )}
     </div>
   );
 };
