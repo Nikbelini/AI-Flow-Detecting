@@ -1,6 +1,9 @@
-// src/pages/components/ThroughputMetrics.tsx
 import React from 'react';
 import { TrendingUp, Clock, Zap, Target, Users } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, LineChart, Line, ComposedChart
+} from 'recharts';
 
 interface ThroughputMetricsProps {
   baseThroughput: any;
@@ -13,62 +16,113 @@ const ThroughputMetrics: React.FC<ThroughputMetricsProps> = ({
 }) => {
   const formatNumber = (num: number) => Math.round(num).toLocaleString();
   
+  // Подготавливаем данные для графика
+  const chartData = baseThroughput.hourly_throughput.map((item: any) => ({
+    hour: item.hour,
+    departed: item.passengers_departed,
+    waiting: item.passengers_waiting,
+    arrived: item.passengers_arrived,
+    // Если есть модифицированные данные - добавляем их
+    ...(modifiedThroughput && {
+      modifiedDeparted: modifiedThroughput.hourly_throughput[item.hour]?.passengers_departed,
+      modifiedWaiting: modifiedThroughput.hourly_throughput[item.hour]?.passengers_waiting,
+    })
+  }));
+
+  const peakHour = baseThroughput.peak_hour;
+  
   return (
     <div className="throughput-metrics">
+      {/* Карточки с метриками */}
       <div className="panel-section">
         <h3 className="panel-title">
           <Zap size={18} />
           Пропускная способность в час пик
         </h3>
         
-        <div className="metrics-grid">
-          <div className="metric-card">
-            <div className="metric-label">
-              <Clock size={16} />
-              Час пик
+        <div className="metrics-grid" style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          gap: '12px',
+          marginTop: '12px'
+        }}>
+          {/* Час пик */}
+          <div className="metric-card" style={{
+            background: '#f8fafc',
+            padding: '12px',
+            borderRadius: '8px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <Clock size={16} color="#64748b" />
+              <span style={{ fontSize: '12px', color: '#64748b' }}>Час пик</span>
             </div>
-            <div className="metric-value">{baseThroughput.peak_hour}:00</div>
+            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b' }}>
+              {baseThroughput.peak_hour}:00
+            </div>
           </div>
           
-          <div className="metric-card">
-            <div className="metric-label">
-              <Users size={16} />
-              Пассажиров в час
+          {/* Пассажиров в час */}
+          <div className="metric-card" style={{
+            background: '#f8fafc',
+            padding: '12px',
+            borderRadius: '8px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <Users size={16} color="#64748b" />
+              <span style={{ fontSize: '12px', color: '#64748b' }}>Пассажиров в час</span>
             </div>
-            <div className="metric-value">
+            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b' }}>
               {formatNumber(baseThroughput.peak_hour_passengers)}
               {modifiedThroughput && (
-                <span className={`metric-change ${
-                  modifiedThroughput.peak_hour_passengers > baseThroughput.peak_hour_passengers 
-                    ? 'positive' : 'negative'
-                }`}>
-                  {((modifiedThroughput.peak_hour_passengers / baseThroughput.peak_hour_passengers - 1) * 100).toFixed(1)}%
+                <span style={{
+                  fontSize: '12px',
+                  marginLeft: '8px',
+                  color: modifiedThroughput.peak_hour_passengers > baseThroughput.peak_hour_passengers 
+                    ? '#ef4444' : '#10b981'
+                }}>
+                  {modifiedThroughput.peak_hour_passengers > baseThroughput.peak_hour_passengers ? '↑' : '↓'}
+                  {Math.abs(((modifiedThroughput.peak_hour_passengers / baseThroughput.peak_hour_passengers - 1) * 100)).toFixed(1)}%
                 </span>
               )}
             </div>
           </div>
           
-          <div className="metric-card">
-            <div className="metric-label">
-              <Target size={16} />
-              Теоретический максимум
+          {/* Теоретический максимум */}
+          <div className="metric-card" style={{
+            background: '#f8fafc',
+            padding: '12px',
+            borderRadius: '8px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <Target size={16} color="#64748b" />
+              <span style={{ fontSize: '12px', color: '#64748b' }}>Теоретический максимум</span>
             </div>
-            <div className="metric-value">{formatNumber(baseThroughput.theoretical_capacity)}</div>
+            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b' }}>
+              {formatNumber(baseThroughput.theoretical_capacity)}
+            </div>
           </div>
           
-          <div className="metric-card">
-            <div className="metric-label">
-              <TrendingUp size={16} />
-              Использование
+          {/* Использование */}
+          <div className="metric-card" style={{
+            background: '#f8fafc',
+            padding: '12px',
+            borderRadius: '8px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <TrendingUp size={16} color="#64748b" />
+              <span style={{ fontSize: '12px', color: '#64748b' }}>Использование</span>
             </div>
-            <div className="metric-value">
+            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b' }}>
               {(baseThroughput.utilization_rate * 100).toFixed(1)}%
               {modifiedThroughput && (
-                <span className={`metric-change ${
-                  modifiedThroughput.utilization_rate > baseThroughput.utilization_rate 
-                    ? 'negative' : 'positive'
-                }`}>
-                  {((modifiedThroughput.utilization_rate / baseThroughput.utilization_rate - 1) * 100).toFixed(1)}%
+                <span style={{
+                  fontSize: '12px',
+                  marginLeft: '8px',
+                  color: modifiedThroughput.utilization_rate > baseThroughput.utilization_rate 
+                    ? '#ef4444' : '#10b981'
+                }}>
+                  {modifiedThroughput.utilization_rate > baseThroughput.utilization_rate ? '↑' : '↓'}
+                  {Math.abs(((modifiedThroughput.utilization_rate / baseThroughput.utilization_rate - 1) * 100)).toFixed(1)}%
                 </span>
               )}
             </div>
@@ -76,48 +130,210 @@ const ThroughputMetrics: React.FC<ThroughputMetricsProps> = ({
         </div>
       </div>
       
+      {/* ГРАФИК: Почасовая пропускная способность */}
       <div className="panel-section">
         <h3 className="panel-title">
           <Clock size={18} />
           Почасовая пропускная способность
         </h3>
         
-        <div className="throughput-chart">
-          <div className="chart-bars throughput">
-            {baseThroughput.hourly_throughput.map((data: any) => (
-              <div key={data.hour} className="throughput-bar-group">
-                <div 
-                  className="throughput-bar"
-                  style={{ 
-                    height: `${(data.passengers_departed / baseThroughput.peak_hour_passengers) * 100}%` 
-                  }}
-                  title={`${data.hour}:00 - уехало: ${data.passengers_departed}, ждёт: ${data.passengers_waiting}`}
+        {/* Контейнер графика с фиксированной высотой */}
+        <div style={{ width: '100%', height: '220px', marginTop: '12px' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart
+              data={chartData}
+              margin={{ top: 10, right: 30, left: 0, bottom: 20 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              
+              <XAxis 
+                dataKey="hour" 
+                tickFormatter={(hour) => `${hour}`}
+                stroke="#64748b"
+                fontSize={10}
+                interval={3}
+              />
+              
+              <YAxis 
+                yAxisId="left"
+                stroke="#64748b"
+                fontSize={10}
+                label={{ 
+                  value: 'Пассажиров', 
+                  angle: -90, 
+                  position: 'insideLeft',
+                  fontSize: 10,
+                  fill: '#64748b'
+                }}
+              />
+              
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: 'white',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                }}
+                formatter={(value: number, name: string) => {
+                  const labels: Record<string, string> = {
+                    departed: 'Уехало',
+                    waiting: 'Ожидает',
+                    arrived: 'Прибыло'
+                  };
+                  return [`${value} чел.`, labels[name] || name];
+                }}
+                labelFormatter={(hour) => `${hour}:00`}
+              />
+              
+              <Legend 
+                verticalAlign="top" 
+                height={36}
+                iconType="circle"
+                iconSize={8}
+                formatter={(value) => {
+                  const labels: Record<string, string> = {
+                    departed: 'Уехало',
+                    waiting: 'Ожидает',
+                    arrived: 'Прибыло'
+                  };
+                  return labels[value] || value;
+                }}
+              />
+              
+              {/* Столбцы - уехавшие */}
+              <Bar 
+                yAxisId="left"
+                dataKey="departed" 
+                name="departed"
+                fill="#3b82f6"
+                opacity={0.8}
+                radius={[4, 4, 0, 0]}
+                barSize={20}
+              />
+              
+              {/* Столбцы - ожидающие (если есть данные) */}
+              {chartData.some(d => d.waiting > 0) && (
+                <Bar 
+                  yAxisId="left"
+                  dataKey="waiting" 
+                  name="waiting"
+                  fill="#f59e0b"
+                  opacity={0.6}
+                  radius={[4, 4, 0, 0]}
+                  barSize={20}
                 />
-                <div className="hour-label">{data.hour}</div>
-              </div>
-            ))}
-          </div>
+              )}
+              
+              {/* Линия для пикового часа */}
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="arrived"
+                name="arrived"
+                stroke="#10b981"
+                strokeWidth={2}
+                dot={false}
+                activeDot={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
         </div>
         
-        <div className="throughput-stats">
-          <div className="stat-row">
-            <span className="stat-label">Всего уехало за день:</span>
-            <span className="stat-value">
+        {/* Подсветка пикового часа */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          marginTop: '8px',
+          padding: '8px',
+          background: '#f1f5f9',
+          borderRadius: '6px',
+          fontSize: '12px'
+        }}>
+          <div style={{ 
+            width: '8px', 
+            height: '8px', 
+            background: '#f97316', 
+            borderRadius: '2px'
+          }}></div>
+          <span>Пиковый час: <strong>{peakHour}:00</strong> (уехало {formatNumber(baseThroughput.peak_hour_passengers)} чел.)</span>
+        </div>
+        
+        {/* Статистика */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '12px',
+          marginTop: '12px'
+        }}>
+          <div style={{
+            background: '#f8fafc',
+            padding: '8px 12px',
+            borderRadius: '6px'
+          }}>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Всего уехало за день</div>
+            <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b' }}>
               {formatNumber(baseThroughput.hourly_throughput.reduce(
                 (acc: number, h: any) => acc + h.passengers_departed, 0
               ))}
-            </span>
+            </div>
           </div>
-          <div className="stat-row">
-            <span className="stat-label">Средняя очередь:</span>
-            <span className="stat-value">
+          
+          <div style={{
+            background: '#f8fafc',
+            padding: '8px 12px',
+            borderRadius: '6px'
+          }}>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Средняя очередь</div>
+            <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b' }}>
               {formatNumber(baseThroughput.hourly_throughput.reduce(
                 (acc: number, h: any) => acc + h.passengers_waiting, 0
               ) / 24)}
-            </span>
+            </div>
           </div>
         </div>
       </div>
+      
+      {/* Если есть модифицированные данные - показываем сравнение */}
+      {modifiedThroughput && (
+        <div className="panel-section">
+          <h3 className="panel-title">
+            <TrendingUp size={18} />
+            Сравнение с изменениями
+          </h3>
+          
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '8px'
+          }}>
+            <div style={{
+              padding: '8px',
+              background: '#f8fafc',
+              borderRadius: '6px',
+              borderLeft: '3px solid #3b82f6'
+            }}>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Было (час пик)</div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
+                {formatNumber(baseThroughput.peak_hour_passengers)} чел.
+              </div>
+            </div>
+            
+            <div style={{
+              padding: '8px',
+              background: '#f8fafc',
+              borderRadius: '6px',
+              borderLeft: '3px solid #f59e0b'
+            }}>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Стало (час пик)</div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
+                {formatNumber(modifiedThroughput.peak_hour_passengers)} чел.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

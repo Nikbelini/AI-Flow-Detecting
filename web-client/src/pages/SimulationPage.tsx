@@ -8,12 +8,16 @@ import {
   Play, Save, RotateCcw, Download, Eye, EyeOff,
   Clock, Users, Bus, AlertTriangle, TrendingUp,
   Plus, Trash2, Settings, Route as RouteIcon,
-  BarChart, PieChart, Activity, Target
+  PieChart, Activity, Target
 } from 'lucide-react';
 import type { Stop } from '../api/types';
 import StopMetricsModal from '../components/modal/StopMetricsModal';
 import ThroughputMetrics from '../components/ThroughputMetrics';
 import WaitTimeDistributionChart from '../components/WaitTimeDistributionChart';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, LineChart, Line, ComposedChart, Area
+} from 'recharts';
 
 // ========== ТИПЫ ==========
 
@@ -972,101 +976,111 @@ const SimulationPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Почасовая динамика - ТАБЛИЦА вместо графика */}
+                    {/* Почасовая динамика - КРАСИВЫЙ ГРАФИК НА RECHARTS */}
                     <div className="panel-section">
                       <h3 className="panel-title">
                         <Clock size={18} />
                         Почасовая динамика
                       </h3>
 
-                      <div className="hourly-table-container" style={{
-                        maxHeight: '200px',
-                        overflowY: 'auto',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '8px'
-                      }}>
-                        <table className="hourly-table" style={{
-                          width: '100%',
-                          borderCollapse: 'collapse',
-                          fontSize: '12px'
-                        }}>
-                          <thead style={{
-                            position: 'sticky',
-                            top: 0,
-                            background: '#f8fafc',
-                            borderBottom: '2px solid #e2e8f0'
-                          }}>
-                            <tr>
-                              <th style={{ padding: '8px', textAlign: 'left' }}>Час</th>
-                              <th style={{ padding: '8px', textAlign: 'right' }}>Было</th>
-                              <th style={{ padding: '8px', textAlign: 'right' }}>Стало</th>
-                              <th style={{ padding: '8px', textAlign: 'right' }}>Δ</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {simState.results.hourlyData.map((data) => {
-                              const change = data.modifiedPassengers - data.basePassengers;
-                              const changePercent = data.basePassengers > 0
-                                ? ((data.modifiedPassengers - data.basePassengers) / data.basePassengers * 100).toFixed(1)
-                                : '0';
+                      {/* Контейнер с фиксированной высотой - гарантия отображения */}
+                      <div style={{ width: '100%', height: '200px', marginTop: '8px' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart
+                            data={simState.results.hourlyData}
+                            margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                          >
+                            {/* Сетка */}
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
 
-                              return (
-                                <tr
-                                  key={data.hour}
-                                  onClick={() => setSelectedHour(data.hour)}
-                                  style={{
-                                    backgroundColor: selectedHour === data.hour ? '#e6f7ff' : 'white',
-                                    cursor: 'pointer',
-                                    borderBottom: '1px solid #f1f5f9'
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor =
-                                    selectedHour === data.hour ? '#e6f7ff' : 'white'
-                                  }
-                                >
-                                  <td style={{ padding: '6px 8px', fontWeight: 'bold' }}>
-                                    {data.hour}:00
-                                  </td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                                    {Math.round(data.basePassengers)} чел.
-                                  </td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                                    {Math.round(data.modifiedPassengers)} чел.
-                                  </td>
-                                  <td style={{
-                                    padding: '6px 8px',
-                                    textAlign: 'right',
-                                    color: change > 0 ? '#10b981' : change < 0 ? '#ef4444' : '#64748b',
-                                    fontWeight: 'bold'
-                                  }}>
-                                    {change > 0 ? '↑' : change < 0 ? '↓' : '•'} {Math.abs(change)} чел.
-                                    <span style={{ fontSize: '10px', marginLeft: '4px', opacity: 0.7 }}>
-                                      ({changePercent}%)
-                                    </span>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                            {/* Оси */}
+                            <XAxis
+                              dataKey="hour"
+                              tickFormatter={(hour) => `${hour}:00`}
+                              stroke="#64748b"
+                              fontSize={10}
+                            />
+                            <YAxis
+                              yAxisId="left"
+                              stroke="#64748b"
+                              fontSize={10}
+                              label={{ value: 'Пассажиры', angle: -90, position: 'insideLeft', fontSize: 10 }}
+                            />
+
+                            {/* Подсказки */}
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: 'white',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '6px',
+                                fontSize: '12px'
+                              }}
+                              formatter={(value: number) => [`${Math.round(value)} пасс.`, '']}
+                              labelFormatter={(hour) => `${hour}:00`}
+                            />
+
+                            {/* Легенда */}
+                            <Legend
+                              verticalAlign="top"
+                              height={36}
+                              iconType="circle"
+                              iconSize={8}
+                            />
+
+                            {/* Базовый сценарий - столбцы */}
+                            <Bar
+                              yAxisId="left"
+                              dataKey="basePassengers"
+                              name="Базовый сценарий"
+                              fill="#3b82f6"
+                              opacity={0.7}
+                              radius={[4, 4, 0, 0]}
+                              barSize={20}
+                              onClick={(data) => data && setSelectedHour(data.hour)}
+                            />
+
+                            {/* Изменённый сценарий - столбцы */}
+                            <Bar
+                              yAxisId="left"
+                              dataKey="modifiedPassengers"
+                              name="С изменениями"
+                              fill="#f59e0b"
+                              opacity={0.7}
+                              radius={[4, 4, 0, 0]}
+                              barSize={20}
+                              onClick={(data) => data && setSelectedHour(data.hour)}
+                            />
+
+                            {/* Линия для тренда (опционально) */}
+                            <Line
+                              yAxisId="left"
+                              type="monotone"
+                              dataKey="modifiedPassengers"
+                              stroke="#f59e0b"
+                              strokeWidth={2}
+                              dot={false}
+                              activeDot={false}
+                            />
+                          </ComposedChart>
+                        </ResponsiveContainer>
                       </div>
 
-                      {/* Легенда */}
+                      {/* Мини-легенда с пояснениями */}
                       <div style={{
                         display: 'flex',
-                        gap: '16px',
+                        justifyContent: 'center',
+                        gap: '20px',
                         marginTop: '8px',
-                        padding: '8px',
-                        background: '#f8fafc',
-                        borderRadius: '6px',
-                        fontSize: '11px'
+                        padding: '4px',
+                        fontSize: '11px',
+                        color: '#64748b'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <div style={{ width: '12px', height: '12px', background: '#3b82f6', borderRadius: '2px' }}></div>
-                          <span>Базовый сценарий</span>
+                          <div style={{ width: '8px', height: '8px', background: '#3b82f6', borderRadius: '2px' }}></div>
+                          <span>Базовый</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <div style={{ width: '12px', height: '12px', background: '#f59e0b', borderRadius: '2px' }}></div>
+                          <div style={{ width: '8px', height: '8px', background: '#f59e0b', borderRadius: '2px' }}></div>
                           <span>С изменениями</span>
                         </div>
                       </div>
