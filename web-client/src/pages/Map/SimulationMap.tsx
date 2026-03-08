@@ -1,3 +1,4 @@
+// src/pages/Map/SimulationMap.tsx
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -33,7 +34,9 @@ interface SimulationMapProps {
   selectedRouteId?: number | null;
   onMarkerClick?: (marker: ExtendedStop) => void;
   onRouteClick?: (route: MapRoute) => void;
+  onMapClick?: (lngLat: [number, number]) => void;
   selectionMode?: boolean;
+  creationMode?: 'stop' | 'route' | null;
 }
 
 const SimulationMap: React.FC<SimulationMapProps> = ({
@@ -43,7 +46,9 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
   selectedRouteId,
   onMarkerClick,
   onRouteClick,
-  selectionMode = false
+  onMapClick,
+  selectionMode = false,
+  creationMode = null
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -99,6 +104,23 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
     };
   }, []);
 
+  // Обработчик клика по карте для создания остановки
+  useEffect(() => {
+    if (!map.current || !mapLoaded || !onMapClick || creationMode !== 'stop') return;
+
+    const handleMapClick = (e: maplibregl.MapMouseEvent) => {
+      if (creationMode === 'stop') {
+        onMapClick([e.lngLat.lng, e.lngLat.lat]);
+      }
+    };
+
+    map.current.on('click', handleMapClick);
+
+    return () => {
+      map.current?.off('click', handleMapClick);
+    };
+  }, [mapLoaded, onMapClick, creationMode]);
+
   // Отрисовка маршрутов
   useEffect(() => {
     if (!map.current || !mapLoaded || routes.length === 0) return;
@@ -116,13 +138,11 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       map.current.removeSource('routes');
     }
 
-    // Генерируем цвета для маршрутов, если не заданы
     const routesWithColors = routes.map(route => ({
       ...route,
       color: route.color || `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`
     }));
 
-    // Создаём источник данных для маршрутов
     const features = routesWithColors.map(route => ({
       type: 'Feature' as const,
       properties: { 
@@ -148,7 +168,6 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       }
     });
 
-    // Добавляем обводку для лучшей видимости
     map.current.addLayer({
       id: 'routes-outline',
       type: 'line',
@@ -160,7 +179,6 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       }
     });
 
-    // Добавляем слой для маршрутов (основной)
     map.current.addLayer({
       id: 'routes',
       type: 'line',
@@ -169,7 +187,7 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
         'line-color': [
           'case',
           ['==', ['get', 'isSelected'], true],
-          '#f97316', // оранжевый для выбранного
+          '#f97316',
           ['get', 'color']
         ],
         'line-width': [
@@ -182,7 +200,6 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       }
     });
 
-    // Добавляем слой для подсветки при наведении
     map.current.addLayer({
       id: 'routes-highlight',
       type: 'line',
@@ -194,21 +211,17 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       }
     });
 
-    // Обработчики кликов
     map.current.on('click', 'routes', (e) => {
       if (!e.features || e.features.length === 0) return;
-      
       const feature = e.features[0];
       const routeId = feature.properties?.id;
       const route = routesWithColors.find(r => r.id === routeId);
-      
       if (route && onRouteClick) {
         console.log('🖱️ Route clicked:', route);
         onRouteClick(route);
       }
     });
 
-    // Hover эффекты
     map.current.on('mouseenter', 'routes', () => {
       map.current!.getCanvas().style.cursor = selectionMode ? 'pointer' : 'default';
       map.current!.setPaintProperty('routes-highlight', 'line-opacity', 0.3);
@@ -219,14 +232,11 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       map.current!.setPaintProperty('routes-highlight', 'line-opacity', 0);
     });
 
-    // Тултипы при наведении
     map.current.on('mousemove', 'routes', (e) => {
       if (!e.features || e.features.length === 0) return;
-      
       const feature = e.features[0];
       const routeId = feature.properties?.id;
       const route = routesWithColors.find(r => r.id === routeId);
-      
       if (route && e.lngLat) {
         showRouteTooltip(route, e.lngLat);
         setHoveredRoute(route);
@@ -249,11 +259,9 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
 
     console.log('📍 Отрисовка маркеров:', markers.length);
 
-    // Удаляем старые маркеры
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
 
-    // Создаём новые маркеры
     markers.forEach(stop => {
       const el = createMarkerElement(stop);
       
@@ -265,13 +273,10 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
         .setLngLat([stop.lng, stop.lat])
         .addTo(map.current!);
 
-      // Обработчик клика
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
-        
         console.log('✅ Marker clicked:', stop.id, stop.address);
-        
         onMarkerClick?.({
           ...stop,
           id: stop.id,
@@ -284,7 +289,6 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
         });
       });
 
-      // Hover эффекты
       el.addEventListener('mouseenter', () => {
         setHoveredStop(stop);
         showStopTooltip(stop);
@@ -301,7 +305,6 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       markersRef.current.push(marker);
     });
 
-    // Центрируем на выбранной остановке
     if (selectedStopId) {
       const selected = markers.find(m => m.id === selectedStopId);
       if (selected) {
@@ -315,13 +318,9 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
 
   }, [markers, mapLoaded, selectedStopId, onMarkerClick]);
 
-  // Показать тултип для остановки
   const showStopTooltip = (stop: ExtendedStop) => {
     if (!map.current) return;
-
-    if (popupRef.current) {
-      popupRef.current.remove();
-    }
+    if (popupRef.current) popupRef.current.remove();
 
     const popup = new maplibregl.Popup({
       closeButton: false,
@@ -343,13 +342,9 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
     popupRef.current = popup;
   };
 
-  // Показать тултип для маршрута
   const showRouteTooltip = (route: MapRoute, lngLat: maplibregl.LngLat) => {
     if (!map.current) return;
-
-    if (routePopupRef.current) {
-      routePopupRef.current.remove();
-    }
+    if (routePopupRef.current) routePopupRef.current.remove();
 
     const transportIcon = 
       route.transportType === 'BUS' ? '🚌' :
@@ -376,7 +371,6 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
     routePopupRef.current = popup;
   };
 
-  // Создание элемента маркера
   const createMarkerElement = (stop: ExtendedStop): HTMLDivElement => {
     const el = document.createElement('div');
     const size = getMarkerSize(stop.load || stop.avg_load || 3);
@@ -401,7 +395,6 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
     el.style.color = 'white';
     el.style.textShadow = '0 1px 2px rgba(0,0,0,0.3)';
 
-    // Отображаем загрузку или пиковый час
     const currentHour = new Date().getHours();
     if (stop.peak_hours?.includes(currentHour)) {
       el.textContent = '⚡';
@@ -414,21 +407,18 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
     return el;
   };
 
-  // Получение цвета по загрузке
   const getColorByLoad = (load: number): string => {
     if (load <= 3) return '#10b981';
     if (load <= 7) return '#f59e0b';
     return '#ef4444';
   };
 
-  // Получение размера маркера по загрузке
   const getMarkerSize = (load: number): number => {
     if (load <= 3) return 32;
     if (load <= 7) return 40;
     return 48;
   };
 
-  // Получение метки кластера
   const getClusterLabel = (cluster: string): string => {
     const labels: Record<string, string> = {
       'office': '🏢 Офисный район',
@@ -449,6 +439,13 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
         <div className="simulation-map-hint">
           <MapPin size={16} />
           <span>Кликните на остановку или маршрут для выбора</span>
+        </div>
+      )}
+
+      {creationMode === 'stop' && (
+        <div className="simulation-map-hint creation">
+          <MapPin size={16} />
+          <span>Кликните на карту, чтобы добавить новую остановку</span>
         </div>
       )}
 
@@ -478,7 +475,6 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
         </div>
       )}
 
-      {/* Легенда */}
       <div className="map-legend">
         <div className="legend-title">Загрузка</div>
         <div className="legend-item">

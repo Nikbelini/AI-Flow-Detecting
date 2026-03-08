@@ -840,6 +840,10 @@ class SimulationEngine:
         for mod in modifications:
             if mod.type == ModificationType.CLOSE_STOP:
                 self._apply_close_stop(modified, mod)
+            elif mod.type == ModificationType.ADD_STOP:
+                self._apply_add_stop(modified, mod)
+            elif mod.type == ModificationType.ADD_ROUTE:
+                self._apply_add_route(modified, mod)
             elif mod.type == ModificationType.CHANGE_INTERVAL:
                 self._apply_change_interval(modified, mod)
             elif mod.type == ModificationType.CHANGE_CAPACITY:
@@ -954,3 +958,127 @@ class SimulationEngine:
         
         affected.sort(key=lambda x: abs(x.loadChange), reverse=True)
         return affected[:10]
+
+    def _apply_add_stop(self, network: Dict, mod: Modification):
+        """
+        Добавление новой остановки
+        """
+        stop_id = mod.targetId
+        params = mod.parameters
+        
+        # Получаем параметры новой остановки
+        address = params.get("address", f"Новая остановка {stop_id}")
+        lat = params.get("lat", 0)
+        lng = params.get("lng", 0)
+        capacity = params.get("capacity", 50)
+        pattern = params.get("pattern", [5] * 24)
+        
+        # Определяем кластер на основе местоположения (упрощённо)
+        # В реальности можно использовать более сложную логику
+        cluster = "unknown"
+        peak_hours = []
+        
+        # Создаём новую остановку
+        network["stops"][stop_id] = {
+            "id": stop_id,
+            "address": address,
+            "lat": lat,
+            "lng": lng,
+            "pattern": pattern,
+            "base_load": 3,
+            "cluster": cluster,
+            "peak_hours": peak_hours,
+            "capacity": capacity,
+            "routes": [],
+            "theoretical_capacity": 0,  # будет пересчитано позже
+            "closed_hours": [],
+            "redistributed": {},
+            "carryover": 0
+        }
+        
+        # Инициализируем stop_routes для новой остановки
+        if stop_id not in network["stop_routes"]:
+            network["stop_routes"][stop_id] = []
+        
+        logger.info(f"➕ Добавлена новая остановка {stop_id}: {address}")
+
+    def _apply_add_route(self, network: Dict, mod: Modification):
+        """
+        Добавление нового маршрута
+        """
+        route_id = mod.targetId
+        params = mod.parameters
+        
+        # Получаем параметры нового маршрута
+        number = params.get("number", str(route_id))
+        stops = params.get("stops", [])
+        interval = params.get("interval", 15)
+        transport_type = params.get("transportType", "BUS")
+        path = params.get("path", [])
+        
+        # Валидация: маршрут должен содержать хотя бы 2 остановки
+        if len(stops) < 2:
+            logger.warning(f"⚠️ Маршрут {route_id} содержит менее 2 остановок, пропускаем")
+            return
+        
+        # Создаём новый маршрут
+        network["routes"][route_id] = {
+            "id": route_id,
+            "number": number,
+            "base_interval": interval,
+            "current_interval": interval,
+            "stops": stops,
+            "transport_type": transport_type,
+            "frequency": 60 / max(interval, 1),
+            "capacity_per_hour": (60 / max(interval, 1)) * self.BUS_CAPACITY,
+            "vehicle_capacity": self.BUS_CAPACITY
+        }
+        
+        # Добавляем маршрут к каждой остановке
+        for i, stop_id in enumerate(stops):
+            if stop_id in network["stops"]:
+                # Добавляем информацию о маршруте в остановку
+                if "routes" not in network["stops"][stop_id]:
+                    network["stops"][stop_id]["routes"] = []
+                
+                route_info = {
+                    "route_id": route_id,
+                    "order": i,
+                    "interval": interval,
+                    "capacity_per_hour": network["routes"][route_id]["capacity_per_hour"]
+                }
+                network["stops"][stop_id]["routes"].append(route_info)
+                
+                # Добавляем в обратный индекс
+                if stop_id not in network["stop_routes"]:
+                    network["stop_routes"][stop_id] = []
+                network["stop_routes"][stop_id].append(route_id)
+        
+        # Строим связи между остановками для нового маршрута
+        for i in range(len(stops) - 1):
+            stop_a = stops[i]
+            stop_b = stops[i + 1]
+            
+            key = f"{min(stop_a, stop_b)}:{max(stop_a, stop_b)}"
+            if key not in network["stop_connections"]:
+                network["stop_connections"][key] = []
+            
+            connection = {
+                "route_id": route_id,
+                "from_stop": stop_a,
+                "to_stop": stop_b,
+                "travel_time": 5  # минут по умолчанию
+            }
+            network["stop_connections"][key].append(connection)
+        
+        # Пересчитываем теоретическую пропускную способность для затронутых остановок
+        for stop_id in stops:
+            if stop_id in network["stops"]:
+                route_ids = network["stop_routes"].get(stop_id, [])
+                theoretical_capacity = 0
+                for rid in route_ids:
+                    if rid in network["routes"]:
+                        theoretical_capacity += network["routes"][rid]["capacity_per_hour"]
+                network["stops"][stop_id]["theoretical_capacity"] = theoretical_capacity
+        
+        logger.info(f"🛤️ Добавлен новый маршрут {route_id}: {number}, остановок: {len(stops)}")

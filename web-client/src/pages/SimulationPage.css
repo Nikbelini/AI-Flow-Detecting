@@ -695,3 +695,67 @@
     height: auto;
   }
 }
+
+.creation-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.creation-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  color: #334155;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.creation-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.creation-btn.active {
+  background: #3b82f6;
+  border-color: #2563eb;
+  color: white;
+}
+
+.route-creation-indicator {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  margin-top: 8px;
+}
+
+.selected-stops-list {
+  max-height: 150px;
+  overflow-y: auto;
+  margin: 8px 0;
+  padding: 4px;
+  background: white;
+  border-radius: 4px;
+}
+
+.selected-stop-item {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.route-creation-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.action-btn.small {
+  padding: 6px 12px;
+  font-size: 13px;
+}
