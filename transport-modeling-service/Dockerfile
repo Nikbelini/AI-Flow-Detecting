@@ -1,25 +1,34 @@
+# transport-modeling-service/Dockerfile
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Устанавливаем зависимости системы
+# Установка системных зависимостей
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Копируем зависимости
+# Копирование зависимостей
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копируем код
-COPY app/ ./app/
+# Копирование кода
+COPY . .
 
-# Создаем директории
-RUN mkdir -p models data visualizations
+# Создаём __init__.py
+RUN touch /app/__init__.py
 
-# Порт
-EXPOSE 8000
+# Делаем run.py исполняемым
+RUN chmod +x /app/run.py
 
-# Запуск
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Устанавливаем PYTHONPATH
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Порты
+EXPOSE 8084
+
+# ЗАПУСК ЧЕРЕЗ run.py (это решает проблему!)
+CMD ["python", "run.py"]

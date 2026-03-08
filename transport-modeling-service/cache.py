@@ -1,196 +1,135 @@
-# map_cache_service.py
-from fastapi import FastAPI, HTTPException
-import redis
-import pandas as pd
+# transport-modeling-service/cache.py
 import json
-from datetime import datetime, timedelta
-from sqlalchemy import create_engine
-import numpy as np
+import redis
+from typing import Optional, List, Dict, Any, Callable, Awaitable
+import logging
+from datetime import timedelta
+import asyncio
 
-app = FastAPI()
-redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
-pg_engine = create_engine('postgresql://user:pass@localhost/flowdetect')
+logger = logging.getLogger(__name__)
 
-# Конфигурация
-CACHE_TTL_DAYS = 30  # 30 дней жизни кэша
-CITIES = {1: "Ульяновск"}
-
-@app.get("/city/{city_id}/map")
-async def get_city_map(city_id: int):
-    """
-    Получение карты города с данными остановок
-    """
-    cache_key = f"city:{city_id}:map"
+class CacheService:
+    def __init__(self, redis_client: redis.Redis):
+        self.redis = redis_client
+        self.default_ttl = timedelta(days=30)
     
-    # 1. Проверяем Redis
-    cached = redis_client.get(cache_key)
+    async def get_city_stops(self, city_id: int) -> Optional[List[Dict]]:
+        """Получение всех остановок города из кэша"""
+        key = f"city:{city_id}:stops"
+        try:
+            data = self.redis.get(key)
+            if data:
+                logger.info(f"✅ Кэш HIT: {key}")
+                return json.loads(data)
+            logger.info(f"❌ Кэш MISS: {key}")
+        except Exception as e:
+            logger.error(f"❌ Ошибка чтения кэша {key}: {e}")
+        return None
     
-    if cached:
-        cache_data = json.loads(cached)
-        cache_age = datetime.now() - datetime.fromisoformat(cache_data['cached_at'])
-        
-        # 2. Если кэш свежий (< 30 дней) — отдаём
-        if cache_age.days < CACHE_TTL_DAYS:
-            return {
-                "city": CITIES.get(city_id),
-                "data": cache_data['stops'],
-                "cached": True,
-                "age_days": cache_age.days,
-                "expires_in_days": CACHE_TTL_DAYS - cache_age.days
-            }
-        else:
-            print(f"⚠️ Кэш города {city_id} устарел ({cache_age.days} дней)")
-            # Продолжаем — пересчитаем
+    async def save_city_stops(self, city_id: int, stops: List[Dict]):
+        """Сохранение остановок города в кэш"""
+        key = f"city:{city_id}:stops"
+        try:
+            self.redis.setex(
+                key,
+                self.default_ttl,
+                json.dumps(stops, default=str)
+            )
+            logger.info(f"💾 Сохранено в кэш: {key} ({len(stops)} остановок)")
+        except Exception as e:
+            logger.error(f"❌ Ошибка сохранения кэша {key}: {e}")
     
-    # 3. Кэша нет или устарел — запускаем сублимацию
-    print(f"🔄 Запуск сублимации для города {city_id}...")
-    map_data = await sublimate_city_data(city_id)
+    async def delete_city_stops(self, city_id: int):
+        """Удаление кэша города"""
+        key = f"city:{city_id}:stops"
+        try:
+            self.redis.delete(key)
+            logger.info(f"🗑️ Удалён кэш: {key}")
+        except Exception as e:
+            logger.error(f"❌ Ошибка удаления кэша {key}: {e}")
     
-    # 4. Сохраняем в Redis
-    cache_entry = {
-        'stops': map_data,
-        'cached_at': datetime.now().isoformat(),
-        'city_id': city_id
-    }
+    async def get_stop(self, stop_id: int) -> Optional[Dict]:
+        """Получение конкретной остановки из кэша"""
+        key = f"stop:{stop_id}"
+        try:
+            data = self.redis.get(key)
+            if data:
+                return json.loads(data)
+        except Exception as e:
+            logger.error(f"❌ Ошибка чтения кэша {key}: {e}")
+        return None
     
-    redis_client.setex(
-        cache_key, 
-        timedelta(days=CACHE_TTL_DAYS + 1),  # +1 день запаса
-        json.dumps(cache_entry, default=str)
-    )
+    async def save_stop(self, stop_id: int, stop_data: Dict):
+        """Сохранение остановки в кэш"""
+        key = f"stop:{stop_id}"
+        try:
+            self.redis.setex(key, self.default_ttl, json.dumps(stop_data, default=str))
+        except Exception as e:
+            logger.error(f"❌ Ошибка сохранения кэша {key}: {e}")
     
-    return {
-        "city": CITIES.get(city_id),
-        "data": map_data,
-        "cached": False,
-        "generated": datetime.now().isoformat()
-    }
-
-async def sublimate_city_data(city_id: int):
-    """
-    Сублимация данных для конкретного города
-    """
-    # 1. Получаем все остановки города
-    stops_query = f"SELECT id, address, lat, lng FROM stops WHERE city_id = {city_id}"
-    stops_df = pd.read_sql(stops_query, pg_engine)
+    async def save_task(self, task_id: str, task_data: Dict):
+        """Сохранение задачи асинхронной симуляции"""
+        key = f"task:{task_id}"
+        try:
+            self.redis.setex(key, timedelta(hours=1), json.dumps(task_data, default=str))
+        except Exception as e:
+            logger.error(f"❌ Ошибка сохранения задачи {key}: {e}")
     
-    result = []
+    async def get_task(self, task_id: str) -> Optional[Dict]:
+        """Получение задачи"""
+        key = f"task:{task_id}"
+        try:
+            data = self.redis.get(key)
+            if data:
+                return json.loads(data)
+        except Exception as e:
+            logger.error(f"❌ Ошибка чтения задачи {key}: {e}")
+        return None
     
-    # 2. Для каждой остановки собираем сублимат
-    for _, stop in stops_df.iterrows():
-        stop_id = stop['id']
-        
-        # Загружаем историю за последние 3 месяца
-        history_query = f"""
-            SELECT 
-                EXTRACT(DOW FROM datetime) as dow,
-                EXTRACT(HOUR FROM datetime) as hour,
-                count, velocity, load
-            FROM stops_history 
-            WHERE stop_id = {stop_id}
-            AND datetime >= NOW() - INTERVAL '90 days'
+    async def update_task(self, task_id: str, updates: Dict):
+        """Обновление задачи"""
+        key = f"task:{task_id}"
+        try:
+            task = await self.get_task(task_id)
+            if task:
+                task.update(updates)
+                self.redis.setex(key, timedelta(hours=1), json.dumps(task, default=str))
+        except Exception as e:
+            logger.error(f"❌ Ошибка обновления задачи {key}: {e}")
+    
+    # Полезный метод для паттерна "кэш или вычисление"
+    async def get_or_compute(
+        self, 
+        key: str, 
+        compute_func: Callable[[], Awaitable[Any]], 
+        ttl: Optional[timedelta] = None
+    ) -> Any:
         """
+        Получить из кэша или вычислить и сохранить
+        """
+        # Пробуем из кэша
+        try:
+            data = self.redis.get(key)
+            if data:
+                logger.info(f"✅ Кэш HIT: {key}")
+                return json.loads(data)
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка чтения кэша {key}: {e}")
         
-        history_df = pd.read_sql(history_query, pg_engine)
+        # Вычисляем
+        logger.info(f"🔄 Вычисление {key}...")
+        result = await compute_func()
         
-        if history_df.empty:
-            # Нет истории — базовые значения
-            stop_data = {
-                'id': stop_id,
-                'address': stop['address'],
-                'lat': float(stop['lat']),
-                'lng': float(stop['lng']),
-                'avg_pattern': [5] * 24,  # Заглушка
-                'cluster': 'unknown',
-                'peak_hours': []
-            }
-        else:
-            # Считаем паттерн по часам
-            pattern = []
-            for hour in range(24):
-                hour_data = history_df[history_df['hour'] == hour]
-                if not hour_data.empty:
-                    avg = hour_data['count'].mean()
-                    pattern.append(round(avg, 1))
-                else:
-                    pattern.append(0)
-            
-            # Определяем пиковые часы
-            peak_hours = []
-            for h in range(24):
-                if pattern[h] > np.mean(pattern) * 1.5:
-                    peak_hours.append(h)
-            
-            # Кластеризация (упрощённо)
-            if 7 in peak_hours and 18 in peak_hours:
-                cluster = 'office'
-            elif 12 in peak_hours and 19 in peak_hours:
-                cluster = 'shopping'
-            elif 8 in peak_hours and 14 in peak_hours:
-                cluster = 'educational'
-            else:
-                cluster = 'residential'
-            
-            stop_data = {
-                'id': stop_id,
-                'address': stop['address'],
-                'lat': float(stop['lat']),
-                'lng': float(stop['lng']),
-                'avg_pattern': pattern,
-                'cluster': cluster,
-                'peak_hours': peak_hours,
-                'max_count': int(history_df['count'].max()),
-                'avg_load': round(history_df['load'].mean(), 1)
-            }
+        # Сохраняем
+        if result is not None:
+            try:
+                self.redis.setex(
+                    key, 
+                    ttl or self.default_ttl, 
+                    json.dumps(result, default=str)
+                )
+                logger.info(f"💾 Сохранено в кэш: {key}")
+            except Exception as e:
+                logger.warning(f"⚠️ Ошибка сохранения кэша {key}: {e}")
         
-        result.append(stop_data)
-    
-    return result
-
-@app.get("/city/{city_id}/refresh")
-async def refresh_city_cache(city_id: int):
-    """Принудительное обновление кэша города"""
-    cache_key = f"city:{city_id}:map"
-    
-    # Удаляем старый кэш
-    redis_client.delete(cache_key)
-    
-    # Генерируем новый
-    map_data = await sublimate_city_data(city_id)
-    
-    cache_entry = {
-        'stops': map_data,
-        'cached_at': datetime.now().isoformat(),
-        'city_id': city_id
-    }
-    
-    redis_client.setex(
-        cache_key,
-        timedelta(days=CACHE_TTL_DAYS + 1),
-        json.dumps(cache_entry, default=str)
-    )
-    
-    return {"status": "refreshed", "city_id": city_id}
-
-@app.get("/admin/cache/stats")
-async def cache_stats():
-    """Статистика кэша"""
-    stats = {}
-    for city_id in CITIES.keys():
-        key = f"city:{city_id}:map"
-        cached = redis_client.get(key)
-        if cached:
-            data = json.loads(cached)
-            age = datetime.now() - datetime.fromisoformat(data['cached_at'])
-            stats[city_id] = {
-                'city': CITIES[city_id],
-                'cached': True,
-                'age_days': age.days,
-                'stops_count': len(data['stops'])
-            }
-        else:
-            stats[city_id] = {
-                'city': CITIES[city_id],
-                'cached': False
-            }
-    return stats
+        return result
