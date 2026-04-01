@@ -1,0 +1,30 @@
+// Интерфейс для остановки (с сервера)
+export interface StopFromServer {
+  id: number;
+  name: string;
+  lat: number;
+  lng: number;
+  address: string;
+  city_id: number;
+  passenger_count: number;
+  load: number;
+  velocity: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Интерфейс для остановки (для внутреннего использования)
+export interface Stop {
+  id: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+  coordinates: [number, number]; // [lng, lat] для Mapbox
+  address: string;
+  cityId: number;
+  passengerCount: number;
+  load: number;
+  velocity: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
