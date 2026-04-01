@@ -1,5 +1,7 @@
 package ru.slivkiai.flowdetect.auth.controller;
 
+import java.util.Map;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +24,7 @@ import ru.slivkiai.flowdetect.auth.dto.OtpVerifyRequest;
 import ru.slivkiai.flowdetect.auth.dto.RegisterRequest;
 import ru.slivkiai.flowdetect.auth.dto.RegisterResponse;
 import ru.slivkiai.flowdetect.auth.dto.ResendOtpRequest;
+import ru.slivkiai.flowdetect.auth.dto.ResetPasswordByTokenRequest;
 import ru.slivkiai.flowdetect.auth.dto.ResetPasswordRequest;
 import ru.slivkiai.flowdetect.auth.service.AuthService;
 import ru.slivkiai.flowdetect.user.dto.UserGetResponse;
@@ -118,6 +121,49 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/resend-otp")
+    public ResponseEntity<String> repeatOtp(@RequestBody ResendOtpRequest request) {
+        authService.repeatOtpCode(request);
+        return ResponseEntity.ok("OTP repeat");
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<String> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok("OTP sent to email");
+    }
+
+    @PostMapping("/verify-otp-forgot-password")
+    public ResponseEntity<String> verifyOtpForgotPassword(@RequestBody OtpVerifyRequest request) {
+        authService.verifyOtpForgotPassword(request);
+        return ResponseEntity.ok("OTP verify success!");
+    }
+
+    @PostMapping("/verify-otp-forgot-password/token")
+    public ResponseEntity<Map<String, String>> verifyOtpForResetToken(@RequestBody OtpVerifyRequest request) {
+        String resetToken = authService.verifyOtpForPasswordReset(request);
+        return ResponseEntity.ok(Map.of("resetToken", resetToken, "message", "Код подтверждён. Используйте токен для смены пароля."));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<String> resetPassword(@RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok("Password has been reset successfully");
+    }
+
+    @PostMapping("/reset-password/by-token")
+    public ResponseEntity<Map<String, String>> resetPasswordByToken(@RequestBody @Valid ResetPasswordByTokenRequest request) {
+        authService.resetPasswordByToken(request);
+        return ResponseEntity.ok(Map.of("message", "Пароль успешно изменён", "redirect", "/login"));
+    }
+
+    @GetMapping("/valid-token")
+    public ResponseEntity<String> validToken(@RequestParam("token") String token) {
+        authService.validToken(token);
+        return ResponseEntity.ok("Token is valid");
+    }
+
+    // === Для работы на Cookie === //
     private void addHttpOnlyCookie(HttpServletResponse response, String name, String value,
             int maxAge, boolean isSecure) {
         boolean secure = isSecure; // в продакшене будет true автоматически
@@ -145,35 +191,5 @@ public class AuthController {
 
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
         log.debug("Cleared cookie: {}", name);
-    }
-
-    @PostMapping("/resend-otp")
-    public ResponseEntity<String> repeatOtp(@RequestBody ResendOtpRequest request) {
-        authService.repeatOtpCode(request);
-        return ResponseEntity.ok("OTP repeat");
-    }
-
-    @PostMapping("/forgot-password")
-    public ResponseEntity<String> forgotPassword(@RequestBody ForgotPasswordRequest request) {
-        authService.forgotPassword(request);
-        return ResponseEntity.ok("OTP sent to email");
-    }
-
-    @PostMapping("/verify-otp-forgot-password")
-    public ResponseEntity<String> verifyOtpForgotPassword(@RequestBody OtpVerifyRequest request) {
-        authService.verifyOtpForgotPassword(request);
-        return ResponseEntity.ok("OTP verify success!");
-    }
-
-    @PostMapping("/reset-password")
-    public ResponseEntity<String> resetPassword(@RequestBody ResetPasswordRequest request) {
-        authService.resetPassword(request);
-        return ResponseEntity.ok("Password has been reset successfully");
-    }
-
-    @GetMapping("/valid-token")
-    public ResponseEntity<String> validToken(@RequestParam("token") String token) {
-        authService.validToken(token);
-        return ResponseEntity.ok("Token is valid");
     }
 }

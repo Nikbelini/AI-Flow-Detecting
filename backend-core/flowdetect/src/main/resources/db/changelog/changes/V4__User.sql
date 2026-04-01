@@ -40,6 +40,8 @@ CREATE TABLE device_sessions (
     user_id BIGINT NOT NULL,
 
     session_id VARCHAR(255) NOT NULL UNIQUE,
+    device_fingerprint VARCHAR(64) NOT NULL,
+
     revoked BOOLEAN NOT NULL DEFAULT FALSE,
 
     device_name VARCHAR(255),

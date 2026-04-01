@@ -1,6 +1,7 @@
 package ru.slivkiai.flowdetect.auth.jwt;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -102,4 +103,34 @@ public class JwtService {
     public String extractDeviceId(String token) {
         return extractClaim(token, c -> c.get("deviceId", String.class));
     }
+
+    public String generateResetToken(String email) {
+        return Jwts.builder()
+                .subject(email)
+                .claim("type", "PASSWORD_RESET")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + jwtProperties.getResetTokenExpirationMs()))
+                .signWith(secretKey, Jwts.SIG.HS256)
+                .compact();
+    }
+
+    public String validateResetToken(String token) {
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(secretKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+
+            if (!"PASSWORD_RESET".equals(claims.get("type", String.class))) {
+                return null;
+            }
+
+            return claims.getSubject();
+
+        } catch (JwtException | IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
 }

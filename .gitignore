@@ -8,6 +8,8 @@ __pycache__/
 
 .vs
 .vscode
+.env.production 
+.env.development
 
 # Distribution / packaging
 .Python

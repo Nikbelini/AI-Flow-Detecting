@@ -2,6 +2,7 @@ package ru.slivkiai.flowdetect.auth.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -54,6 +55,7 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/api/auth/**",
                                 "/api/user/me",
@@ -112,11 +114,15 @@ public class SecurityConfig {
                 "Accept",
                 "Origin",
                 "Access-Control-Request-Method",
-                "Access-Control-Request-Headers"));
+                "Access-Control-Request-Headers",
+                "X-Device-Id"
+            ));
 
         // Какие заголовки можно читать на клиенте
         configuration.setExposedHeaders(List.of(
-                "Authorization"));
+                "Authorization",
+                "Content-Type"
+            ));
 
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);

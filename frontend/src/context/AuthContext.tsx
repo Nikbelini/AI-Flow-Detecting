@@ -19,6 +19,7 @@ type AuthContextType = {
     tempToken: string | null;
     setTempToken: (token: string | null) => void;
     checkAuth: () => Promise<void>;
+    refreshUser: () => Promise<void>;
 };
 
 const isValidRole = (role: string): role is UserRoles => {
@@ -45,6 +46,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 email: userData.email,
                 fullName: userData.fullName,
                 role: userData.role.toUpperCase() as UserRoles,
+
+                emailConfirmed: userData.emailConfirmed ?? false,
+                twoFactorEnabled: userData.twoFactorEnabled ?? false,
+                accountLocked: userData.accountLocked ?? false,
+                failedAttempts: userData.failedAttempts ?? 0,
+                lockUntil: userData.lockUntil ?? null,
+                lastPasswordChangeAt: userData.lastPasswordChangeAt ?? null,
+                lastLoginAt: userData.lastLoginAt ?? null,
+                createdAt: userData.createdAt,
             });
         } catch {
             setUser(null);
@@ -57,6 +67,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         checkAuth();
     }, [checkAuth]);
 
+
+    const refreshUser = useCallback(async () => {
+        try {
+            const userData = await getCurrentUser();
+            if (!userData?.role || !isValidRole(userData.role)) {
+                setUser(null);
+                return;
+            }
+            setUser({
+                id: userData.id,
+                email: userData.email,
+                fullName: userData.fullName,
+                role: userData.role.toUpperCase() as UserRoles,
+
+                emailConfirmed: userData.emailConfirmed ?? false,
+                twoFactorEnabled: userData.twoFactorEnabled ?? false,
+                accountLocked: userData.accountLocked ?? false,
+                failedAttempts: userData.failedAttempts ?? 0,
+                lockUntil: userData.lockUntil ?? null,
+                lastPasswordChangeAt: userData.lastPasswordChangeAt ?? null,
+                lastLoginAt: userData.lastLoginAt ?? null,
+                createdAt: userData.createdAt,
+            });
+        } catch {
+            setUser(null);
+        }
+    }, []);
 
     const login = async (email: string, password: string): Promise<AuthResponse> => {
         setIsLoading(true);
@@ -119,8 +156,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     return (
         <AuthContext.Provider value={{
-            user, login, verifyOtp, resendOtp: handleResendOtp,
-            logout, isLoading, tempToken, setTempToken, checkAuth
+            user, login, verifyOtp, resendOtp: handleResendOtp, logout, 
+            isLoading, tempToken, setTempToken, checkAuth, refreshUser
         }}>
             {children}
         </AuthContext.Provider>

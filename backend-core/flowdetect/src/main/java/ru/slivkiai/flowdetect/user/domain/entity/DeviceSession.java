@@ -23,7 +23,13 @@ public class DeviceSession {
     private User user;
 
     // session
+    @Column(name = "session_id", nullable = false, length = 64)
     private String sessionId;
+
+    // хеш-отпечаток для надёжного поиска
+    @Column(name = "device_fingerprint", length = 64)
+    private String deviceFingerprint;
+
     private boolean revoked;
 
     // === Device Info ===

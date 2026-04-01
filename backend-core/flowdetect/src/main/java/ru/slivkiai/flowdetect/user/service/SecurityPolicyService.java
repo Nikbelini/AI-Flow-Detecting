@@ -7,7 +7,7 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import ru.slivkiai.flowdetect.user.domain.entity.SecurityPolicy;
 import ru.slivkiai.flowdetect.user.domain.entity.User;
-import ru.slivkiai.flowdetect.user.dto.UserUpdatePolicy;
+import ru.slivkiai.flowdetect.user.dto.PolicyUpdate;
 import ru.slivkiai.flowdetect.user.repository.SecurityPolicyRepository;
 import ru.slivkiai.flowdetect.user.repository.UserRepository;
 
@@ -19,7 +19,7 @@ public class SecurityPolicyService {
 
     private final UserRepository userRepository;
 
-    public void updateMyPolicy(long currentUserId, UserUpdatePolicy dto) {
+    public void updateMyPolicy(long currentUserId, PolicyUpdate dto) {
         SecurityPolicy policy = securityPolicyRepository.findByUserId(currentUserId)
                 .orElseGet(() -> createDefault(currentUserId));
 
@@ -38,7 +38,7 @@ public class SecurityPolicyService {
         applyPolicyUpdate(policy, dto);
     }
 
-    public void updatePolicyAsAdmin(long targetUserId, UserUpdatePolicy dto) {
+    public void updatePolicyAsAdmin(long targetUserId, PolicyUpdate dto) {
         SecurityPolicy securityPolicy = securityPolicyRepository.findByUserId(targetUserId)
                 .orElseGet(() -> createDefault(targetUserId));
 
@@ -51,7 +51,7 @@ public class SecurityPolicyService {
             .orElseGet(() -> createDefault(userId));
     }
 
-    private void applyPolicyUpdate(SecurityPolicy securityPolicy, UserUpdatePolicy dto) {
+    private void applyPolicyUpdate(SecurityPolicy securityPolicy, PolicyUpdate dto) {
         if (dto.passwordExpirationDays() != null) {
             if (dto.passwordExpirationDays() < 1 || dto.passwordExpirationDays() > 365) {
                 throw new IllegalArgumentException("Invalid password expiration");

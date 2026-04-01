@@ -1,12 +1,3 @@
-export type UserRoles = 'USER' | 'ADMIN' | 'MODERATOR';
-
-export interface User {
-  id: string;
-  email: string;
-  fullName: string;
-  role: UserRoles;
-}
-
 export interface AuthResponse {
   accessToken?: string;
   refreshToken?: string;
@@ -19,6 +10,7 @@ export interface AuthResponse {
 export interface LoginCredentials {
   email: string;
   password: string;
+  deviceId?: string;
 }
 
 export interface OtpVerifyPayload {
@@ -26,4 +18,10 @@ export interface OtpVerifyPayload {
   tempToken?: string;
   email?: string;
   type?: 'LOGIN' | 'FORGOT_PASSWORD';
+  deviceId?: string;
+}
+
+export interface OtpVerifyResponse {
+  resetToken: string;
+  message: string;
 }

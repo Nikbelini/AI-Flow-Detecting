@@ -1,0 +1,455 @@
+/* ===== Переменные ===== */
+:root {
+  --otp-bg-primary: #0f0f23;
+  --otp-bg-secondary: #1a1a3a;
+  --otp-accent: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
+  --otp-accent-glow: rgba(99, 102, 241, 0.45);
+  --otp-text-primary: #ffffff;
+  --otp-text-secondary: rgba(255, 255, 255, 0.75);
+  --otp-text-muted: rgba(255, 255, 255, 0.45);
+  --otp-border: rgba(255, 255, 255, 0.12);
+  --otp-card-bg: rgba(26, 26, 58, 0.85);
+  --otp-input-bg: rgba(255, 255, 255, 0.08);
+  --otp-input-border: rgba(255, 255, 255, 0.18);
+  --otp-radius-card: 24px;
+  --otp-radius-input: 14px;
+  --otp-radius-btn: 14px;
+  --otp-blur: blur(24px);
+  --otp-shadow-card: 0 32px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--otp-border);
+  --otp-shadow-btn: 0 8px 32px var(--otp-accent-glow);
+  --otp-transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===== Обёртка страницы ===== */
+.otp-page-wrapper {
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+  background: var(--otp-bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.otp-protected-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--otp-bg-primary);
+  padding: 20px;
+}
+
+/* ===== Анимированный фон ===== */
+.otp-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.bg-gradient {
+  position: absolute;
+  inset: 0;
+  background: 
+    radial-gradient(ellipse at top, rgba(99, 102, 241, 0.25), transparent 60%),
+    radial-gradient(ellipse at bottom right, rgba(217, 70, 239, 0.2), transparent 50%),
+    linear-gradient(180deg, var(--otp-bg-primary), var(--otp-bg-secondary));
+  animation: gradientFlow 20s ease infinite;
+  background-size: 200% 200%;
+}
+
+@keyframes gradientFlow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.35;
+  animation: orbFloat 25s ease-in-out infinite;
+}
+
+.orb-1 {
+  width: 500px;
+  height: 500px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  top: -150px;
+  right: -100px;
+}
+
+.orb-2 {
+  width: 350px;
+  height: 350px;
+  background: linear-gradient(135deg, #d946ef, #ec4899);
+  bottom: -80px;
+  left: -80px;
+  animation-delay: -12s;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.03); }
+  66% { transform: translate(-15px, 25px) scale(0.97); }
+}
+
+/* ===== Контент ===== */
+.otp-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+/* ===== Карточка ===== */
+.otp-card {
+  width: 100%;
+  background: var(--otp-card-bg);
+  backdrop-filter: var(--otp-blur);
+  -webkit-backdrop-filter: var(--otp-blur);
+  border: 1px solid var(--otp-border);
+  border-radius: var(--otp-radius-card);
+  box-shadow: var(--otp-shadow-card);
+  padding: 36px 32px;
+  animation: cardAppear 0.4s ease-out;
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes cardAppear {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.card-accent-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--otp-accent);
+}
+
+/* ===== Хедер ===== */
+.otp-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.logo-wrapper {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 18px;
+  background: var(--otp-accent);
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 40px var(--otp-accent-glow);
+  animation: logoPulse 3s ease-in-out infinite;
+}
+
+@keyframes logoPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+.logo-icon {
+  font-size: 32px;
+  color: white;
+}
+
+.otp-title {
+  margin: 0 0 6px !important;
+  color: var(--otp-text-primary);
+  font-weight: 800;
+  font-size: 26px;
+}
+
+.otp-subtitle {
+  color: var(--otp-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.otp-subtitle strong {
+  color: var(--otp-text-secondary);
+  font-weight: 600;
+}
+
+/* ===== Alert ===== */
+.otp-alert {
+  margin-bottom: 22px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(239, 68, 68, 0.18);
+  font-size: 13px;
+}
+
+.otp-alert .ant-alert-message {
+  color: #fecaca;
+  font-weight: 600;
+}
+
+/* ===== Форма ===== */
+.otp-form {
+  margin-bottom: 8px;
+}
+
+.otp-form-item {
+  margin-bottom: 24px !important;
+}
+
+/* ===== OTP компонент Ant Design ===== */
+.otp-component {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.otp-component .ant-otp-input {
+  width: 52px !important;
+  height: 60px !important;
+  text-align: center;
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  border: 2px solid var(--otp-input-border) !important;
+  border-radius: var(--otp-radius-input) !important;
+  background: var(--otp-input-bg) !important;
+  color: var(--otp-text-primary) !important;
+  transition: var(--otp-transition) !important;
+}
+
+.otp-component .ant-otp-input:hover {
+  border-color: rgba(99, 102, 241, 0.6) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  transform: translateY(-2px);
+}
+
+.otp-component .ant-otp-input:focus,
+.otp-component .ant-otp-input-active {
+  border-color: #6366f1 !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25) !important;
+  transform: translateY(-2px);
+}
+
+.otp-component .ant-otp-input::placeholder {
+  color: var(--otp-text-muted) !important;
+  opacity: 0.6;
+}
+
+/* Анимация при вводе */
+@keyframes otpPop {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.otp-component .ant-otp-input:active {
+  animation: otpPop 0.15s ease;
+}
+
+/* ===== Кнопка ===== */
+.otp-submit {
+  margin: 8px 0 4px;
+}
+
+.otp-button {
+  height: 52px !important;
+  border-radius: var(--otp-radius-btn) !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  background: var(--otp-accent) !important;
+  border: none !important;
+  color: white !important;
+  box-shadow: var(--otp-shadow-btn) !important;
+  transition: var(--otp-transition) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.otp-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 45px var(--otp-accent-glow) !important;
+  filter: brightness(1.05);
+}
+
+.otp-button:active:not(:disabled) {
+  transform: translateY(0);
+  transition-duration: 0.1s;
+}
+
+.otp-button[disabled] {
+  opacity: 0.75;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* ===== Футер ===== */
+.otp-footer {
+  text-align: center;
+  padding-top: 16px;
+  margin-top: 8px;
+  border-top: 1px solid var(--otp-border);
+}
+
+.otp-resend-btn {
+  font-size: 14px !important;
+  color: var(--otp-text-secondary) !important;
+  transition: var(--otp-transition) !important;
+}
+
+.otp-resend-btn:hover:not(:disabled) {
+  color: #a5b4fc !important;
+}
+
+.otp-resend-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.otp-back-link {
+  font-size: 14px;
+}
+
+.otp-back-link a {
+  color: #a5b4fc !important;
+  font-weight: 600;
+  text-decoration: none;
+  transition: var(--otp-transition);
+}
+
+.otp-back-link a:hover {
+  color: #c7d2fe !important;
+}
+
+/* ===== Копирайт ===== */
+.otp-copyright {
+  color: var(--otp-text-muted) !important;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ===== Адаптивность ===== */
+@media (max-width: 480px) {
+  .otp-page-wrapper {
+    padding: 12px;
+  }
+  
+  .otp-card {
+    padding: 32px 24px;
+    border-radius: 20px;
+  }
+  
+  .logo-wrapper {
+    width: 64px;
+    height: 64px;
+  }
+  
+  .logo-icon {
+    font-size: 28px;
+  }
+  
+  .otp-title {
+    font-size: 24px;
+  }
+  
+  .otp-subtitle {
+    font-size: 12px;
+  }
+  
+  .otp-component .ant-otp-input {
+    width: 44px !important;
+    height: 52px !important;
+    font-size: 20px !important;
+  }
+  
+  .otp-button {
+    height: 50px !important;
+    font-size: 15px !important;
+  }
+}
+
+@media (max-height: 700px) {
+  .otp-card {
+    padding: 28px 24px;
+  }
+  
+  .otp-header {
+    margin-bottom: 22px;
+  }
+  
+  .logo-wrapper {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 14px;
+  }
+}
+
+/* ===== Светлая тема ===== */
+@media (prefers-color-scheme: light) {
+  :root {
+    --otp-bg-primary: #f8fafc;
+    --otp-bg-secondary: #e2e8f0;
+    --otp-text-primary: #0f172a;
+    --otp-text-secondary: #475569;
+    --otp-text-muted: #94a3b8;
+    --otp-border: rgba(0, 0, 0, 0.08);
+    --otp-card-bg: rgba(255, 255, 255, 0.92);
+    --otp-input-bg: rgba(0, 0, 0, 0.04);
+    --otp-input-border: rgba(0, 0, 0, 0.12);
+    --otp-shadow-card: 0 32px 80px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--otp-border);
+  }
+  
+  .otp-subtitle,
+  .otp-back-link,
+  .otp-copyright {
+    color: var(--otp-text-muted);
+  }
+  
+  .otp-back-link a {
+    color: #6366f1 !important;
+  }
+  
+  .otp-component .ant-otp-input {
+    color: var(--otp-text-primary) !important;
+  }
+}
+
+/* ===== Доступность ===== */
+.otp-component .ant-otp-input:focus-visible,
+.otp-button:focus-visible,
+.otp-resend-btn:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+/* ===== Убираем лишнее Ant Design ===== */
+.otp-card .ant-card-body {
+  padding: 0;
+}
+
+.otp-form .ant-form-item-label {
+  display: none;
+}
+
+.otp-form .ant-form-item-explain-error {
+  font-size: 12px;
+  margin-top: 4px;
+  text-align: center;
+}

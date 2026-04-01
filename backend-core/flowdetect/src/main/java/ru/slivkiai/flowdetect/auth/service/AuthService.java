@@ -14,6 +14,7 @@ import ru.slivkiai.flowdetect.auth.dto.LoginRequest;
 import ru.slivkiai.flowdetect.auth.dto.OtpVerifyRequest;
 import ru.slivkiai.flowdetect.auth.dto.RegisterRequest;
 import ru.slivkiai.flowdetect.auth.dto.ResendOtpRequest;
+import ru.slivkiai.flowdetect.auth.dto.ResetPasswordByTokenRequest;
 import ru.slivkiai.flowdetect.auth.dto.ResetPasswordRequest;
 import ru.slivkiai.flowdetect.auth.jwt.JwtService;
 import ru.slivkiai.flowdetect.user.domain.entity.DeviceSession;
@@ -21,6 +22,7 @@ import ru.slivkiai.flowdetect.user.domain.entity.SecurityPolicy;
 import ru.slivkiai.flowdetect.user.domain.entity.User;
 import ru.slivkiai.flowdetect.user.dto.UserGetResponse;
 import ru.slivkiai.flowdetect.user.repository.UserRepository;
+import ru.slivkiai.flowdetect.user.service.DeviceSessionService;
 import ru.slivkiai.flowdetect.user.service.SecurityPolicyService;
 import ru.slivkiai.flowdetect.user.service.UserService;
 
@@ -117,43 +119,31 @@ public class AuthService {
         // Email НЕ подтверждён → обычный логин
         if (!user.isEmailConfirmed()) {
 
-            DeviceSession session = deviceSessionService.createSession(user, null, ip, userAgent);
+            DeviceSession session = deviceSessionService.createOrUpdateSession(user, request.deviceId(), ip, userAgent);
 
             String access = jwtService.generateAccessToken(user, session.getSessionId());
             String refresh = jwtService.generateRefreshToken(user, session.getSessionId());
 
-            return new AuthResponse(
-                    access,
-                    refresh,
-                    false,
-                    user.getEmail());
+            return new AuthResponse(access, refresh, false, user.getEmail());
         }
 
         // Email подтверждён + 2FA включена → OTP
-        if (user.isTwoFactorEnabled()) {
+        if (user.isTwoFactorEnabled() && user.isEmailConfirmed()) {
 
             otpService.generateAndSendOtp(user.getEmail());
 
             log.info("OTP sent to {}", user.getEmail());
 
-            return new AuthResponse(
-                    null,
-                    null,
-                    true, // requiresOtp
-                    user.getEmail());
+            return new AuthResponse(null, null, true, user.getEmail());
         }
 
-        DeviceSession session = deviceSessionService.createSession(user, null, ip, userAgent);
+        DeviceSession session = deviceSessionService.createOrUpdateSession(user, request.deviceId(), ip, userAgent);
 
         // Email подтверждён, но 2FA выключена → сразу токен
         String access = jwtService.generateAccessToken(user, session.getSessionId());
         String refresh = jwtService.generateRefreshToken(user, session.getSessionId());
 
-        return new AuthResponse(
-                access,
-                refresh,
-                false,
-                user.getEmail());
+        return new AuthResponse(access, refresh, false, user.getEmail());
     }
 
     public AuthResponse verifyAndGenerateToken(OtpVerifyRequest request, String ip, String userAgent) {
@@ -165,7 +155,7 @@ public class AuthService {
             throw new RuntimeException("Invalid or expired OTP");
 
         log.info("OTP успешно подтверждён — выдаём токен для {}", user.getEmail());
-        DeviceSession session = deviceSessionService.createSession(user, null, ip, userAgent);
+        DeviceSession session = deviceSessionService.createOrUpdateSession(user, request.deviceId(), ip, userAgent);
         String access = jwtService.generateAccessToken(user, session.getSessionId());
         String refresh = jwtService.generateRefreshToken(user, session.getSessionId());
 
@@ -235,4 +225,45 @@ public class AuthService {
             throw new RuntimeException("Invalid OTP for password reset");
         log.info("OTP успешно подтверждён для восстановления {}", request.email());
     }
+
+    // === Смена пароля через токен === //
+    public String verifyOtpForPasswordReset(OtpVerifyRequest request) {
+        boolean verified = otpService.checkOtpWithoutRemoval(request.email(), request.otp());
+
+        if (!verified) {
+            throw new RuntimeException("Неверный или истёкший код подтверждения");
+        }
+
+        String resetToken = jwtService.generateResetToken(request.email());
+
+        otpService.removeOtp(request.email());
+
+        log.info("Выдача resetToken для {}", request.email());
+        return resetToken;
+    }
+
+    public void resetPasswordByToken(ResetPasswordByTokenRequest request) {
+
+        String email = jwtService.validateResetToken(request.resetToken());
+
+        if (email == null) {
+            throw new RuntimeException("Недействительный или истёкший токен");
+        }
+
+         User user = userRepository.findByEmail(email)
+            .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+        
+        if (passwordEncoder.matches(request.newPassword(), user.getPassword())) {
+            throw new RuntimeException("Новый пароль не должен совпадать со старым");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.newPassword()));
+        user.setLastPasswordChangeAt(LocalDateTime.now());
+        user.setFailedAttempts(0);
+        user.setAccountLocked(false);
+        user.setLockUntil(null);
+        userRepository.save(user);
+        
+        log.info("Пароль успешно обновлён для {}", user.getEmail());
+    } 
 }

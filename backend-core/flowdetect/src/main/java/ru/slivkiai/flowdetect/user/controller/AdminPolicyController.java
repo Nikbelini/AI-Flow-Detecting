@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import lombok.RequiredArgsConstructor;
 import ru.slivkiai.flowdetect.user.domain.entity.SecurityPolicy;
-import ru.slivkiai.flowdetect.user.dto.UserUpdatePolicy;
+import ru.slivkiai.flowdetect.user.dto.PolicyUpdate;
 import ru.slivkiai.flowdetect.user.service.SecurityPolicyService;
 
 @RestController
@@ -20,7 +20,7 @@ public class AdminPolicyController {
     private final SecurityPolicyService securityPolicyService;
 
     @PutMapping("/{userId}")
-    public void updatePolicy(@PathVariable long userId, @RequestBody UserUpdatePolicy dto) {
+    public void updatePolicy(@PathVariable long userId, @RequestBody PolicyUpdate dto) {
         securityPolicyService.updatePolicyAsAdmin(userId, dto);
     }
 

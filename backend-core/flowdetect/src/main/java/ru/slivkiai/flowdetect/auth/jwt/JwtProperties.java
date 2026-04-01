@@ -22,4 +22,6 @@ public class JwtProperties {
 
     // Обновление токена (длинный)
     private long refreshExpirationMs = 1000 * 60 * 60 * 24 * 7; // 7 дней
+
+    private long resetTokenExpirationMs = 1000 * 60 * 5; // 5 минут (для сброса пароля)
 }

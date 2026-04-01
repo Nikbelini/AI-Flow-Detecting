@@ -4,7 +4,15 @@ export interface User {
   id: string;
   email: string;
   fullName: string;
-  role: UserRoles;
+  role: 'ADMIN' | 'USER' | 'LoGISTIC' | 'OTHER';
+  emailConfirmed: boolean;
+  twoFactorEnabled: boolean;
+  accountLocked: boolean;
+  failedAttempts: number;
+  lockUntil: string | null;
+  lastPasswordChangeAt: string | null;
+  lastLoginAt: string | null;
+  createdAt?: string;
 }
 
 export interface LoginRequest {
@@ -33,4 +41,59 @@ export interface UserGet {
   fullName?: string;
   phoneNumber?: string;
   role: 'ADMIN' | 'USER' | 'LoGISTIC' | 'OTHER'; // или string, если роли динамические
+}
+
+export interface UserGetResponse {
+  id: number;
+  email: string;
+  fullName: string;
+  role: UserRoles;
+  emailConfirmed: boolean;
+  twoFactorEnabled: boolean;
+  accountLocked: boolean;
+  failedAttempts: number;
+  lockUntil: string | null;
+  lastPasswordChangeAt: string | null;
+  lastLoginAt: string | null;
+}
+
+export interface UserUpdate {
+  fullName?: string;
+  email?: string;
+}
+
+export interface OtpRequest {
+  otp: string;
+}
+
+export interface ChangePassword {
+  oldPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export interface PolicyUpdate {
+  passwordExpirationDays?: number;
+  maxFailedAttempts?: number;
+  lockDurationSeconds?: number;
+}
+
+export interface SecurityPolicyDto {
+  id: number;
+  maxFailedAttempts: number;
+  lockDurationSeconds: number;
+  passwordExpirationDays: number;
+}
+
+export interface DeviceSessionDto {
+  sessionId: string;
+  ip: string;
+  country: string;
+  browser: string;
+  os: string;
+  deviceName: string;
+  createdAt: string;
+  lastActiveAt: string;
+  currentSession: boolean;
+  revoked: boolean;
 }

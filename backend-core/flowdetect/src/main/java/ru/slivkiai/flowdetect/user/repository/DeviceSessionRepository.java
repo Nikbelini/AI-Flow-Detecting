@@ -11,4 +11,9 @@ public interface DeviceSessionRepository extends JpaRepository<DeviceSession, Lo
     Optional<DeviceSession> findBySessionId(String sessionId);
     
     List<DeviceSession> findByUserId(Long userId);
+
+    Optional<DeviceSession> findBySessionIdAndUserId(String sessionId, Long userId);
+    Optional<DeviceSession> findByUserIdAndDeviceFingerprintAndRevokedFalse(
+            Long userId, String fingerprint);
+    List<DeviceSession> findByUserIdAndRevokedFalse(Long userId);
 }

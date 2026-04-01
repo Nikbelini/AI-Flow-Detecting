@@ -35,6 +35,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         final String username;
 
         try {
