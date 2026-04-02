@@ -63,6 +63,11 @@ async def lifespan(app: FastAPI):
         )
         logger.info("✅ PostgreSQL подключен")
         
+        # Импорт OSM данных (только при первом запуске)
+        # from import_osm_data import run_import_if_needed
+        # await run_import_if_needed(pg_pool)
+        # =========================================
+
         # Инициализация сервисов
         cache_service = CacheService(redis_client)
         db_service = DatabaseService(pg_pool)
