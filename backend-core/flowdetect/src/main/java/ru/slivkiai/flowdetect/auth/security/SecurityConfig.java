@@ -89,10 +89,10 @@ public class SecurityConfig {
                     .policy(org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
             )
             
-            // 🔑 Аутентификация провайдер
+            // Аутентификация провайдер
             .authenticationProvider(authenticationProvider())
             
-            // ⚡ ВАЖНО: Добавляем JWT-фильтр в цепочку ДО UsernamePasswordAuthenticationFilter
+            // Добавляем JWT-фильтр в цепочку ДО UsernamePasswordAuthenticationFilter
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
                 
