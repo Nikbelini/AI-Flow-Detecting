@@ -1,0 +1,402 @@
+/* components/RegistrationPage.css
+
+/* ===== Наследуем переменные из LoginPage ===== */
+:root {
+  --bg-primary: #0f0f23;
+  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
+  --accent-glow: rgba(99, 102, 241, 0.45);
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.75);
+  --text-muted: rgba(255, 255, 255, 0.45);
+  --border-color: rgba(255, 255, 255, 0.12);
+  --card-bg: rgba(26, 26, 58, 0.85);
+  --input-bg: rgba(255, 255, 255, 0.08);
+  --input-border: rgba(255, 255, 255, 0.18);
+  --radius-card: 24px;
+  --radius-input: 14px;
+  --radius-btn: 14px;
+  --blur: blur(24px);
+  --shadow-card: 0 32px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border-color);
+  --shadow-btn: 0 8px 32px var(--accent-glow);
+  --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===== Обёртка ===== */
+.reg-page-wrapper {
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* ===== Фон ===== */
+.reg-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.bg-gradient {
+  position: absolute;
+  inset: 0;
+  background: 
+    radial-gradient(ellipse at top, rgba(99, 102, 241, 0.25), transparent 60%),
+    radial-gradient(ellipse at bottom right, rgba(217, 70, 239, 0.2), transparent 50%),
+    linear-gradient(180deg, var(--bg-primary), #1a1a3a);
+  animation: gradientFlow 20s ease infinite;
+  background-size: 200% 200%;
+}
+
+@keyframes gradientFlow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.35;
+  animation: orbFloat 25s ease-in-out infinite;
+}
+
+.orb-1 {
+  width: 500px;
+  height: 500px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  top: -150px;
+  right: -100px;
+}
+
+.orb-2 {
+  width: 350px;
+  height: 350px;
+  background: linear-gradient(135deg, #d946ef, #ec4899);
+  bottom: -80px;
+  left: -80px;
+  animation-delay: -12s;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.03); }
+  66% { transform: translate(-15px, 25px) scale(0.97); }
+}
+
+/* ===== Контент ===== */
+.reg-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+/* ===== Карточка ===== */
+.reg-card {
+  width: 100%;
+  background: var(--card-bg);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 32px 28px;
+  animation: cardAppear 0.4s ease-out;
+}
+
+@keyframes cardAppear {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Карточка успеха */
+.reg-card-success {
+  text-align: center;
+  padding: 40px 32px;
+}
+
+.success-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 20px;
+  background: linear-gradient(135deg, #10b981, #14b8a6);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: successPop 0.5s ease-out;
+}
+
+.success-icon .anticon {
+  font-size: 40px;
+  color: white;
+}
+
+@keyframes successPop {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.success-title {
+  margin: 0 0 12px !important;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.success-text {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+  display: block;
+  margin-bottom: 16px;
+}
+
+.success-email {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.goto-login-btn {
+  height: 48px;
+  border-radius: var(--radius-btn);
+  font-weight: 600;
+  background: var(--accent-gradient);
+  border: none;
+  box-shadow: var(--shadow-btn);
+}
+
+.goto-login-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 45px var(--accent-glow);
+}
+
+/* ===== Хедер ===== */
+.reg-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.logo-wrapper {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 18px;
+  background: var(--accent-gradient);
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 40px var(--accent-glow);
+  animation: logoPulse 3s ease-in-out infinite;
+}
+
+@keyframes logoPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+.logo-icon { font-size: 32px; color: white; }
+
+.ai-badge {
+  position: absolute;
+  top: -6px; right: -6px;
+  background: linear-gradient(135deg, #f43f5e, #ec4899);
+  color: white;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 7px;
+  animation: badgeGlow 2s ease-in-out infinite;
+}
+
+@keyframes badgeGlow {
+  0%, 100% { box-shadow: 0 3px 12px rgba(244, 63, 94, 0.5); }
+  50% { box-shadow: 0 5px 20px rgba(244, 63, 94, 0.8); }
+}
+
+.reg-title {
+  margin: 0 0 6px !important;
+  color: var(--text-primary);
+  font-weight: 800;
+  font-size: 26px;
+}
+
+.reg-subtitle {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ===== Alert ===== */
+.reg-alert {
+  margin-bottom: 22px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(239, 68, 68, 0.18);
+  font-size: 13px;
+}
+
+/* ===== Форма ===== */
+.reg-form { margin-bottom: 4px; }
+.reg-form .ant-form-item { margin-bottom: 16px; }
+.reg-form .ant-form-item-label { display: none; }
+
+.reg-input {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
+  padding: 13px 16px;
+  font-size: 15px;
+  height: auto;
+  transition: var(--transition);
+}
+
+.reg-input:hover {
+  border-color: rgba(99, 102, 241, 0.6);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.reg-input:focus {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25) !important;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.reg-input::placeholder { color: var(--text-muted); }
+.input-icon { color: var(--text-muted); font-size: 16px; margin-right: 2px; }
+
+/* ===== Кнопка ===== */
+.submit-row { margin: 24px 0 4px; }
+
+.reg-button {
+  height: 52px;
+  border-radius: var(--radius-btn);
+  font-size: 16px;
+  font-weight: 700;
+  background: var(--accent-gradient);
+  border: none;
+  color: white;
+  box-shadow: var(--shadow-btn);
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.reg-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent 60%);
+  opacity: 0;
+  transition: var(--transition);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.reg-button:hover::before { opacity: 1; }
+.reg-button:hover { transform: translateY(-2px); box-shadow: 0 12px 45px var(--accent-glow); }
+.reg-button:active { transform: translateY(0); transition-duration: 0.1s; }
+.reg-button[disabled] { opacity: 0.75; cursor: not-allowed; transform: none !important; }
+
+.btn-loading { display: flex; align-items: center; justify-content: center; gap: 10px; pointer-events: none; }
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.btn-content { display: flex; align-items: center; justify-content: center; gap: 8px; pointer-events: none; }
+
+/* ===== Футер ===== */
+.reg-footer {
+  margin-top: 16px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.footer-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.footer-link {
+  color: #a5b4fc;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.footer-link:hover { color: #c7d2fe; }
+
+.reg-security {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reg-copyright {
+  color: var(--text-muted) !important;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ===== Адаптив ===== */
+@media (max-width: 480px) {
+  .reg-page-wrapper { padding: 12px; }
+  .reg-card { padding: 28px 24px; border-radius: 20px; }
+  .logo-wrapper { width: 64px; height: 64px; }
+  .logo-icon { font-size: 28px; }
+  .reg-title { font-size: 24px; }
+  .reg-input { padding: 12px 14px; font-size: 14px; }
+  .reg-button { height: 50px; font-size: 15px; }
+}
+
+/* ===== Светлая тема ===== */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-primary: #f8fafc;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --border-color: rgba(0,0,0,0.08);
+    --card-bg: rgba(255,255,255,0.92);
+    --input-bg: rgba(0,0,0,0.04);
+    --input-border: rgba(0,0,0,0.12);
+    --shadow-card: 0 32px 80px rgba(0,0,0,0.12), 0 0 0 1px var(--border-color);
+  }
+}
+
+/* ===== Доступность ===== */
+.reg-input:focus-visible,
+.reg-button:focus-visible,
+.footer-link:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+/* ===== Убираем лишнее Ant Design ===== */
+.reg-card .ant-card-body { padding: 0; }

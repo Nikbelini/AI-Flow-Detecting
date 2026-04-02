@@ -1,0 +1,78 @@
+/* src/main.css или src/index.css */
+:root {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* По умолчанию используем светлую тему */
+  color-scheme: light;
+  color: #333333; /* Серый вместо белого */
+  background-color: #f8f9fa; /* Светлый фон */
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #f8f9fa;
+  color: #333333;
+}
+
+/* Базовые стили для текста */
+p, h1, h2, h3, h4, h5, h6, span, div {
+  color: #333333;
+}
+
+/* Для темной темы */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #e0e0e0;
+    background-color: #121212;
+  }
+  
+  body {
+    background-color: #121212;
+    color: #e0e0e0;
+  }
+}
+
+/* Базовые стили кнопок */
+button {
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #ffffff;
+  color: #495057; /* Серый цвет текста */
+  cursor: pointer;
+  transition: all 0.25s;
+}
+
+button:hover {
+  border-color: #646cff;
+  background-color: #f8f9fa;
+}
+
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+  outline-color: #646cff;
+}
+
+/* Убираем синий цвет активных ссылок */
+a {
+  color: #0d6efd;
+  text-decoration: none;
+}
+
+a:hover {
+  color: #0a58ca;
+  text-decoration: underline;
+}

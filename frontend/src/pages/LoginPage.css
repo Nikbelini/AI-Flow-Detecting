@@ -1,0 +1,503 @@
+/* components/LoginPage.css */
+
+/* ===== Переменные ===== */
+:root {
+  /* Цвета */
+  --bg-primary: #0f0f23;
+  --bg-secondary: #1a1a3a;
+  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
+  --accent-glow: rgba(99, 102, 241, 0.45);
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.75);
+  --text-muted: rgba(255, 255, 255, 0.45);
+  --border-color: rgba(255, 255, 255, 0.12);
+  --card-bg: rgba(26, 26, 58, 0.85);
+  --input-bg: rgba(255, 255, 255, 0.08);
+  --input-border: rgba(255, 255, 255, 0.18);
+  --danger: #ef4444;
+  
+  /* Размеры */
+  --radius-card: 24px;
+  --radius-input: 14px;
+  --radius-btn: 14px;
+  
+  /* Эффекты */
+  --blur: blur(24px);
+  --shadow-card: 0 32px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border-color);
+  --shadow-input: 0 4px 20px rgba(0, 0, 0, 0.25);
+  --shadow-btn: 0 8px 32px var(--accent-glow);
+  --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===== Обёртка ===== */
+.login-page-wrapper {
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* ===== Фон ===== */
+.login-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.bg-gradient {
+  position: absolute;
+  inset: 0;
+  background: 
+    radial-gradient(ellipse at top, rgba(99, 102, 241, 0.25), transparent 60%),
+    radial-gradient(ellipse at bottom right, rgba(217, 70, 239, 0.2), transparent 50%),
+    linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
+  animation: gradientFlow 20s ease infinite;
+  background-size: 200% 200%;
+}
+
+@keyframes gradientFlow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.35;
+  animation: orbFloat 25s ease-in-out infinite;
+}
+
+.orb-1 {
+  width: 500px;
+  height: 500px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  top: -150px;
+  right: -100px;
+}
+
+.orb-2 {
+  width: 350px;
+  height: 350px;
+  background: linear-gradient(135deg, #d946ef, #ec4899);
+  bottom: -80px;
+  left: -80px;
+  animation-delay: -12s;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.03); }
+  66% { transform: translate(-15px, 25px) scale(0.97); }
+}
+
+/* ===== Контент ===== */
+.login-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+/* ===== Карточка ===== */
+.login-card {
+  width: 100%;
+  background: var(--card-bg);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 32px 28px;
+  animation: cardAppear 0.4s ease-out;
+}
+
+@keyframes cardAppear {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ===== Логотип ===== */
+.login-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.logo-wrapper {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 18px;
+  background: var(--accent-gradient);
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 40px var(--accent-glow);
+  animation: logoPulse 3s ease-in-out infinite;
+}
+
+@keyframes logoPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+.logo-icon {
+  font-size: 32px;
+  color: white;
+}
+
+.ai-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: linear-gradient(135deg, #f43f5e, #ec4899);
+  color: white;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 7px;
+  animation: badgeGlow 2s ease-in-out infinite;
+  box-shadow: 0 3px 12px rgba(244, 63, 94, 0.5);
+}
+
+@keyframes badgeGlow {
+  0%, 100% { box-shadow: 0 3px 12px rgba(244, 63, 94, 0.5); }
+  50% { box-shadow: 0 5px 20px rgba(244, 63, 94, 0.8); }
+}
+
+.login-title {
+  margin: 0 0 6px !important;
+  color: var(--text-primary);
+  font-weight: 800;
+  font-size: 26px;
+  letter-spacing: -0.5px;
+}
+
+.login-subtitle {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+/* ===== Alert ===== */
+.login-alert {
+  margin-bottom: 22px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(239, 68, 68, 0.18);
+  font-size: 13px;
+}
+
+.login-alert .ant-alert-message {
+  color: #fecaca;
+  font-weight: 600;
+}
+
+/* ===== Форма ===== */
+.login-form {
+  margin-bottom: 4px;
+}
+
+.login-form .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.login-input {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
+  padding: 13px 16px;
+  font-size: 15px;
+  height: auto;
+  transition: var(--transition);
+  box-shadow: var(--shadow-input);
+}
+
+.login-input:hover {
+  border-color: rgba(99, 102, 241, 0.6);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.login-input:focus,
+.login-input-focused {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25) !important;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.login-input::placeholder {
+  color: var(--text-muted);
+}
+
+.input-icon {
+  color: var(--text-muted);
+  font-size: 16px;
+  margin-right: 2px;
+}
+
+/* ===== Забыли пароль ===== */
+.forgot-row {
+  text-align: right;
+  margin: -8px 0 20px;
+}
+
+.forgot-link {
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-decoration: none;
+  transition: var(--transition);
+  font-weight: 500;
+}
+
+.forgot-link:hover {
+  color: #a5b4fc;
+  text-decoration: none;
+}
+
+/* ===== Кнопка входа — ИСПРАВЛЕНА ✅ ===== */
+.submit-row {
+  margin: 24px 0 4px;
+}
+
+.login-button {
+  height: 52px;
+  border-radius: var(--radius-btn);
+  font-size: 16px;
+  font-weight: 700;
+  background: var(--accent-gradient);
+  border: none;
+  color: white;
+  box-shadow: var(--shadow-btn);
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+  opacity: 0;
+  transition: var(--transition);
+}
+
+.login-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 45px var(--accent-glow);
+  filter: brightness(1.05);
+}
+
+.login-button:hover::before {
+  opacity: 1;
+}
+
+.login-button:active {
+  transform: translateY(0);
+  transition-duration: 0.1s;
+}
+
+.login-button[disabled] {
+  opacity: 0.75;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Спиннер загрузки */
+.btn-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Контент кнопки */
+.btn-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-arrow {
+  font-size: 17px;
+  transition: var(--transition);
+}
+
+.login-button:hover .btn-arrow {
+  transform: translateX(3px);
+}
+
+/* ===== Футер ===== */
+.login-footer {
+  text-align: center;
+  padding-top: 16px;
+  margin-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.footer-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.footer-link {
+  color: #a5b4fc;
+  font-weight: 600;
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+.footer-link:hover {
+  color: #c7d2fe;
+  text-decoration: none;
+}
+
+/* ===== Копирайт ===== */
+.login-copyright {
+  color: var(--text-muted) !important;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ===== Адаптивность ===== */
+@media (max-width: 480px) {
+  .login-page-wrapper {
+    padding: 12px;
+  }
+  
+  .login-card {
+    padding: 28px 24px;
+    border-radius: 20px;
+  }
+  
+  .logo-wrapper {
+    width: 64px;
+    height: 64px;
+  }
+  
+  .logo-icon {
+    font-size: 28px;
+  }
+  
+  .login-title {
+    font-size: 24px;
+  }
+  
+  .login-subtitle {
+    font-size: 12px;
+  }
+  
+  .login-input {
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+  
+  .login-button {
+    height: 50px;
+    font-size: 15px;
+  }
+  
+  .forgot-row {
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-height: 700px) {
+  .login-card {
+    padding: 24px 24px;
+  }
+  
+  .login-header {
+    margin-bottom: 22px;
+  }
+  
+  .logo-wrapper {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 14px;
+  }
+}
+
+/* ===== Светлая тема ===== */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #e2e8f0;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --border-color: rgba(0, 0, 0, 0.08);
+    --card-bg: rgba(255, 255, 255, 0.92);
+    --input-bg: rgba(0, 0, 0, 0.04);
+    --input-border: rgba(0, 0, 0, 0.12);
+    --shadow-card: 0 32px 80px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--border-color);
+    --shadow-input: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+  
+  .login-subtitle,
+  .footer-text,
+  .login-copyright {
+    color: var(--text-muted);
+  }
+  
+  .footer-link {
+    color: #6366f1;
+  }
+}
+
+/* ===== Доступность ===== */
+.login-input:focus-visible,
+.login-button:focus-visible,
+.forgot-link:focus-visible,
+.footer-link:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+/* ===== Убираем лишние отступы Ant Design ===== */
+.login-card .ant-card-body {
+  padding: 0;
+}
+
+.login-form .ant-form-item-label {
+  display: none; /* Скрываем лейблы — используем плейсхолдеры */
+}
+
+.login-form .ant-form-item-explain-error {
+  font-size: 12px;
+  margin-top: 4px;
+}

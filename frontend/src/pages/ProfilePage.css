@@ -1,0 +1,667 @@
+/* src/pages/ProfilePage.css */
+
+/* ===== Переменные: светлая тема (по умолчанию) ===== */
+:root {
+  /* Фон */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-hover: #f1f5f9;
+  
+  /* Текст */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --text-on-accent: #ffffff;
+  
+  /* Границы */
+  --border-color: #e2e8f0;
+  --border-focus: #6366f1;
+  
+  /* Акценты */
+  --accent-primary: #6366f1;
+  --accent-secondary: #8b5cf6;
+  --accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --accent-glow: rgba(99, 102, 241, 0.15);
+  
+  /* Статусы */
+  --success: #16a34a;
+  --success-bg: rgba(22, 163, 74, 0.1);
+  --warning: #d97706;
+  --warning-bg: rgba(217, 119, 6, 0.1);
+  --danger: #dc2626;
+  --danger-bg: rgba(220, 38, 38, 0.1);
+  --info: #2563eb;
+  --info-bg: rgba(37, 99, 235, 0.1);
+  
+  /* Размеры */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  
+  /* Тени */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  
+  /* Анимации */
+  --transition: all 0.2s ease;
+}
+
+/* ===== Тёмная тема (при prefers-color-scheme: dark) ===== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Фон */
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-card: #1e293b;
+    --bg-hover: #334155;
+    
+    /* Текст — ПОВЫШЕННЫЙ КОНТРАСТ */
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --text-on-accent: #ffffff;
+    
+    /* Границы */
+    --border-color: #334155;
+    --border-focus: #818cf8;
+    
+    /* Акценты — более яркие для тёмного фона */
+    --accent-primary: #818cf8;
+    --accent-secondary: #a78bfa;
+    --accent-gradient: linear-gradient(135deg, #818cf8, #a78bfa);
+    --accent-glow: rgba(129, 140, 248, 0.25);
+    
+    /* Статусы — более насыщенные */
+    --success: #22c55e;
+    --success-bg: rgba(34, 197, 94, 0.15);
+    --warning: #f59e0b;
+    --warning-bg: rgba(245, 158, 11, 0.15);
+    --danger: #f87171;
+    --danger-bg: rgba(248, 113, 113, 0.15);
+    --info: #60a5fa;
+    --info-bg: rgba(96, 165, 250, 0.15);
+    
+    /* Тени — мягче для тёмной темы */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* ===== Обёртка страницы ===== */
+.profile-wrapper {
+  min-height: 100vh;
+  background: var(--bg-primary);
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+/* ===== Хедер профиля ===== */
+.profile-header-card {
+  width: 100%;
+  max-width: 800px;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-xl) !important;
+  padding: 24px !important;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.profile-header-card .ant-space {
+  width: 100%;
+}
+
+.profile-avatar-large {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-on-accent);
+  font-size: 28px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.profile-header-info {
+  flex: 1;
+  min-width: 0;
+  padding-left: 16px;
+}
+
+.profile-header-name {
+  margin: 0 0 4px !important;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 22px;
+}
+
+.profile-header-email {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.profile-header-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-header-tags .ant-tag {
+  border: none;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+/* ===== Основная карточка ===== */
+.profile-card {
+  width: 100%;
+  max-width: 800px;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* ===== Вкладки ===== */
+.profile-card .ant-tabs {
+  color: var(--text-primary);
+}
+
+.profile-card .ant-tabs-nav {
+  margin: 0 0 24px !important;
+  border-bottom-color: var(--border-color) !important;
+}
+
+.profile-card .ant-tabs-tab {
+  color: var(--text-secondary) !important;
+  font-weight: 500;
+  padding: 12px 20px !important;
+  transition: var(--transition);
+}
+
+.profile-card .ant-tabs-tab:hover {
+  color: var(--text-primary) !important;
+}
+
+.profile-card .ant-tabs-tab-active {
+  color: var(--accent-primary) !important;
+}
+
+.profile-card .ant-tabs-ink-bar {
+  background: var(--accent-gradient) !important;
+  height: 3px !important;
+}
+
+/* ===== Контент вкладок ===== */
+.tab-content {
+  padding: 4px 0;
+}
+
+.tab-title {
+  margin: 0 0 24px !important;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab-title .anticon {
+  color: var(--accent-primary);
+}
+
+/* ===== Формы ===== */
+.ant-form-item-label > label {
+  color: var(--text-secondary) !important;
+  font-weight: 500;
+}
+
+.ant-input,
+.ant-input-password {
+  background: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+  border-radius: var(--radius-md) !important;
+  transition: var(--transition) !important;
+}
+
+.ant-input:hover,
+.ant-input-password:hover {
+  border-color: var(--accent-primary) !important;
+}
+
+.ant-input:focus,
+.ant-input-password:focus {
+  border-color: var(--border-focus) !important;
+  box-shadow: 0 0 0 3px var(--accent-glow) !important;
+}
+
+.ant-input::placeholder {
+  color: var(--text-muted) !important;
+}
+
+.ant-input-prefix {
+  color: var(--text-muted) !important;
+}
+
+/* ===== Кнопки ===== */
+.ant-btn-primary {
+  background: var(--accent-gradient) !important;
+  border: none !important;
+  color: var(--text-on-accent) !important;
+  font-weight: 600;
+  border-radius: var(--radius-md) !important;
+  transition: var(--transition) !important;
+}
+
+.ant-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--accent-glow) !important;
+}
+
+.ant-btn-primary:active {
+  transform: translateY(0);
+}
+
+.ant-btn-danger {
+  background: var(--danger-bg) !important;
+  border-color: var(--danger) !important;
+  color: var(--danger) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.ant-btn-danger:hover {
+  background: var(--danger) !important;
+  color: var(--text-on-accent) !important;
+}
+
+/* ===== Карточки секций ===== */
+.security-card,
+.policy-card {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-lg) !important;
+  margin-bottom: 16px;
+}
+
+.security-card .ant-card-head,
+.policy-card .ant-card-head {
+  border-bottom-color: var(--border-color) !important;
+  min-height: 52px !important;
+  padding: 0 20px !important;
+}
+
+.security-card .ant-card-head-title,
+.policy-card .ant-card-head-title {
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.security-card .ant-card-body,
+.policy-card .ant-card-body {
+  padding: 20px !important;
+}
+
+/* ===== Descriptions ===== */
+.ant-descriptions {
+  background: var(--bg-secondary) !important;
+  border-radius: var(--radius-md) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.ant-descriptions-item-label {
+  color: var(--text-secondary) !important;
+  font-weight: 500;
+  background: transparent !important;
+}
+
+.ant-descriptions-item-content {
+  color: var(--text-primary) !important;
+  font-weight: 500;
+  background: transparent !important;
+}
+
+.ant-descriptions-row > td {
+  border-bottom-color: var(--border-color) !important;
+}
+
+/* ===== Tags ===== */
+.ant-tag {
+  border-radius: 20px !important;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.ant-tag-green {
+  background: var(--success-bg) !important;
+  color: var(--success) !important;
+  border-color: transparent !important;
+}
+
+.ant-tag-orange {
+  background: var(--warning-bg) !important;
+  color: var(--warning) !important;
+  border-color: transparent !important;
+}
+
+.ant-tag-red {
+  background: var(--danger-bg) !important;
+  color: var(--danger) !important;
+  border-color: transparent !important;
+}
+
+.ant-tag-blue {
+  background: var(--info-bg) !important;
+  color: var(--info) !important;
+  border-color: transparent !important;
+}
+
+.ant-tag-purple {
+  background: rgba(139, 92, 246, 0.15) !important;
+  color: #8b5cf6 !important;
+  border-color: transparent !important;
+}
+
+/* ===== Список сессий ===== */
+.sessions-list .ant-list-item {
+  padding: 16px 0 !important;
+  border-bottom-color: var(--border-color) !important;
+  transition: var(--transition);
+}
+
+.sessions-list .ant-list-item:hover {
+  background: var(--bg-hover) !important;
+  border-radius: var(--radius-md);
+  padding: 16px 12px !important;
+  margin: 0 -12px;
+}
+
+.sessions-list .ant-list-item-meta-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: var(--accent-gradient);
+  border-radius: var(--radius-md);
+  color: var(--text-on-accent);
+  font-size: 20px;
+}
+
+.sessions-list .ant-list-item-meta-title {
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  font-size: 15px;
+  margin-bottom: 4px !important;
+}
+
+.sessions-list .ant-list-item-meta-description {
+  color: var(--text-secondary) !important;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.sessions-list .ant-list-item-meta-description .ant-typography {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sessions-list .ant-list-item-meta-description .anticon {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ===== Empty state для сессий ===== */
+.sessions-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text-secondary);
+}
+
+.sessions-empty .anticon {
+  font-size: 48px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  opacity: 0.7;
+}
+
+.sessions-empty-title {
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.sessions-empty-desc {
+  font-size: 14px;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+/* ===== Опасная зона ===== */
+.danger-zone {
+  padding: 24px;
+  background: var(--danger-bg);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  border-radius: var(--radius-lg);
+  margin: 24px 0;
+}
+
+.danger-title {
+  margin: 0 0 8px !important;
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.danger-text {
+  display: block;
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ===== Модальное окно OTP ===== */
+.ant-modal-content {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-lg) !important;
+}
+
+.ant-modal-title {
+  color: var(--text-primary) !important;
+  font-weight: 600;
+}
+
+.ant-modal-close {
+  color: var(--text-secondary) !important;
+}
+
+.otp-input-wrapper {
+  display: flex;
+  justify-content: center;
+  margin: 24px 0;
+}
+
+.otp-input {
+  width: 60px !important;
+  height: 60px !important;
+  font-size: 24px !important;
+  text-align: center !important;
+  letter-spacing: 8px !important;
+  background: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.otp-input:focus {
+  border-color: var(--border-focus) !important;
+  box-shadow: 0 0 0 3px var(--accent-glow) !important;
+}
+
+.otp-hint {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+/* ===== Alerts ===== */
+.ant-alert {
+  border-radius: var(--radius-md) !important;
+  margin-bottom: 16px !important;
+}
+
+.ant-alert-info {
+  background: var(--info-bg) !important;
+  border-color: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-alert-warning {
+  background: var(--warning-bg) !important;
+  border-color: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-alert-success {
+  background: var(--success-bg) !important;
+  border-color: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-alert-error {
+  background: var(--danger-bg) !important;
+  border-color: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+/* ===== Divider ===== */
+.ant-divider {
+  border-color: var(--border-color) !important;
+  margin: 24px 0 !important;
+}
+
+.ant-divider-inner-text {
+  color: var(--text-muted) !important;
+  background: var(--bg-card) !important;
+  padding: 0 16px;
+}
+
+/* ===== Space между элементами ===== */
+.mb-3 { margin-bottom: 16px !important; }
+.mt-3 { margin-top: 16px !important; }
+.mb-4 { margin-bottom: 24px !important; }
+
+/* ===== Анимации ===== */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.profile-card,
+.profile-header-card {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.tab-content {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+/* ===== Скроллбар ===== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+  transition: var(--transition);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}
+
+/* ===== Адаптивность ===== */
+@media (max-width: 768px) {
+  .profile-wrapper {
+    padding: 16px 12px;
+  }
+  
+  .profile-header-card,
+  .profile-card {
+    border-radius: var(--radius-lg) !important;
+    padding: 16px !important;
+  }
+  
+  .profile-avatar-large {
+    width: 64px;
+    height: 64px;
+    font-size: 22px;
+  }
+  
+  .profile-header-info {
+    padding-left: 12px;
+  }
+  
+  .profile-header-name {
+    font-size: 18px;
+  }
+  
+  .profile-card .ant-tabs-tab {
+    padding: 10px 12px !important;
+    font-size: 13px;
+  }
+  
+  .sessions-list .ant-list-item-meta-description {
+    font-size: 12px;
+  }
+  
+  .otp-input {
+    width: 48px !important;
+    height: 48px !important;
+    font-size: 20px !important;
+  }
+}
+
+/* ===== Утилиты ===== */
+.text-center { text-align: center; }
+.text-muted { color: var(--text-muted) !important; }
+.text-secondary { color: var(--text-secondary) !important; }
+.text-primary { color: var(--text-primary) !important; }
+.font-semibold { font-weight: 600; }
+.flex-center { display: flex; align-items: center; justify-content: center; }
