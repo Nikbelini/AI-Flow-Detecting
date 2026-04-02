@@ -1,4 +1,3 @@
-// ru.slivkiai.flowdetect.user.service.DeviceSessionService.java
 package ru.slivkiai.flowdetect.user.service;
 
 import java.net.URI;

@@ -25,9 +25,10 @@ export interface StopStatsUpdateRequest {
 
 export const stopsApi = {
   // Получить все остановки (для карты)
-  getStops: async (): Promise<StopResponse[]> => {
+  getStops: async (cityId?: number): Promise<StopResponse[]> => {
     try {
-      const response = await apiClient.get<{ stops: StopResponse[] }>('/stops');
+      const url = cityId ? `/stops?cityId=${cityId}` : '/stops';
+      const response = await apiClient.get<{ stops: StopResponse[] }>(url);
       const stops = response.data.stops;
       
       return stops.map(stop => ({

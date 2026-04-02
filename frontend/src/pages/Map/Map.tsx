@@ -1,11 +1,28 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './MapComponent.css';
 import ModalContent from './ModalContent';
 import { getMarkers } from '../../api/endpoints/markersApi';
-import { Clock, RefreshCw, MapPin, Minimize2, Maximize2, X } from 'lucide-react';
+import { Clock, RefreshCw, MapPin, Minimize2, Maximize2, X, Building2, Loader2 } from 'lucide-react';
 import type { Stop, Route as ApiRoute } from '../../api/types';
+import { Select, Spin, Badge, Tooltip } from 'antd';
+import type { SelectProps } from 'antd/es/select';
+import { formatCoordsHuman } from '../../utils/geo';
+import { useCities } from '../../hooks/api/useCities';
+
+const { Option } = Select;
+
+const isValidCoordinate = (lat: number, lng: number): boolean => {
+  return (
+    Number.isFinite(lat) && Number.isFinite(lng) &&
+    lat >= -90 && lat <= 90 &&
+    lng >= -180 && lng <= 180 &&
+    !(lat === 0 && lng === 0)
+  );
+};
+
+const toMapLibre = (lat: number, lng: number): [number, number] => [lng, lat];
 
 interface MapComponentProps {
   markers?: Stop[];
@@ -16,6 +33,7 @@ interface MapComponentProps {
   isCreatingStop?: boolean;
   isCreatingRoute?: boolean;
   selectedStops?: number[];
+  defaultCityId?: number;
 }
 
 const MapComponent: React.FC<MapComponentProps> = ({
@@ -26,13 +44,16 @@ const MapComponent: React.FC<MapComponentProps> = ({
   onMarkerClick,
   isCreatingStop = false,
   isCreatingRoute = false,
-  selectedStops = []
+  selectedStops = [],
+  defaultCityId,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
+  const markersRef = useRef<Map<Stop['id'], { marker: maplibregl.Marker; element: HTMLDivElement }>>(new Map());
   const onMarkerClickRef = useRef(onMarkerClick);
   const onMapClickRef = useRef(onMapClick);
+
+  const { cities, loading: citiesLoading, selectedCityId, selectedCity, selectCity, error: citiesError } = useCities();
 
   const [localMarkers, setLocalMarkers] = useState<Stop[]>([]);
   const [loading, setLoading] = useState(!externalMarkers);
@@ -41,8 +62,13 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const [selectedModalMarker, setSelectedModalMarker] = useState<Stop | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapInitializing, setMapInitializing] = useState(true);
 
-  const markers = externalMarkers || localMarkers;
+  const markers = useMemo(() => {
+    const sourceMarkers = externalMarkers || localMarkers;
+    if (!selectedCityId) return sourceMarkers;
+    return sourceMarkers.filter(m => m.cityId === selectedCityId || !m.cityId);
+  }, [externalMarkers, localMarkers, selectedCityId]);
 
   useEffect(() => {
     onMarkerClickRef.current = onMarkerClick;
@@ -55,27 +81,25 @@ const MapComponent: React.FC<MapComponentProps> = ({
   }, []);
 
   useEffect(() => {
-    if (!externalMarkers) fetchMarkers();
-  }, [externalMarkers]);
-
-  const fetchMarkers = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const fetchedMarkers = await getMarkers();
-      const normalized = fetchedMarkers.map((m: any) => ({ ...m, id: Number(m.id) }));
-      setLocalMarkers(normalized);
-    } catch (err) {
-      console.error('Failed to fetch markers:', err);
-      setError('Не удалось загрузить данные остановок');
-    } finally {
-      setLoading(false);
+    if (!externalMarkers && selectedCityId) {
+      fetchMarkers(selectedCityId);
     }
-  };
+  }, [externalMarkers, selectedCityId]);
 
-  // Инициализация карты
+  // 🗺️ Инициализация карты — ИСПРАВЛЕНО
   useEffect(() => {
-    if (!mapContainer.current) return;
+    if (!mapContainer.current || !selectedCity) return;
+
+    if (map.current) {
+      map.current.flyTo({ 
+        center: toMapLibre(selectedCity.lat, selectedCity.lng), 
+        zoom: 11, 
+        duration: 1500 
+      });
+      return;
+    }
+
+    setMapInitializing(true);
 
     map.current = new maplibregl.Map({
       container: mapContainer.current,
@@ -90,265 +114,298 @@ const MapComponent: React.FC<MapComponentProps> = ({
               'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
             ],
             tileSize: 256,
-            attribution: '© OpenStreetMap'
+            attribution: '© OpenStreetMap contributors'
           }
         },
-        layers: [{
-          id: 'osm-tiles',
-          type: 'raster',
-          source: 'osm-raster-tiles',
-          minzoom: 0,
-          maxzoom: 22
+        layers: [{ 
+          id: 'osm-tiles', 
+          type: 'raster', 
+          source: 'osm-raster-tiles', 
+          minzoom: 0, 
+          maxzoom: 22 
         }]
       },
-      center: [48.2412, 54.1851],
-      zoom: 10,
+      center: toMapLibre(selectedCity.lat, selectedCity.lng),
+      zoom: 11,
       maxZoom: 18,
-      minZoom: 8
+      minZoom: 9,
+      pitch: 0,
+      bearing: 0,
+      fadeDuration: 0,
+      localIdeographFontFamily: false,
     });
 
-    map.current.addControl(new maplibregl.NavigationControl());
-    map.current.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }));
-
-    map.current.on('load', () => {
-      console.log('Map loaded');
-      setMapLoaded(true);
-    });
-
-    return () => {
+    // ✅ КРИТИЧНО: resize после инициализации
+    const initTimeout = setTimeout(() => {
       if (map.current) {
-        map.current.remove();
-        markersRef.current.forEach(marker => marker.remove());
+        map.current.resize();
+        map.current.triggerRepaint();
       }
-    };
-  }, []);
+    }, 150);
 
-  // Обработка кликов для создания остановки
-  useEffect(() => {
-    if (!map.current) return;
+    map.current.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), 'top-right');
+    map.current.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-left');
+    map.current.addControl(new maplibregl.GeolocateControl({ 
+      positionOptions: { enableHighAccuracy: true }, 
+      trackUserLocation: true 
+    }), 'top-right');
 
-    const handleClick = (e: maplibregl.MapMouseEvent) => {
-      if (onMapClickRef.current && isCreatingStop) {
+    map.current.on('load', () => { 
+      setMapLoaded(true); 
+      setMapInitializing(false);
+      // Ещё один resize после полной загрузки карты
+      setTimeout(() => {
+        map.current?.resize();
+        map.current?.triggerRepaint();
+      }, 50);
+    });
+    
+    map.current.on('error', (e) => console.error('❌ Map error:', e.error));
+
+    map.current.on('click', (e: maplibregl.MapMouseEvent) => {
+      const target = e.originalEvent.target as HTMLElement;
+      if (target.closest('.custom-marker') || target.closest('.modal-container') || target.closest('.modal-overlay')) return;
+      if (isCreatingStop && onMapClickRef.current) {
         const { lng, lat } = e.lngLat;
         onMapClickRef.current(lat, lng);
       }
-    };
-
-    if (isCreatingStop) {
-      map.current.on('click', handleClick);
-    }
-
-    return () => {
-      if (map.current) {
-        map.current.off('click', handleClick);
-      }
-    };
-  }, [isCreatingStop]);
-
-  // Отрисовка маршрутов при изменении данных или загрузке карты
-  useEffect(() => {
-    if (!map.current || !mapLoaded) {
-      console.log('Map not ready for routes');
-      return;
-    }
-    
-    console.log('Drawing routes, count:', routes.length, 'selectedId:', selectedRouteId);
-    drawRoutes();
-  }, [routes, selectedRouteId, mapLoaded]);
-
-  const drawRoutes = () => {
-    if (!map.current) {
-      console.log('No map instance');
-      return;
-    }
-
-    console.log('Starting drawRoutes with routes:', routes.length);
-
-    // Удаляем старые слои и источник
-    try {
-      if (map.current.getLayer('routes-line-selected')) {
-        map.current.removeLayer('routes-line-selected');
-      }
-      if (map.current.getLayer('routes-line')) {
-        map.current.removeLayer('routes-line');
-      }
-      if (map.current.getSource('routes')) {
-        map.current.removeSource('routes');
-      }
-    } catch (error) {
-      console.log('Error removing old layers:', error);
-    }
-
-    if (routes.length === 0) {
-      console.log('No routes to draw');
-      return;
-    }
-
-    const features: any[] = [];
-
-    routes.forEach(route => {
-      if (!route.stops || route.stops.length < 2) {
-        console.log(`Route ${route.id} has insufficient stops`);
-        return;
-      }
-
-      const sortedStops = [...route.stops].sort((a, b) => a.orderInRoute - b.orderInRoute);
-      
-      const coordinates = sortedStops
-        .map(stop => {
-          if (!stop.lng || !stop.lat) {
-            console.warn('Stop missing coordinates:', stop);
-            return null;
-          }
-          // MapLibre ожидает [lng, lat]
-          return [stop.lng, stop.lat];
-        })
-        .filter(coord => coord !== null);
-
-      if (coordinates.length < 2) {
-        console.log(`Route ${route.id} has insufficient valid coordinates`);
-        return;
-      }
-
-      features.push({
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: coordinates
-        },
-        properties: {
-          id: route.id,
-          number: route.number,
-          isSelected: route.id === selectedRouteId
-        }
-      });
     });
 
-    console.log('Features to draw:', features);
-
-    if (features.length === 0) {
-      console.log('No valid features to draw');
-      return;
-    }
-
-    try {
-      map.current.addSource('routes', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: features
-        }
-      });
-
-      console.log('Source added successfully');
-
-      // Невыделенные маршруты (серые, пунктирные)
-      map.current.addLayer({
-        id: 'routes-line',
-        type: 'line',
-        source: 'routes',
-        filter: ['!=', ['get', 'isSelected'], true],
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round'
-        },
-        paint: {
-          'line-color': '#94a3b8',
-          'line-width': 3,
-          'line-opacity': 0.6,
-          'line-dasharray': [2, 1]
-        }
-      });
-
-      console.log('Base routes layer added');
-
-      // Выделенный маршрут (синий, жирный)
-      if (selectedRouteId) {
-        map.current.addLayer({
-          id: 'routes-line-selected',
-          type: 'line',
-          source: 'routes',
-          filter: ['==', ['get', 'isSelected'], true],
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': '#3b82f6',
-            'line-width': 5,
-            'line-opacity': 1
+    return () => {
+      clearTimeout(initTimeout);
+      if (map.current) {
+        markersRef.current.forEach(({ marker, element }) => {
+          if (element && (element as any)._clickHandler) {
+            element.removeEventListener('click', (element as any)._clickHandler);
+            delete (element as any)._clickHandler;
           }
+          marker.remove();
         });
-
-        console.log('Selected route layer added');
-        
-        // Центрируем карту на выбранном маршруте
-        const selectedFeature = features.find(f => f.properties.id === selectedRouteId);
-        if (selectedFeature) {
-          const bounds = new maplibregl.LngLatBounds();
-          selectedFeature.geometry.coordinates.forEach((coord: [number, number]) => {
-            bounds.extend(coord);
-          });
-          map.current.fitBounds(bounds, { padding: 50, duration: 1000 });
-        }
+        markersRef.current.clear();
+        map.current.remove();
+        map.current = null;
       }
-    } catch (error) {
-      console.error('Error adding routes to map:', error);
+      setMapLoaded(false);
+      setMapInitializing(true);
+    };
+  }, [selectedCity, isCreatingStop]);
+
+  // 🔄 Resize handler — ИСПРАВЛЕНО
+  useEffect(() => {
+    const triggerResize = () => {
+      if (map.current && mapLoaded) {
+        // Force reflow
+        if (mapContainer.current) {
+          void mapContainer.current.offsetWidth;
+        }
+        requestAnimationFrame(() => {
+          map.current?.resize();
+          map.current?.triggerRepaint();
+        });
+      }
+    };
+
+    triggerResize();
+    const handleWindowResize = () => triggerResize();
+    window.addEventListener('resize', handleWindowResize);
+    
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, [isPanelCollapsed, mapLoaded]);
+
+  const fetchMarkers = async (cityId: number) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const fetchedMarkers = await getMarkers(cityId);
+      const normalized = fetchedMarkers.map((m: any) => ({ 
+        ...m, 
+        id: Number(m.id), 
+        cityId: m.cityId || cityId, 
+        lat: Number(m.lat), 
+        lng: Number(m.lng) 
+      }));
+      setLocalMarkers(normalized);
+    } catch (err) {
+      console.error('Failed to fetch markers:', err);
+      setError('Не удалось загрузить данные остановок');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Отрисовка маркеров
+  // 🛣️ Отрисовка маршрутов — УПРОЩЕНО (без GeoJSON типов)
   useEffect(() => {
-    if (!map.current || loading) return;
+    if (!map.current || !mapLoaded) return;
+    drawRoutes();
+  }, [routes, selectedRouteId, mapLoaded]);
 
-    markersRef.current.forEach((markerInstance) => {
-      const markerElement = markerInstance.getElement() as HTMLDivElement;
-      if (markerElement && (markerElement as any)._clickHandler) {
-        markerElement.removeEventListener('click', (markerElement as any)._clickHandler);
-      }
-      markerInstance.remove();
+  const drawRoutes = useCallback(() => {
+    if (!map.current) return;
+    
+    ['routes-line-selected', 'routes-line'].forEach(layerId => {
+      if (map.current?.getLayer(layerId)) map.current.removeLayer(layerId);
     });
-    markersRef.current = [];
+    if (map.current?.getSource('routes')) map.current.removeSource('routes');
+    if (routes.length === 0) return;
 
-    const markersInstances = markers.map(marker => {
-      const markerElement = createCustomMarker(marker);
+    // ✅ Простой массив — MapLibre сам конвертирует
+    const features = routes
+      .filter(route => route.stops && route.stops.length >= 2)
+      .map(route => {
+        const sortedStops = [...route.stops].sort((a, b) => a.orderInRoute - b.orderInRoute);
+        const coordinates = sortedStops
+          .map(stop => isValidCoordinate(stop.lat, stop.lng) ? toMapLibre(stop.lat, stop.lng) : null)
+          .filter((c): c is [number, number] => c !== null);
+        if (coordinates.length < 2) return null;
+        
+        return {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates },
+          properties: { 
+            id: route.id, 
+            number: route.number, 
+            isSelected: route.id === selectedRouteId 
+          }
+        };
+      })
+      .filter(Boolean);
 
+    if (features.length === 0) return;
+
+    try {
+      // ✅ Используем as any — MapLibre разберётся
+      map.current.addSource('routes', { 
+        type: 'geojson', 
+        data: { type: 'FeatureCollection', features } as any 
+      });
+
+      map.current.addLayer({
+        id: 'routes-line', 
+        type: 'line', 
+        source: 'routes',
+        filter: ['!=', ['get', 'isSelected'], true],
+        paint: { 
+          'line-color': '#94a3b8', 
+          'line-width': 3, 
+          'line-opacity': 0.6, 
+          'line-dasharray': [2, 2] 
+        }
+      });
+
+      if (selectedRouteId) {
+        map.current.addLayer({
+          id: 'routes-line-selected', 
+          type: 'line', 
+          source: 'routes',
+          filter: ['==', ['get', 'isSelected'], true],
+          paint: { 
+            'line-color': '#3b82f6', 
+            'line-width': 5, 
+            'line-opacity': 1 
+          }
+        });
+        const selectedFeature = features.find((f: any) => f.properties.id === selectedRouteId);
+        if (selectedFeature) {
+          const bounds = new maplibregl.LngLatBounds();
+          selectedFeature.geometry.coordinates.forEach((coord: [number, number]) => bounds.extend(coord));
+          map.current.fitBounds(bounds, { padding: 60, duration: 1000, maxZoom: 14 });
+        }
+      }
+    } catch (error) {
+      console.error('Error adding routes:', error);
+    }
+  }, [routes, selectedRouteId]);
+
+  // 📍 Отрисовка маркеров — ИСПРАВЛЕНО
+  useEffect(() => {
+    if (!map.current || loading || mapInitializing) return;
+
+    // Удаляем маркеры, которых больше нет
+    markersRef.current.forEach((value, id) => {
+      if (!markers.find(m => m.id === id)) {
+        const { marker, element } = value;
+        if (element && (element as any)._clickHandler) {
+          element.removeEventListener('click', (element as any)._clickHandler);
+          delete (element as any)._clickHandler;
+        }
+        marker.remove();
+        markersRef.current.delete(id);
+      }
+    });
+
+    // Создаём/обновляем маркеры
+    markers.forEach(marker => {
+      if (!isValidCoordinate(marker.lat, marker.lng)) return;
+
+      if (markersRef.current.has(marker.id)) {
+        const existing = markersRef.current.get(marker.id)!;
+        updateMarkerElement(existing.element, marker, isCreatingRoute, selectedStops);
+        return;
+      }
+
+      const el = createCustomMarker(marker, isCreatingRoute, selectedStops);
+      
       const clickHandler = (e: MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
-
-        console.log('Marker clicked:', marker);
-
         if (isCreatingRoute && onMarkerClickRef.current) {
           onMarkerClickRef.current(marker);
           return;
         }
-
         if (!isCreatingRoute && !isCreatingStop) {
           setSelectedModalMarker(marker);
-          map.current?.flyTo({
-            center: [marker.lng, marker.lat],
-            zoom: 15,
-            essential: true,
-            duration: 800
-          });
         }
       };
 
-      markerElement.addEventListener('click', clickHandler);
-      (markerElement as any)._clickHandler = clickHandler;
+      el.addEventListener('click', clickHandler, { passive: false });
+      (el as any)._clickHandler = clickHandler;
+      el.setAttribute('data-marker-id', String(marker.id));
 
-      const markerInstance = new maplibregl.Marker({
-        element: markerElement,
-        anchor: 'center'
+      // ✅ Создаём ОДИН экземпляр маркера
+      const markerInstance = new maplibregl.Marker({ 
+        element: el, 
+        anchor: 'center',
+        clickTolerance: 8
       })
-        .setLngLat([marker.lng, marker.lat])
+        .setLngLat(toMapLibre(marker.lat, marker.lng))
         .addTo(map.current!);
-      return markerInstance;
+        
+      markersRef.current.set(marker.id, { marker: markerInstance, element: el });
     });
 
-    markersRef.current = markersInstances;
-  }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops]);
+  }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops, mapInitializing]);
+
+  const updateMarkerElement = (el: HTMLDivElement, marker: Stop, isCreatingRoute: boolean, selectedStops: number[]) => {
+    const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
+    const color = loadToColor(marker.load);
+    const size = getMarkerSize(marker.load);
+    const index = isSelected ? selectedStops.indexOf(marker.id) + 1 : 0;
+
+    Object.assign(el.style, {
+  width: `${size}px`,
+  height: `${size}px`,
+  backgroundColor: isSelected ? '#3B82F6' : color,
+  cursor: 'pointer',
+  border: isSelected ? '3px solid #2563EB' : '3px solid white',
+  borderRadius: '50%',
+  boxShadow: isSelected ? '0 4px 20px rgba(37, 99, 235, 0.6)' : '0 4px 12px rgba(0,0,0,0.25)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  // transition: 'all 0.25s ease',  // ← можно оставить или убрать, теперь в CSS
+  pointerEvents: 'auto',
+  zIndex: isSelected ? '150' : '100',
+  // ❗ УДАЛЕНО: transform: isSelected ? 'scale(1.1)' : 'scale(1)',
+});
+
+    const text = el.querySelector('.marker-text') as HTMLElement;
+    if (text) {
+      text.textContent = (isSelected && index > 0) ? index.toString() : (marker.load?.toString() || '0');
+      Object.assign(text.style, { fontSize: size > 40 ? '14px' : '12px' });
+    }
+
+    el.setAttribute('title', `${marker.address}\nЗагрузка: ${marker.load}/10`);
+  };
 
   const loadToColor = (load: number): string => {
     if (load <= 3) return "#10b981";
@@ -362,51 +419,63 @@ const MapComponent: React.FC<MapComponentProps> = ({
     return 48;
   };
 
-  const createCustomMarker = (marker: Stop): HTMLDivElement => {
+  const createCustomMarker = (marker: Stop, isCreatingRoute: boolean, selectedStops: number[]): HTMLDivElement => {
     const el = document.createElement('div');
     el.className = 'custom-marker';
-
+    
     const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
     const color = loadToColor(marker.load);
     const size = getMarkerSize(marker.load);
-    const selectedIndex = isSelected ? selectedStops.indexOf(marker.id) + 1 : 0;
+    const index = isSelected ? selectedStops.indexOf(marker.id) + 1 : 0;
 
-    el.style.width = `${size}px`;
-    el.style.height = `${size}px`;
-    el.style.backgroundColor = isSelected ? '#3B82F6' : color;
-    el.style.cursor = 'pointer';
-    el.style.border = isSelected ? '3px solid #2563EB' : '3px solid white';
-    el.style.borderRadius = '50%';
-    el.style.boxShadow = isSelected
-      ? '0 4px 12px rgba(37, 99, 235, 0.5)'
-      : '0 4px 12px rgba(0,0,0,0.3)';
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.justifyContent = 'center';
-    el.style.transition = 'all 0.3s ease';
+    Object.assign(el.style, {
+      width: `${size}px`,
+      height: `${size}px`,
+      backgroundColor: isSelected ? '#3B82F6' : color,
+      cursor: 'pointer',
+      border: isSelected ? '3px solid #2563EB' : '3px solid white',
+      borderRadius: '50%',
+      boxShadow: isSelected ? '0 4px 20px rgba(37, 99, 235, 0.6)' : '0 4px 12px rgba(0,0,0,0.25)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'all 0.25s ease',
+      transform: isSelected ? 'scale(1.1)' : 'scale(1)',
+      pointerEvents: 'auto',
+      zIndex: isSelected ? '150' : '100',
+      // ❗ НЕТ position: relative — MapLibre сам управляет!
+    });
 
     const text = document.createElement('div');
     text.className = 'marker-text';
-    if (isSelected && selectedIndex > 0) {
-      text.textContent = selectedIndex.toString();
-    } else {
-      text.textContent = marker.load?.toString() || '0';
-    }
-    text.style.color = 'white';
-    text.style.fontWeight = 'bold';
-    text.style.fontSize = size > 40 ? '14px' : '12px';
-    text.style.textShadow = '0 1px 2px rgba(0,0,0,0.3)';
+    text.textContent = (isSelected && index > 0) ? index.toString() : (marker.load?.toString() || '0');
+    Object.assign(text.style, {
+      color: 'white',
+      fontWeight: '700',
+      fontSize: size > 40 ? '14px' : '12px',
+      textShadow: '0 1px 3px rgba(0,0,0,0.4)',
+      lineHeight: '1',
+      userSelect: 'none',
+      pointerEvents: 'none',
+    });
     el.appendChild(text);
-
-    el.setAttribute('data-address', marker.address || '');
-    el.setAttribute('data-load', marker.load?.toString() || '0');
-    el.setAttribute('data-id', marker.id?.toString() || '');
-
+    el.setAttribute('title', `${marker.address}\nЗагрузка: ${marker.load}/10`);
+    el.setAttribute('data-marker-id', String(marker.id));
     return el;
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const formatTime = (date: Date) => date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const handleCityChange = (value: number) => { 
+    selectCity(value); 
+    setSelectedModalMarker(null); 
+  };
+
+  const filterOption: SelectProps['filterOption'] = (input, option) => {
+    const label = option?.label ?? option?.children;
+    if (typeof label === 'string') {
+      return label.toLowerCase().includes(input.toLowerCase());
+    }
+    return false;
   };
 
   return (
@@ -422,25 +491,57 @@ const MapComponent: React.FC<MapComponentProps> = ({
                   <span>{formatTime(currentTime)}</span>
                 </div>
               </div>
-              <button className="collapse-btn" onClick={() => setIsPanelCollapsed(true)}>
-                <Minimize2 size={20} />
+              <button className="collapse-btn" onClick={() => setIsPanelCollapsed(true)} title="Свернуть">
+                <Minimize2 size={18} />
               </button>
+            </div>
+
+            <div className="city-filter-section">
+              <div className="filter-label">
+                <Building2 size={16} />
+                <span>Город:</span>
+              </div>
+              {citiesLoading ? (
+                <Spin size="small" />
+              ) : citiesError ? (
+                <span className="error-text">Ошибка загрузки</span>
+              ) : (
+                <Select
+                  className="city-select"
+                  value={selectedCityId || undefined}
+                  onChange={handleCityChange}
+                  style={{ width: '100%' }}
+                  placeholder="Выберите город"
+                  showSearch
+                  optionFilterProp="label"
+                  filterOption={filterOption}
+                >
+                  {cities.map(city => (
+                    <Option key={city.id} value={city.id} label={city.name}>
+                      <Tooltip title={`${formatCoordsHuman(city.lat, city.lng)}`}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <MapPin size={14} style={{ color: '#666' }} />
+                          {city.name}
+                          {defaultCityId === city.id && (
+                            <Badge color="green" text="по умолчанию" style={{ fontSize: '10px' }} />
+                          )}
+                        </span>
+                      </Tooltip>
+                    </Option>
+                  ))}
+                </Select>
+              )}
             </div>
 
             {(isCreatingStop || isCreatingRoute) && (
               <div className="creation-mode-info">
                 <div className="mode-indicator">
-                  {isCreatingStop ? (
-                    <>
-                      <MapPin size={18} />
-                      <span>Режим создания остановки - кликните на карту</span>
-                    </>
-                  ) : (
-                    <>
-                      <MapPin size={18} />
-                      <span>Режим создания маршрута - кликайте на остановки</span>
-                    </>
-                  )}
+                  <MapPin size={18} />
+                  <span>
+                    {isCreatingStop 
+                      ? '🎯 Кликните на карту для создания остановки' 
+                      : '🔗 Кликните на остановки для создания маршрута'}
+                  </span>
                 </div>
               </div>
             )}
@@ -448,18 +549,14 @@ const MapComponent: React.FC<MapComponentProps> = ({
             <div className="stats-section">
               <div className="stats-grid">
                 <div className="stat-card">
-                  <div className="stat-icon">
-                    <MapPin size={20} />
-                  </div>
+                  <div className="stat-icon"><MapPin size={20} /></div>
                   <div className="stat-info">
                     <div className="stat-value">{markers.length}</div>
                     <div className="stat-label">Остановок</div>
                   </div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-icon">
-                    <RefreshCw size={20} />
-                  </div>
+                  <div className="stat-icon"><RefreshCw size={20} /></div>
                   <div className="stat-info">
                     <div className="stat-value">{routes.length}</div>
                     <div className="stat-label">Маршрутов</div>
@@ -469,33 +566,40 @@ const MapComponent: React.FC<MapComponentProps> = ({
             </div>
 
             <div className="actions-section">
-              <button className="action-btn primary" onClick={fetchMarkers} disabled={loading}>
-                <RefreshCw size={18} />
-                {loading ? 'Обновление...' : 'Обновить данные'}
+              <button 
+                className="action-btn primary" 
+                onClick={() => selectedCityId && fetchMarkers(selectedCityId)} 
+                disabled={loading || !selectedCityId}
+              >
+                {loading ? <Loader2 size={18} className="spin" /> : <RefreshCw size={18} />}
+                {loading ? 'Загрузка...' : 'Обновить'}
               </button>
             </div>
           </>
         ) : (
           <div className="collapsed-panel">
-            <button className="expand-btn" onClick={() => setIsPanelCollapsed(false)}>
-              <Maximize2 size={24} />
-            </button>
+            <Tooltip title="Развернуть панель">
+              <button className="expand-btn" onClick={() => setIsPanelCollapsed(false)}>
+                <Maximize2 size={22} />
+              </button>
+            </Tooltip>
           </div>
         )}
       </div>
 
       <div className="map-area">
-        {loading && (
+        {(loading || mapInitializing || citiesLoading) && (
           <div className="map-loading-overlay">
-            <div className="spinner"></div>
-            <p>Загрузка данных...</p>
+            <Spin size="large" tip="Загрузка данных..." />
           </div>
         )}
 
         {error && (
           <div className="map-error-overlay">
             <div className="error-message">⚠️ {error}</div>
-            <button className="retry-btn" onClick={fetchMarkers}>Повторить</button>
+            <button className="retry-btn" onClick={() => selectedCityId && fetchMarkers(selectedCityId)}>
+              Повторить
+            </button>
           </div>
         )}
 
@@ -503,29 +607,28 @@ const MapComponent: React.FC<MapComponentProps> = ({
           ref={mapContainer}
           className="map-container"
           style={{
-            cursor: isCreatingStop ? 'crosshair' : isCreatingRoute ? 'pointer' : 'grab'
+            cursor: isCreatingStop ? 'crosshair' : isCreatingRoute ? 'pointer' : 'grab',
+            opacity: mapInitializing ? 0.5 : 1,
+            transition: 'opacity 0.3s ease',
+            pointerEvents: 'auto',
           }}
         />
       </div>
 
       {selectedModalMarker && !isCreatingRoute && !isCreatingStop && (
-        <ModalContent
-          marker={selectedModalMarker}
-          isOpen={!!selectedModalMarker}
-          onClose={() => setSelectedModalMarker(null)}
-        />
-      )}
-
-      {selectedModalMarker && !isCreatingRoute && !isCreatingStop && (
-        <button
-          className="modal-close-btn"
-          onClick={() => setSelectedModalMarker(null)}
-        >
-          <X size={20} />
-        </button>
+        <>
+          <ModalContent
+            marker={selectedModalMarker}
+            isOpen={!!selectedModalMarker}
+            onClose={() => setSelectedModalMarker(null)}
+          />
+          <button className="modal-close-btn" onClick={() => setSelectedModalMarker(null)} title="Закрыть" aria-label="Закрыть">
+            <X size={20} />
+          </button>
+        </>
       )}
     </div>
   );
 };
 
-export default MapComponent;
+export default React.memo(MapComponent);
