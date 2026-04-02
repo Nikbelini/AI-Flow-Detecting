@@ -22,7 +22,7 @@ import {
   getDeviceSessions, revokeSession, revokeAllOtherSessions, logoutAllSessions
 } from '../api/endpoints/user';
 import type {
-  UserUpdate, ChangePassword, PolicyUpdate, 
+  UserUpdate, ChangePassword, PolicyUpdate,
   SecurityPolicyDto, DeviceSessionDto
 } from '../api/types/user';
 import './ProfilePage.css';
@@ -42,9 +42,9 @@ const ProfilePage: React.FC = () => {
   const [policy, setPolicy] = useState<SecurityPolicyDto | null>(null);
   const [sessions, setSessions] = useState<DeviceSessionDto[]>([]);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
-  const [otpModal, setOtpModal] = useState<{ 
-    visible: boolean; 
-    action: 'confirm' | 'disable2fa' | null 
+  const [otpModal, setOtpModal] = useState<{
+    visible: boolean;
+    action: 'confirm' | 'disable2fa' | null
   }>({ visible: false, action: null });
   const [otpValue, setOtpValue] = useState('');
 
@@ -95,28 +95,28 @@ const ProfilePage: React.FC = () => {
   // Загрузка сессий — теперь без deviceId, всё через JWT
   const loadSessions = useCallback(async () => {
     if (!mountedRef.current) return;
-    
+
     if (mountedRef.current) {
       setSessionsLoading(true);
       setSessionsError(null);
     }
-    
+
     try {
       // Запрос идёт с заголовком Authorization: Bearer <token>
       // sessionId извлекается на бэкенде из токена
       const data = await getDeviceSessions();
-      
+
       if (mountedRef.current) {
         setSessions(Array.isArray(data) ? data : []);
         sessionsLoadedRef.current = true;
       }
     } catch (err: any) {
       if (mountedRef.current) {
-        const errorMsg = err?.response?.status === 401 
+        const errorMsg = err?.response?.status === 401
           ? 'Сессия истекла. Пожалуйста, войдите снова.'
           : err?.response?.status === 404
-          ? 'Эндпоинт не найден. Проверьте конфигурацию сервера.'
-          : 'Не удалось загрузить сессии. Проверьте соединение.';
+            ? 'Эндпоинт не найден. Проверьте конфигурацию сервера.'
+            : 'Не удалось загрузить сессии. Проверьте соединение.';
         setSessionsError(errorMsg);
         setSessions([]);
       }
@@ -137,7 +137,7 @@ const ProfilePage: React.FC = () => {
 
   useEffect(() => {
     if (!user?.id) return;
-    
+
     // Загружаем данные ТОЛЬКО если ещё не загружены
     if (!profileLoadedRef.current) loadProfile();
     if (!policyLoadedRef.current) loadPolicy();
@@ -239,10 +239,23 @@ const ProfilePage: React.FC = () => {
 
   const handleRevokeSession = async (sessionId: string) => {
     try {
+
+      const isCurrentSession = sessions.find(s => s.sessionId === sessionId)?.currentSession;
+
       await revokeSession(sessionId);
+
+      if (isCurrentSession) {
+        message.info('Сессия завершена. Выполняется выход...');
+
+        // Перенаправляем на логин
+        navigate('/logout', { replace: true });
+        return;
+      }
+
+      // Завершили другую сессию — просто обновляем список
       message.success('Сессия завершена');
       await loadSessions();
-    } catch {
+    } catch (err: any) {
       message.error('Ошибка завершения сессии');
     }
   };
@@ -317,7 +330,7 @@ const ProfilePage: React.FC = () => {
       <Title level={4} className="tab-title">
         <UserOutlined /> Личные данные
       </Title>
-      
+
       <Form form={profileForm} onFinish={handleUpdateProfile} layout="vertical" className="mb-4">
         <Form.Item name="fullName" label="Полное имя" rules={[{ required: true, message: 'Введите имя' }]}>
           <Input prefix={<UserOutlined />} placeholder="Иван Иванов" size="large" />
@@ -373,8 +386,8 @@ const ProfilePage: React.FC = () => {
           <Form.Item name="confirmPassword" label="Подтвердите пароль" dependencies={['newPassword']} rules={[
             { required: true, message: 'Подтвердите пароль' },
             ({ getFieldValue }) => ({
-              validator: (_, value) => !value || getFieldValue('newPassword') === value 
-                ? Promise.resolve() 
+              validator: (_, value) => !value || getFieldValue('newPassword') === value
+                ? Promise.resolve()
                 : Promise.reject(new Error('Пароли не совпадают'))
             })
           ]}>
@@ -396,7 +409,7 @@ const ProfilePage: React.FC = () => {
               {user.twoFactorEnabled ? 'Включена' : 'Отключена'}
             </Tag>
           </div>
-          
+
           {!user.emailConfirmed ? (
             <Button type="primary" onClick={handleRequestConfirmation} loading={loading} size="large" block>
               Подтвердить почту и включить 2FA
@@ -406,10 +419,10 @@ const ProfilePage: React.FC = () => {
               <UnlockOutlined /> Отключить 2FA
             </Button>
           ) : null}
-          
+
           <Text type="secondary" style={{ fontSize: 13, textAlign: 'center' }}>
-            {user.emailConfirmed 
-              ? 'При входе потребуется код из почты' 
+            {user.emailConfirmed
+              ? 'При входе потребуется код из почты'
               : 'Подтвердите почту для активации защиты'}
           </Text>
         </Space>
@@ -422,7 +435,7 @@ const ProfilePage: React.FC = () => {
       <Title level={4} className="tab-title">
         <SafetyOutlined /> Политики безопасности
       </Title>
-      
+
       {policy ? (
         <Form form={policyForm} onFinish={handleUpdatePolicy} layout="vertical" className="policy-card">
           <Form.Item name="passwordExpirationDays" label="Срок действия пароля (дни)" tooltip="Через сколько дней пароль потребует смены">
@@ -441,11 +454,11 @@ const ProfilePage: React.FC = () => {
           </Form.Item>
         </Form>
       ) : (
-        <Alert 
-          message="Политики недоступны" 
-          description="Управление политиками доступно только администраторам" 
-          type="info" 
-          showIcon 
+        <Alert
+          message="Политики недоступны"
+          description="Управление политиками доступно только администраторам"
+          type="info"
+          showIcon
           className="mb-4"
         />
       )}
@@ -458,12 +471,12 @@ const ProfilePage: React.FC = () => {
       <Title level={4} className="tab-title">
         <LaptopOutlined /> Активные сессии
       </Title>
-      
+
       <Alert
         message="Управление устройствами"
         description="Здесь отображаются все устройства, с которых выполнен вход. Вы можете завершить любую сессию."
-        type="info" 
-        showIcon 
+        type="info"
+        showIcon
         className="mb-4"
       />
 
@@ -476,10 +489,10 @@ const ProfilePage: React.FC = () => {
           <WarningOutlined style={{ fontSize: 48, color: 'var(--warning)', marginBottom: 16 }} />
           <Text strong className="sessions-empty-title">Не удалось загрузить</Text>
           <Text type="secondary" className="sessions-empty-desc">{sessionsError}</Text>
-          <Button 
-            type="primary" 
-            onClick={loadSessions} 
-            icon={<ReloadOutlined />} 
+          <Button
+            type="primary"
+            onClick={loadSessions}
+            icon={<ReloadOutlined />}
             className="mt-3"
             loading={sessionsLoading}
           >
@@ -511,7 +524,7 @@ const ProfilePage: React.FC = () => {
                     title="Завершить сессию?"
                     description="Пользователь будет разлогинен на этом устройстве"
                     onConfirm={() => handleRevokeSession(session.sessionId)}
-                    okText="Да" 
+                    okText="Да"
                     cancelText="Нет"
                     okButtonProps={{ danger: true }}
                   >
@@ -522,8 +535,8 @@ const ProfilePage: React.FC = () => {
             >
               <List.Item.Meta
                 avatar={
-                  <div style={{ 
-                    width: 48, height: 48, borderRadius: 12, 
+                  <div style={{
+                    width: 48, height: 48, borderRadius: 12,
                     background: 'var(--accent-gradient)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: 'white', fontSize: 20
@@ -564,8 +577,8 @@ const ProfilePage: React.FC = () => {
           <Divider />
           <Space wrap>
             <Tooltip title="Завершить все сессии, кроме текущей">
-              <Button 
-                onClick={handleRevokeAllOther} 
+              <Button
+                onClick={handleRevokeAllOther}
                 disabled={sessions.filter(s => !s.currentSession).length === 0 || sessionsLoading}
                 icon={<LogoutOutlined />}
               >
@@ -576,7 +589,7 @@ const ProfilePage: React.FC = () => {
               title="Выйти из всех устройств?"
               description="Вы будете разлогинены на всех устройствах, включая текущее"
               onConfirm={handleLogoutAll}
-              okText="Да, выйти везде" 
+              okText="Да, выйти везде"
               cancelText="Отмена"
               okButtonProps={{ danger: true }}
             >
@@ -584,8 +597,8 @@ const ProfilePage: React.FC = () => {
                 Выйти везде
               </Button>
             </Popconfirm>
-            <Button 
-              icon={<ReloadOutlined />} 
+            <Button
+              icon={<ReloadOutlined />}
               onClick={loadSessions}
               loading={sessionsLoading}
             >
@@ -623,9 +636,9 @@ const ProfilePage: React.FC = () => {
       </Card>
 
       <Card className="profile-card" bordered={false}>
-        <Tabs 
-          activeKey={activeTab} 
-          onChange={(k) => setActiveTab(k as ProfileTab)} 
+        <Tabs
+          activeKey={activeTab}
+          onChange={(k) => setActiveTab(k as ProfileTab)}
           centered
           size="large"
         >
@@ -656,7 +669,7 @@ const ProfilePage: React.FC = () => {
             title="Удалить аккаунт?"
             description="Это действие нельзя отменить. Вы уверены?"
             onConfirm={handleDeleteAccount}
-            okText="Удалить" 
+            okText="Удалить"
             cancelText="Отмена"
             okButtonProps={{ danger: true }}
           >
@@ -667,11 +680,11 @@ const ProfilePage: React.FC = () => {
         </div>
 
         <Divider />
-        
-        <Button 
-          block 
-          onClick={logout} 
-          icon={<LogoutOutlined />} 
+
+        <Button
+          block
+          onClick={logout}
+          icon={<LogoutOutlined />}
           size="large"
           className="logout-button"
         >
@@ -696,11 +709,11 @@ const ProfilePage: React.FC = () => {
         closable={!loading}
       >
         <Text type="secondary" style={{ display: 'block', textAlign: 'center', marginBottom: 16 }}>
-          {otpModal.action === 'confirm' 
+          {otpModal.action === 'confirm'
             ? 'Введите код из письма для подтверждения почты и включения 2FA'
             : 'Введите код из письма для отключения 2FA'}
         </Text>
-        
+
         <div className="otp-input-wrapper">
           <Input
             className="otp-input"
@@ -713,14 +726,14 @@ const ProfilePage: React.FC = () => {
             placeholder="000000"
           />
         </div>
-        
+
         <Text type="secondary" className="otp-hint">
           Код отправлен на <strong>{user.email}</strong>
         </Text>
-        
-        <Button 
-          type="link" 
-          size="small" 
+
+        <Button
+          type="link"
+          size="small"
           onClick={handleRequestConfirmation}
           disabled={loading}
           style={{ display: 'block', margin: '12px auto 0' }}

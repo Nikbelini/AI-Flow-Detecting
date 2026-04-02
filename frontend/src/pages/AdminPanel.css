@@ -1,0 +1,500 @@
+/* src/pages/AdminPanel.css */
+
+/* ===== Переменные: светлая тема ===== */
+:root {
+  /* Фон */
+  --admin-bg-primary: #f8fafc;
+  --admin-bg-secondary: #ffffff;
+  --admin-bg-card: #ffffff;
+  --admin-bg-hover: #f1f5f9;
+  
+  /* Текст */
+  --admin-text-primary: #0f172a;
+  --admin-text-secondary: #475569;
+  --admin-text-muted: #94a3b8;
+  --admin-text-on-accent: #ffffff;
+  
+  /* Границы */
+  --admin-border-color: #e2e8f0;
+  --admin-border-focus: #6366f1;
+  
+  /* Акценты */
+  --admin-accent-primary: #6366f1;
+  --admin-accent-secondary: #8b5cf6;
+  --admin-accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --admin-accent-glow: rgba(99, 102, 241, 0.15);
+  
+  /* Статусы */
+  --admin-success: #16a34a;
+  --admin-success-bg: rgba(22, 163, 74, 0.1);
+  --admin-warning: #d97706;
+  --admin-warning-bg: rgba(217, 119, 6, 0.1);
+  --admin-danger: #dc2626;
+  --admin-danger-bg: rgba(220, 38, 38, 0.1);
+  --admin-info: #2563eb;
+  --admin-info-bg: rgba(37, 99, 235, 0.1);
+  
+  /* Размеры */
+  --admin-radius-sm: 8px;
+  --admin-radius-md: 12px;
+  --admin-radius-lg: 16px;
+  
+  /* Тени */
+  --admin-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --admin-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  
+  /* Анимации */
+  --admin-transition: all 0.2s ease;
+}
+
+/* ===== Тёмная тема ===== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Фон */
+    --admin-bg-primary: #0f172a;
+    --admin-bg-secondary: #1e293b;
+    --admin-bg-card: #1e293b;
+    --admin-bg-hover: #334155;
+    
+    /* Текст — ПОВЫШЕННЫЙ КОНТРАСТ */
+    --admin-text-primary: #f8fafc;
+    --admin-text-secondary: #cbd5e1;
+    --admin-text-muted: #94a3b8;
+    --admin-text-on-accent: #ffffff;
+    
+    /* Границы */
+    --admin-border-color: #334155;
+    --admin-border-focus: #818cf8;
+    
+    /* Акценты — более яркие */
+    --admin-accent-primary: #818cf8;
+    --admin-accent-secondary: #a78bfa;
+    --admin-accent-gradient: linear-gradient(135deg, #818cf8, #a78bfa);
+    --admin-accent-glow: rgba(129, 140, 248, 0.25);
+    
+    /* Статусы — насыщенные */
+    --admin-success: #22c55e;
+    --admin-success-bg: rgba(34, 197, 94, 0.15);
+    --admin-warning: #f59e0b;
+    --admin-warning-bg: rgba(245, 158, 11, 0.15);
+    --admin-danger: #f87171;
+    --admin-danger-bg: rgba(248, 113, 113, 0.15);
+    --admin-info: #60a5fa;
+    --admin-info-bg: rgba(96, 165, 250, 0.15);
+    
+    /* Тени */
+    --admin-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --admin-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* ===== Обёртка ===== */
+.admin-panel {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  background: var(--admin-bg-primary);
+  min-height: calc(100vh - 120px);
+}
+
+/* ===== Карточка ===== */
+.admin-panel .ant-card {
+  background: var(--admin-bg-card) !important;
+  border: 1px solid var(--admin-border-color) !important;
+  border-radius: var(--admin-radius-lg) !important;
+  box-shadow: var(--admin-shadow-md) !important;
+}
+
+.admin-panel .ant-card-head {
+  border-bottom-color: var(--admin-border-color) !important;
+  min-height: 64px !important;
+  padding: 0 24px !important;
+}
+
+.admin-panel .ant-card-head-title {
+  color: var(--admin-text-primary) !important;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.admin-panel .ant-card-body {
+  padding: 24px !important;
+}
+
+/* ===== Таблица ===== */
+.admin-panel .ant-table {
+  background: transparent !important;
+}
+
+.admin-panel .ant-table-thead > tr > th {
+  background: var(--admin-bg-secondary) !important;
+  color: var(--admin-text-secondary) !important;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom-color: var(--admin-border-color) !important;
+}
+
+.admin-panel .ant-table-tbody > tr > td {
+  color: var(--admin-text-primary) !important;
+  border-bottom-color: var(--admin-border-color) !important;
+  font-size: 14px;
+}
+
+.admin-panel .ant-table-tbody > tr:hover > td {
+  background: var(--admin-bg-hover) !important;
+}
+
+.admin-panel .ant-table-pagination {
+  margin: 16px 0 0 !important;
+}
+
+.admin-panel .ant-pagination-item {
+  background: var(--admin-bg-secondary) !important;
+  border-color: var(--admin-border-color) !important;
+}
+
+.admin-panel .ant-pagination-item a {
+  color: var(--admin-text-primary) !important;
+}
+
+.admin-panel .ant-pagination-item-active {
+  background: var(--admin-accent-primary) !important;
+  border-color: var(--admin-accent-primary) !important;
+}
+
+.admin-panel .ant-pagination-item-active a {
+  color: var(--admin-text-on-accent) !important;
+}
+
+.admin-panel .ant-pagination-prev .ant-pagination-item-link,
+.admin-panel .ant-pagination-next .ant-pagination-item-link {
+  background: var(--admin-bg-secondary) !important;
+  border-color: var(--admin-border-color) !important;
+  color: var(--admin-text-primary) !important;
+}
+
+/* ===== Кнопки ===== */
+.admin-panel .ant-btn-primary {
+  background: var(--admin-accent-gradient) !important;
+  border: none !important;
+  color: var(--admin-text-on-accent) !important;
+  font-weight: 600;
+  border-radius: var(--admin-radius-md) !important;
+  transition: var(--admin-transition) !important;
+}
+
+.admin-panel .ant-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--admin-accent-glow) !important;
+}
+
+.admin-panel .ant-btn-default {
+  background: var(--admin-bg-secondary) !important;
+  border-color: var(--admin-border-color) !important;
+  color: var(--admin-text-primary) !important;
+}
+
+.admin-panel .ant-btn-default:hover {
+  border-color: var(--admin-accent-primary) !important;
+  color: var(--admin-accent-primary) !important;
+}
+
+.admin-panel .ant-btn-danger {
+  background: var(--admin-danger-bg) !important;
+  border-color: var(--admin-danger) !important;
+  color: var(--admin-danger) !important;
+}
+
+.admin-panel .ant-btn-danger:hover {
+  background: var(--admin-danger) !important;
+  color: var(--admin-text-on-accent) !important;
+}
+
+.admin-panel .ant-btn-icon-only {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: var(--admin-radius-sm) !important;
+}
+
+/* ===== Input / Select ===== */
+.admin-panel .ant-input,
+.admin-panel .ant-input-password,
+.admin-panel .ant-select-selector {
+  background: var(--admin-bg-secondary) !important;
+  border-color: var(--admin-border-color) !important;
+  color: var(--admin-text-primary) !important;
+  border-radius: var(--admin-radius-md) !important;
+  transition: var(--admin-transition) !important;
+}
+
+.admin-panel .ant-input:hover,
+.admin-panel .ant-input-password:hover,
+.admin-panel .ant-select-selector:hover {
+  border-color: var(--admin-accent-primary) !important;
+}
+
+.admin-panel .ant-input:focus,
+.admin-panel .ant-input-password:focus,
+.admin-panel .ant-select-focused .ant-select-selector {
+  border-color: var(--admin-border-focus) !important;
+  box-shadow: 0 0 0 3px var(--admin-accent-glow) !important;
+}
+
+.admin-panel .ant-input::placeholder {
+  color: var(--admin-text-muted) !important;
+}
+
+.admin-panel .ant-input-prefix {
+  color: var(--admin-text-muted) !important;
+}
+
+.admin-panel .ant-select-arrow {
+  color: var(--admin-text-muted) !important;
+}
+
+.admin-panel .ant-select-item {
+  color: var(--admin-text-primary) !important;
+}
+
+.admin-panel .ant-select-item-option-selected {
+  background: var(--admin-bg-hover) !important;
+  color: var(--admin-accent-primary) !important;
+  font-weight: 600;
+}
+
+.admin-panel .ant-select-item-option-active {
+  background: var(--admin-bg-hover) !important;
+}
+
+/* ===== Modal / Drawer ===== */
+.admin-panel .ant-modal-content,
+.admin-panel .ant-drawer-content {
+  background: var(--admin-bg-card) !important;
+  border: 1px solid var(--admin-border-color) !important;
+}
+
+.admin-panel .ant-modal-title,
+.admin-panel .ant-drawer-title {
+  color: var(--admin-text-primary) !important;
+  font-weight: 600;
+}
+
+.admin-panel .ant-modal-close,
+.admin-panel .ant-drawer-close {
+  color: var(--admin-text-secondary) !important;
+}
+
+.admin-panel .ant-modal-header,
+.admin-panel .ant-drawer-header {
+  border-bottom-color: var(--admin-border-color) !important;
+}
+
+.admin-panel .ant-modal-footer,
+.admin-panel .ant-drawer-footer {
+  border-top-color: var(--admin-border-color) !important;
+}
+
+/* ===== Form ===== */
+.admin-panel .ant-form-item-label > label {
+  color: var(--admin-text-secondary) !important;
+  font-weight: 500;
+}
+
+.admin-panel .ant-form-item-explain-error {
+  color: var(--admin-danger) !important;
+}
+
+/* ===== Tag ===== */
+.admin-panel .ant-tag {
+  border-radius: 20px !important;
+  font-weight: 600;
+  font-size: 12px;
+  border: none !important;
+}
+
+.admin-panel .ant-tag-green {
+  background: var(--admin-success-bg) !important;
+  color: var(--admin-success) !important;
+}
+
+.admin-panel .ant-tag-orange {
+  background: var(--admin-warning-bg) !important;
+  color: var(--admin-warning) !important;
+}
+
+.admin-panel .ant-tag-red {
+  background: var(--admin-danger-bg) !important;
+  color: var(--admin-danger) !important;
+}
+
+.admin-panel .ant-tag-blue {
+  background: var(--admin-info-bg) !important;
+  color: var(--admin-info) !important;
+}
+
+/* ===== Alert ===== */
+.admin-panel .ant-alert {
+  border-radius: var(--admin-radius-md) !important;
+  border: none !important;
+}
+
+.admin-panel .ant-alert-info {
+  background: var(--admin-info-bg) !important;
+  color: var(--admin-text-primary) !important;
+}
+
+.admin-panel .ant-alert-success {
+  background: var(--admin-success-bg) !important;
+  color: var(--admin-text-primary) !important;
+}
+
+.admin-panel .ant-alert-warning {
+  background: var(--admin-warning-bg) !important;
+  color: var(--admin-text-primary) !important;
+}
+
+.admin-panel .ant-alert-error {
+  background: var(--admin-danger-bg) !important;
+  color: var(--admin-text-primary) !important;
+}
+
+/* ===== Space / Divider ===== */
+.admin-panel .ant-space {
+  gap: 8px !important;
+}
+
+.admin-panel .ant-divider {
+  border-color: var(--admin-border-color) !important;
+  margin: 16px 0 !important;
+}
+
+.admin-panel .ant-divider-inner-text {
+  color: var(--admin-text-muted) !important;
+  background: var(--admin-bg-card) !important;
+}
+
+/* ===== Tooltip / Popconfirm ===== */
+.admin-panel .ant-tooltip-inner {
+  font-size: 12px;
+  max-width: 200px;
+  background: var(--admin-bg-secondary) !important;
+  color: var(--admin-text-primary) !important;
+  border: 1px solid var(--admin-border-color) !important;
+}
+
+.admin-panel .ant-tooltip-arrow-content {
+  background: var(--admin-bg-secondary) !important;
+  border-color: var(--admin-border-color) !important;
+}
+
+/* ===== Заглушка доступа ===== */
+.admin-panel .ant-alert-error {
+  max-width: 500px;
+  margin: 48px auto;
+}
+
+/* ===== Анимации ===== */
+@keyframes adminFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.admin-panel .ant-card {
+  animation: adminFadeIn 0.3s ease-out;
+}
+
+/* ===== Скроллбар ===== */
+.admin-panel ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.admin-panel ::-webkit-scrollbar-track {
+  background: var(--admin-bg-secondary);
+  border-radius: 4px;
+}
+
+.admin-panel ::-webkit-scrollbar-thumb {
+  background: var(--admin-border-color);
+  border-radius: 4px;
+  transition: var(--admin-transition);
+}
+
+.admin-panel ::-webkit-scrollbar-thumb:hover {
+  background: var(--admin-accent-primary);
+}
+
+/* ===== Адаптивность ===== */
+@media (max-width: 768px) {
+  .admin-panel {
+    padding: 16px 12px;
+  }
+  
+  .admin-panel .ant-card-head {
+    padding: 0 16px !important;
+    min-height: 56px !important;
+  }
+  
+  .admin-panel .ant-card-body {
+    padding: 16px !important;
+  }
+  
+  .admin-panel .ant-table-thead > tr > th,
+  .admin-panel .ant-table-tbody > tr > td {
+    padding: 12px 8px !important;
+    font-size: 13px;
+  }
+  
+  .admin-panel .ant-table-tbody > tr > td:last-child {
+    min-width: 200px;
+  }
+  
+  .admin-panel .ant-space {
+    flex-wrap: wrap !important;
+  }
+  
+  .admin-panel .ant-input,
+  .admin-panel .ant-select {
+    width: 100% !important;
+    min-width: 150px;
+  }
+}
+
+/* ===== Утилиты ===== */
+.mb-3 {
+  margin-bottom: 16px !important;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-muted {
+  color: var(--admin-text-muted) !important;
+}
+
+.text-secondary {
+  color: var(--admin-text-secondary) !important;
+}
+
+.text-primary {
+  color: var(--admin-text-primary) !important;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

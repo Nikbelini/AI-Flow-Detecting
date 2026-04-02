@@ -31,9 +31,12 @@ public class AdminUserController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<UserGetResponse>> getAll(@RequestParam Role role,
+    public ResponseEntity<Page<UserGetResponse>> getAll(@RequestParam String role,
         @RequestParam(required = false) String search, Pageable pageable) {
-            return ResponseEntity.ok(adminUserService.getAllUsers(role, search, pageable));
+
+            Role roleEnum = Role.valueOf(role.toUpperCase());
+
+            return ResponseEntity.ok(adminUserService.getAllUsers(roleEnum, search, pageable));
         }
 
     @GetMapping("/{id}")

@@ -46,7 +46,7 @@ public class UserService {
                 .email(email)
                 .password(encodedPassword)
                 .fullName(fullName)
-                .role(Role.User)
+                .role(Role.USER)
                 .accountLocked(false)
                 .emailConfirmed(false)
                 .twoFactorEnabled(false)

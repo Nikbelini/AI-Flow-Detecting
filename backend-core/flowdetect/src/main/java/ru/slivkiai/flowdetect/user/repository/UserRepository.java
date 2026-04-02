@@ -19,16 +19,19 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Page<User> findByEmailContainingIgnoreCase(String email, Pageable pageable);
 
-@Query("""
-        SELECT u FROM User u
-        WHERE u.role = :role 
-        AND (
-            LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')) 
-            OR 
-            LOWER(u.fullName) LIKE LOWER(CONCAT('%', :search, '%'))
-        )
-        """)
+    @Query("""
+            SELECT u FROM User u
+            WHERE u.role = :role
+            AND (
+                LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%'))
+                OR
+                LOWER(u.fullName) LIKE LOWER(CONCAT('%', :search, '%'))
+            )
+            """)
     Page<User> searchByRoleAndEmailOrFullName(Role role, String search, Pageable pageable);
+
+    Page<User> findByRoleAndFullNameContainingIgnoreCaseOrEmailContainingIgnoreCase(
+            Role role, String fullName, String email, Pageable pageable);
 
     Page<User> findByRole(Role role, Pageable pageable);
 

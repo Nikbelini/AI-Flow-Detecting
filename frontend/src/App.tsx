@@ -13,6 +13,7 @@ import ProfilePage from "./pages/ProfilePage";
 import LogoutCallback from "./pages/LogoutCallback";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import RegistrationPage from "./pages/RegistrationPage";
+import AdminPanel from "./pages/AdminPanel";
 
 const App = () => {
     return (
@@ -47,6 +48,14 @@ const App = () => {
                         </MainLayout>
                     </ProtectedRoute>
                 } />
+
+                  <Route
+                  path="/admin" 
+                  element={
+                    <ProtectedRoute allowedRoles={['ADMIN']}>
+                      <AdminPanel />
+                    </ProtectedRoute>
+                  } />
 
                 <Route path="/profile" element={
                     <ProtectedRoute>

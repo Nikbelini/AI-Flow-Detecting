@@ -3,8 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   MapFill, GraphUp, Bell, PersonCircle,
-  Speedometer2, 
-  ChevronDown, BoxArrowRight, PersonGear 
+  Speedometer2, ChevronDown, BoxArrowRight, 
+  PersonGear, ShieldLock
 } from 'react-bootstrap-icons';
 import './NavigationHeader.css';
 
@@ -29,20 +29,26 @@ const NavigationHeader: React.FC = () => {
   const getActiveKey = () => {
     if (location.pathname === '/map') return 'map';
     if (location.pathname === '/analytics') return 'analytics';
+    if (location.pathname === '/admin') return 'admin';
     return 'map';
   };
 
   const activeKey = getActiveKey();
 
+
   const navItems = [
-    { key: 'map', label: 'Карта', color: 'primary' },
-    { key: 'analytics', label: 'Аналитика', color: 'info' }
+    { key: 'map', label: 'Карта', color: 'primary', path: '/map' },
+    { key: 'analytics', label: 'Аналитика', color: 'info', path: '/analytics' },
+    ...(user?.role === 'ADMIN' ? [
+      { key: 'admin', label: 'Админ-панель', color: 'warning', path: '/admin' }
+    ] : [])
   ];
 
   const getSectionIcon = (section: string) => {
     switch(section) {
       case 'map': return <MapFill />;
       case 'analytics': return <GraphUp />;
+      case 'admin': return <ShieldLock />;
       default: return <MapFill />;
     }
   };
@@ -85,13 +91,13 @@ const NavigationHeader: React.FC = () => {
             </Link>
           </div>
 
-          {/* Навигация — только Карта и Аналитика */}
+          {/* Навигация */}
           <div className="nav-center">
             <div className="nav-items">
               {navItems.map((item) => (
                 <Link
                   key={item.key}
-                  to={`/${item.key}`}
+                  to={item.path}
                   className={`nav-item ${activeKey === item.key ? `nav-item-active bg-${item.color}` : ''}`}
                 >
                   <span className="nav-item-icon">{getSectionIcon(item.key)}</span>
@@ -143,6 +149,20 @@ const NavigationHeader: React.FC = () => {
                       
                       <div className="dropdown-divider" />
                       
+                      {/* Ссылка на админ-панель в дропдауне (для админов) */}
+                      {user.role === 'ADMIN' && (
+                        <button 
+                          className="dropdown-item"
+                          onClick={() => {
+                            setIsProfileOpen(false);
+                            navigate('/admin');
+                          }}
+                        >
+                          <ShieldLock className="dropdown-icon" />
+                          <span>Админ-панель</span>
+                        </button>
+                      )}
+                      
                       <button 
                         className="dropdown-item"
                         onClick={() => {
@@ -182,6 +202,7 @@ const NavigationHeader: React.FC = () => {
             <span className="current-mode">
               {activeKey === 'map' && 'Режим мониторинга'}
               {activeKey === 'analytics' && 'Аналитический режим'}
+              {activeKey === 'admin' && 'Панель администратора'}
             </span>
           </div>
         </div>

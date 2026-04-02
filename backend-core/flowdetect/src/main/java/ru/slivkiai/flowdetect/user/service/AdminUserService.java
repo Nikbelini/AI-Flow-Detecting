@@ -40,7 +40,7 @@ public class AdminUserService {
         user.setAccountLocked(false);
 
         user.setPassword(encoder.encode(dto.password()));
-        user.setRole(Role.User);
+        user.setRole(Role.USER);
 
         return userMapper.toDto(userRepository.save(user));
     }
@@ -49,7 +49,7 @@ public class AdminUserService {
     public Page<UserGetResponse> getAllUsers(Role role, String search, Pageable pageable) {
         Page<User> users = (search == null || search.isBlank())
             ? userRepository.findAll(pageable)
-            : userRepository.searchByRoleAndEmailOrFullName(role, search, pageable);
+            : userRepository.findByRoleAndFullNameContainingIgnoreCaseOrEmailContainingIgnoreCase(role, search, search, pageable);
 
         return users.map(userMapper::toDto);
     }
@@ -61,6 +61,7 @@ public class AdminUserService {
     public void lockUser(long id) {
         User user = getUserOrThrow(id);
         user.setAccountLocked(true);
+         userRepository.save(user);
     }
 
     public void unlockUser(long id) {
@@ -68,17 +69,28 @@ public class AdminUserService {
         user.setAccountLocked(false);
         user.setFailedAttempts(0);
         user.setLockUntil(null);
+        userRepository.save(user);
     }
 
     public void changeRole(long id, Role role) {
-        getUserOrThrow(id).setRole(role);
+        User user = getUserOrThrow(id);
+        user.setRole(role);
+        userRepository.save(user);
     }
 
     public void resetPassword(long id, String newPassword) {
         User user = getUserOrThrow(id);
 
-        user.setPassword(encoder.encode(newPassword));
+         String encodedPassword = encoder.encode(newPassword);
+        
+        user.setPassword(encodedPassword);
+        
         user.setLastPasswordChangeAt(LocalDateTime.now());
+        user.setFailedAttempts(0);
+        user.setAccountLocked(false);
+        user.setLockUntil(null);
+        
+        userRepository.save(user);
     }
 
     @Transactional

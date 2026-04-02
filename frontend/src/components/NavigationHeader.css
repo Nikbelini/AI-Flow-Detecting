@@ -783,3 +783,81 @@
   outline: 2px solid #6366f1;
   outline-offset: 2px;
 }
+
+.nav-item.bg-admin {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #b45309 100%) !important;
+  color: white !important;
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.4);
+}
+
+.nav-item.bg-admin:hover {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 50%, #92400e 100%) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(245, 158, 11, 0.6);
+}
+
+.nav-item.bg-admin .nav-item-icon {
+  color: white !important;
+  animation: adminIconPulse 2s ease-in-out infinite;
+}
+
+@keyframes adminIconPulse {
+  0%, 100% { 
+    opacity: 1; 
+    transform: scale(1);
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+  }
+  50% { 
+    opacity: 0.9; 
+    transform: scale(1.1);
+    text-shadow: 0 0 20px rgba(245, 158, 11, 0.8);
+  }
+}
+
+.nav-item.bg-admin::after {
+  display: none;
+}
+
+/* ===== Админ-иконка в дропдауне ===== */
+.dropdown-item .dropdown-icon.shield-check {
+  color: #f59e0b;
+  transition: var(--header-transition);
+}
+
+.dropdown-item:hover .dropdown-icon.shield-check {
+  color: #fbbf24;
+  transform: scale(1.15) rotate(5deg);
+}
+
+/* ===== Адаптивность для админ-кнопки ===== */
+@media (max-width: 992px) {
+  .nav-item.bg-admin .nav-item-label {
+    display: none;
+  }
+  
+  .nav-item.bg-admin {
+    padding: 10px !important;
+  }
+  
+  .nav-item.bg-admin .nav-item-icon {
+    margin: 0 !important;
+    font-size: 20px;
+  }
+}
+
+/* ===== Подсветка активной админ-кнопки ===== */
+.nav-item-active.bg-admin {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  box-shadow: 
+    0 4px 20px rgba(245, 158, 11, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+.nav-item-active.bg-admin::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.3), transparent);
+  border-radius: 12px;
+  pointer-events: none;
+}

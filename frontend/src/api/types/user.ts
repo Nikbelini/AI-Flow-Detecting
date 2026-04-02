@@ -97,3 +97,18 @@ export interface DeviceSessionDto {
   currentSession: boolean;
   revoked: boolean;
 }
+
+export type UserCreateRequest = {
+  email: string;
+  password: string;
+  fullName: string;
+  role: 'ADMIN' | 'USER' | 'LoGISTIC' | 'OTHER';
+};
+
+export type UserListResponse = {
+  content: UserGetResponse[];
+  totalPages: number;
+  totalElements: number;
+  size: number;
+  number: number;
+};
