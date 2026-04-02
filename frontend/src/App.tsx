@@ -42,7 +42,7 @@ const App = () => {
                 } />
 
                 <Route path="/analytics" element={
-                    <ProtectedRoute>
+                    <ProtectedRoute allowedRoles={['ADMIN']}>
                         <MainLayout>
                             <AnalyticsPage />
                         </MainLayout>

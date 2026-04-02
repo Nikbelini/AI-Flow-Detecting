@@ -29,7 +29,13 @@ public class CityServiceImpl implements CityService {
 
     @Override
     public List<CityResponse> getAll() {
-        return cityRepository.findAll().stream().map(city -> new CityResponse(city.getId(), city.getName(), city.getLng().doubleValue(), city.getLat().doubleValue())).collect(Collectors.toList());
+        return cityRepository.findAll().stream()
+            .map(city -> new CityResponse(
+                city.getId(), 
+                city.getName(), 
+                city.getLat().doubleValue(), 
+                city.getLng().doubleValue()
+            )).collect(Collectors.toList());
     }
 
 

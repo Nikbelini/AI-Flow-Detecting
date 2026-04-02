@@ -1,3 +1,4 @@
+// src/pages/AdminPanel.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -60,7 +61,7 @@ const AdminPanel: React.FC = () => {
     confirmPassword: string 
   }>();
 
-  // 🔹 Защита: только ADMIN
+  // Проверка прав доступа
   useEffect(() => {
     if (user?.role !== 'ADMIN') {
       message.error('Доступ запрещён');
@@ -68,7 +69,7 @@ const AdminPanel: React.FC = () => {
     }
   }, [user, navigate]);
 
-  // 🔹 Загрузка пользователей
+  // Загрузка пользователей
   const loadUsers = async () => {
     setTableLoading(true);
     try {
@@ -97,13 +98,13 @@ const AdminPanel: React.FC = () => {
     }
   }, [roleFilter, pagination.current, pagination.pageSize]);
 
-  // 🔹 Поиск
+  // Поиск
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, current: 1 }));
     loadUsers();
   };
 
-  // 🔹 Создание пользователя
+  // Создание пользователя
   const handleCreateUser = async (values: UserCreateRequest) => {
     setLoading(true);
     try {
@@ -119,7 +120,7 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // 🔹 Удаление
+  // Удаление
   const handleDeleteUser = async (id: number) => {
     setLoading(true);
     try {
@@ -133,7 +134,7 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // 🔹 Блокировка/разблокировка — ИСПРАВЛЕНО
+  // Блокировка/разблокировка — ИСПРАВЛЕНО
   const handleToggleLock = async (id: number, locked: boolean) => {
     setLoading(true);
     try {
@@ -144,7 +145,7 @@ const AdminPanel: React.FC = () => {
         await adminUnlockUser(id);
         message.success('Пользователь разблокирован');
       }
-      // 🔥 Обновляем список сразу после операции
+      // Обновляем список сразу после операции
       await loadUsers();
     } catch (err: any) {
       message.error(err?.message || 'Ошибка операции');
@@ -153,11 +154,12 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // 🔹 Смена роли
+  // Смена роли — ИСПРАВЛЕНО
   const handleChangeRole = async (id: number, role: string) => {
     setLoading(true);
     try {
-      await adminChangeRole(id, role);
+      // 🔥 Приводим роль к верхнему регистру для бэкенда
+      await adminChangeRole(id, role.toUpperCase());
       message.success('Роль изменена');
       loadUsers();
     } catch {
@@ -167,7 +169,7 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // 🔹 Сброс пароля
+  // Сброс пароля
   const handleResetPassword = async () => {
     setLoading(true);
     try {
@@ -193,7 +195,7 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // 🔹 Политики
+  // Политики
   const openPolicyDrawer = async (userId: number) => {
     setLoading(true);
     try {
@@ -227,7 +229,7 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // 🔹 Если не админ — показываем заглушку
+  // Если не админ — показываем заглушку
   if (user?.role !== 'ADMIN') {
     return (
       <div style={{ padding: 48, textAlign: 'center' }}>
@@ -246,7 +248,7 @@ const AdminPanel: React.FC = () => {
     );
   }
 
-  // 🔹 Колонки таблицы
+  // Колонки таблицы
   const columns = [
     {
       title: 'Пользователь',
@@ -396,7 +398,7 @@ const AdminPanel: React.FC = () => {
         title={
           <Space align="center">
             <Title level={4} style={{ margin: 0 }}>
-              👥 Управление пользователями
+              Управление пользователями
             </Title>
             <Tag color="purple">{users.length} пользователей</Tag>
           </Space>
@@ -461,7 +463,7 @@ const AdminPanel: React.FC = () => {
         />
       </Card>
 
-      {/* 🔹 Модальное окно: создание пользователя */}
+      {/* Модальное окно: создание пользователя */}
       <Modal
         title="Создать пользователя"
         open={createModal}
@@ -519,7 +521,7 @@ const AdminPanel: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* 🔹 Модальное окно: сброс пароля */}
+      {/* Модальное окно: сброс пароля */}
       <Modal
         title={`Сброс пароля: ${resetModal.email}`}
         open={resetModal.visible}
@@ -567,7 +569,7 @@ const AdminPanel: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* 🔹 Drawer: политики безопасности */}
+      {/* Drawer: политики безопасности */}
       <Drawer
         title={
           <Space>

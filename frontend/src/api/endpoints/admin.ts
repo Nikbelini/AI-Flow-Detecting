@@ -2,7 +2,7 @@ import { Api } from '../services';
 import type { UserGetResponse, PolicyUpdate, SecurityPolicyDto, UserListResponse, UserCreateRequest } from '../types/user';
 
 export const adminGetUsers = (role: string, search?: string, page = 0, size = 10) => {
-  const params = new URLSearchParams({ role, page: String(page), size: String(size) });
+  const params = new URLSearchParams({ role: role.toUpperCase(), page: String(page), size: String(size) });
   if (search) params.append('search', search);
   return Api.get<UserListResponse>(`/api/admin/users?${params}`).then(res => res.data);
 };
