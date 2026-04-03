@@ -5,10 +5,10 @@ import SimulationMap, { type MapRoute } from './Map/SimulationMap';
 import { useStops } from '../hooks/api/useStops';
 import { useRoutes } from '../hooks/api/useRoutes';
 import {
-  Play, Save, RotateCcw, Download, Eye, EyeOff,
+  Play, RotateCcw, Download, Eye, EyeOff,
   Clock, Users, Bus, AlertTriangle, TrendingUp,
   Plus, Trash2, Settings, Route as RouteIcon,
-  PieChart, Activity, Target, MapPin
+  PieChart, Activity, Target
 } from 'lucide-react';
 import type { Stop } from '../api/types';
 import StopMetricsModal from '../components/modal/StopMetricsModal';
@@ -140,22 +140,6 @@ interface ExtendedStop extends Stop {
   color?: string;
 }
 
-interface NewStopData {
-  lat: number;
-  lng: number;
-  address?: string;
-  capacity?: number;
-}
-
-interface NewRouteData {
-  stops: number[];
-  number: string;
-  name?: string;
-  intervalMinutes: number;
-  transportType: 'BUS' | 'TROLLEYBUS' | 'TRAM' | 'MINIBUS';
-  color?: string;
-}
-
 interface SimulationState {
   status: 'idle' | 'running' | 'completed' | 'error';
   progress: number;
@@ -185,7 +169,7 @@ const SimulationPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [serviceAvailable, setServiceAvailable] = useState(true);
 
-  // Новые состояния для создания элементов
+  // Состояния для создания элементов
   const [creationMode, setCreationMode] = useState<'stop' | 'route' | null>(null);
   const [newRouteStops, setNewRouteStops] = useState<number[]>([]);
   const [newStopPosition, setNewStopPosition] = useState<[number, number] | null>(null);
@@ -202,6 +186,7 @@ const SimulationPage: React.FC = () => {
 
   const [activeMetricTab, setActiveMetricTab] = useState<'basic' | 'throughput' | 'distribution'>('basic');
   const [selectedStopForMetrics, setSelectedStopForMetrics] = useState<number | null>(null);
+  const [showResultsModal, setShowResultsModal] = useState(false);
 
   const CITY_ID = 1;
 
@@ -664,8 +649,6 @@ const SimulationPage: React.FC = () => {
     linkElement.click();
   };
 
-  const formatPercent = (value: number): string => (value * 100).toFixed(1) + '%';
-
   return (
     <div className="simulation-page">
       {/* Заголовок */}
@@ -737,71 +720,6 @@ const SimulationPage: React.FC = () => {
             {editMode === 'select_stop' && (
               <div className="selection-hint"><div className="hint-dot"></div><span>Кликните на остановку на карте</span></div>
             )}
-
-            <div className="panel-section">
-              <h3 className="panel-title"><Plus size={18} /> Создание новых элементов</h3>
-              <div className="creation-actions">
-                <button
-                  className={`creation-btn ${creationMode === 'stop' ? 'active' : ''}`}
-                  onClick={() => {
-                    setCreationMode('stop');
-                    setEditMode('view');
-                    alert('Кликните на карте, чтобы добавить новую остановку');
-                  }}
-                >
-                  <Bus size={16} /> Добавить остановку
-                </button>
-                <button
-                  className={`creation-btn ${creationMode === 'route' ? 'active' : ''}`}
-                  onClick={() => {
-                    setCreationMode('route');
-                    setEditMode('select_stop');
-                    setNewRouteStops([]);
-                    alert('Выберите остановки для маршрута в порядке следования');
-                  }}
-                >
-                  <RouteIcon size={16} /> Добавить маршрут
-                </button>
-              </div>
-            </div>
-            {/* ====================================== */}
-
-            {/* Индикатор создания маршрута */}
-            {creationMode === 'route' && newRouteStops.length > 0 && (
-              <div className="panel-section route-creation-indicator">
-                <h4>Создание маршрута</h4>
-                <p>Выбрано остановок: {newRouteStops.length}</p>
-                <div className="selected-stops-list">
-                  {newRouteStops.map((stopId, idx) => {
-                    const stop = cityStops.find(s => s.id === stopId);
-                    return (
-                      <div key={idx} className="selected-stop-item">
-                        {idx + 1}. {stop?.address || `Остановка ${stopId}`}
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="route-creation-actions">
-                  <button
-                    className="action-btn primary small"
-                    onClick={() => setShowNewRouteModal(true)}
-                    disabled={newRouteStops.length < 2}
-                  >
-                    Завершить маршрут
-                  </button>
-                  <button
-                    className="action-btn secondary small"
-                    onClick={() => {
-                      setNewRouteStops([]);
-                      setCreationMode(null);
-                    }}
-                  >
-                    Отмена
-                  </button>
-                </div>
-              </div>
-            )}
-
             {editMode === 'select_route' && (
               <div className="selection-hint"><div className="hint-dot" style={{ backgroundColor: '#3b82f6' }}></div><span>Кликните на маршрут на карте</span></div>
             )}
@@ -969,6 +887,49 @@ const SimulationPage: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Блок результатов симуляции */}
+          <div className="panel-section results-section">
+            <h3 className="panel-title">
+              <TrendingUp size={18} /> Результаты симуляции
+            </h3>
+
+            {simState.results ? (
+              <div className="results-preview">
+                <div className="results-preview-stats">
+                  <div className="preview-stat">
+                    <span>Ср. время ожидания:</span>
+                    <strong>{simState.results.modifiedMetrics.avgWaitTime.toFixed(1)} мин</strong>
+                    <span className={`preview-delta ${simState.results.modifiedMetrics.avgWaitTime > simState.results.baseMetrics.avgWaitTime ? 'negative' : 'positive'}`}>
+                      {((simState.results.modifiedMetrics.avgWaitTime / simState.results.baseMetrics.avgWaitTime - 1) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="preview-stat">
+                    <span>Всего пассажиров:</span>
+                    <strong>{simState.results.modifiedMetrics.totalPassengers}</strong>
+                    <span className={`preview-delta ${simState.results.modifiedMetrics.totalPassengers > simState.results.baseMetrics.totalPassengers ? 'positive' : 'negative'}`}>
+                      {((simState.results.modifiedMetrics.totalPassengers / simState.results.baseMetrics.totalPassengers - 1) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+                <div className="results-actions">
+                  <button className="open-results-btn" onClick={() => setShowResultsModal(true)}>
+                    📊 Открыть полные результаты
+                  </button>
+                  <button className="export-btn-small" onClick={exportResults}>
+                    <Download size={14} /> Экспорт
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="empty-results-preview">
+                <div className="empty-icon">📊</div>
+                <p>Нет результатов</p>
+                <p className="empty-hint">Добавьте изменения и запустите симуляцию</p>
+              </div>
+            )}
+          </div>
+
         </div>
 
         {/* Центральная область - карта */}
@@ -994,152 +955,6 @@ const SimulationPage: React.FC = () => {
                 <div className="hint-arrow">👆</div>
                 <p>{editMode === 'select_stop' ? 'Кликните на остановку на карте' : 'Кликните на маршрут на карте'}</p>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Правая панель - результаты */}
-        <div className="right-panel">
-          {simState.results ? (
-            <>
-              <div className="metric-tabs">
-                <button className={`metric-tab ${activeMetricTab === 'basic' ? 'active' : ''}`} onClick={() => setActiveMetricTab('basic')}>
-                  <Activity size={16} /> Основные
-                </button>
-                <button className={`metric-tab ${activeMetricTab === 'throughput' ? 'active' : ''}`} onClick={() => setActiveMetricTab('throughput')}>
-                  <Target size={16} /> Пропускная способность
-                </button>
-                <button className={`metric-tab ${activeMetricTab === 'distribution' ? 'active' : ''}`} onClick={() => setActiveMetricTab('distribution')}>
-                  <PieChart size={16} /> Распределение
-                </button>
-              </div>
-
-              <div className="right-panel-content">
-                {activeMetricTab === 'basic' && (
-                  <>
-                    <div className="panel-section">
-                      <h3 className="panel-title"><TrendingUp size={18} /> Ключевые метрики</h3>
-                      <div className="metrics-comparison">
-                        <div className="metric-row header">
-                          <div className="metric-name">Метрика</div>
-                          <div className="metric-base">Было</div>
-                          <div className="metric-modified">Стало</div>
-                          <div className="metric-change">Δ</div>
-                        </div>
-                        <div className="metric-row">
-                          <div className="metric-name">Ср. время ожидания</div>
-                          <div className="metric-base">{simState.results.baseMetrics.avgWaitTime.toFixed(1)} мин</div>
-                          <div className="metric-modified">{simState.results.modifiedMetrics.avgWaitTime.toFixed(1)} мин</div>
-                          <div className={`metric-change ${simState.results.modifiedMetrics.avgWaitTime > simState.results.baseMetrics.avgWaitTime ? 'negative' : 'positive'}`}>
-                            {((simState.results.modifiedMetrics.avgWaitTime / simState.results.baseMetrics.avgWaitTime - 1) * 100).toFixed(1)}%
-                          </div>
-                        </div>
-                        <div className="metric-row">
-                          <div className="metric-name">Макс. время ожидания</div>
-                          <div className="metric-base">{simState.results.baseMetrics.maxWaitTime.toFixed(1)} мин</div>
-                          <div className="metric-modified">{simState.results.modifiedMetrics.maxWaitTime.toFixed(1)} мин</div>
-                          <div className={`metric-change ${simState.results.modifiedMetrics.maxWaitTime > simState.results.baseMetrics.maxWaitTime ? 'negative' : 'positive'}`}>
-                            {((simState.results.modifiedMetrics.maxWaitTime / simState.results.baseMetrics.maxWaitTime - 1) * 100).toFixed(1)}%
-                          </div>
-                        </div>
-                        <div className="metric-row">
-                          <div className="metric-name">Всего пассажиров</div>
-                          <div className="metric-base">{simState.results.baseMetrics.totalPassengers}</div>
-                          <div className="metric-modified">{simState.results.modifiedMetrics.totalPassengers}</div>
-                          <div className={`metric-change ${simState.results.modifiedMetrics.totalPassengers > simState.results.baseMetrics.totalPassengers ? 'positive' : 'negative'}`}>
-                            {((simState.results.modifiedMetrics.totalPassengers / simState.results.baseMetrics.totalPassengers - 1) * 100).toFixed(1)}%
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="panel-section">
-                      <h3 className="panel-title"><Clock size={18} /> Почасовая динамика</h3>
-                      <div style={{ width: '100%', height: '200px', marginTop: '8px' }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart data={simState.results.hourlyData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                            <XAxis dataKey="hour" tickFormatter={(hour) => `${hour}:00`} stroke="#64748b" fontSize={10} />
-                            <YAxis yAxisId="left" stroke="#64748b" fontSize={10} label={{ value: 'Пассажиры', angle: -90, position: 'insideLeft', fontSize: 10 }} />
-                            <Tooltip contentStyle={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '12px' }}
-                              formatter={(value: number) => [`${Math.round(value)} пасс.`, '']}
-                              labelFormatter={(hour) => `${hour}:00`}
-                            />
-                            <Legend verticalAlign="top" height={36} iconType="circle" iconSize={8} />
-                            <Bar yAxisId="left" dataKey="basePassengers" name="Базовый сценарий" fill="#3b82f6" opacity={0.7} radius={[4, 4, 0, 0]} barSize={20} onClick={(data) => data && setSelectedHour(data.hour)} />
-                            <Bar yAxisId="left" dataKey="modifiedPassengers" name="С изменениями" fill="#f59e0b" opacity={0.7} radius={[4, 4, 0, 0]} barSize={20} onClick={(data) => data && setSelectedHour(data.hour)} />
-                            <Line yAxisId="left" type="monotone" dataKey="modifiedPassengers" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={false} />
-                          </ComposedChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '8px', padding: '4px', fontSize: '11px', color: '#64748b' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <div style={{ width: '8px', height: '8px', background: '#3b82f6', borderRadius: '2px' }}></div>
-                          <span>Базовый</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <div style={{ width: '8px', height: '8px', background: '#f59e0b', borderRadius: '2px' }}></div>
-                          <span>С изменениями</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="panel-section">
-                      <h3 className="panel-title"><AlertTriangle size={18} /> Наиболее затронутые остановки</h3>
-                      <div className="affected-stops-list">
-                        {simState.results.affectedStops.map(stop => (
-                          <div key={stop.id} className={`affected-stop-item ${stop.status}`} onClick={() => {
-                            const stopData = cityStops.find(s => s.id === stop.id);
-                            if (stopData) setSelectedStop(stopData);
-                          }}>
-                            <div className="stop-address">{stop.address}</div>
-                            <div className="stop-changes">
-                              <div className="change-badge load">
-                                <span className="change-label">Нагрузка</span>
-                                <span className={`change-value ${stop.loadChange > 0 ? 'up' : 'down'}`}>
-                                  {stop.loadChange > 0 ? '↑' : '↓'} {Math.abs(stop.loadChange)}%
-                                </span>
-                              </div>
-                              <div className="change-badge wait">
-                                <span className="change-label">Ожидание</span>
-                                <span className={`change-value ${stop.waitTimeChange > 0 ? 'up' : 'down'}`}>
-                                  {stop.waitTimeChange > 0 ? '↑' : '↓'} {Math.abs(stop.waitTimeChange)} мин
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {activeMetricTab === 'throughput' && simState.results.baseThroughput && (
-                  <ThroughputMetrics
-                    baseThroughput={simState.results.baseThroughput}
-                    modifiedThroughput={simState.results.modifiedThroughput}
-                  />
-                )}
-
-                {activeMetricTab === 'distribution' && simState.results.baseWaitDistribution && (
-                  <WaitTimeDistributionChart
-                    baseDistribution={simState.results.baseWaitDistribution}
-                    modifiedDistribution={simState.results.modifiedWaitDistribution}
-                  />
-                )}
-
-                <div className="panel-section">
-                  <button className="export-btn full-width" onClick={exportResults}>
-                    <Download size={18} /> Экспортировать результаты
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="empty-results">
-              <div className="empty-icon">📊</div>
-              <h3>Нет результатов</h3>
-              <p>Добавьте изменения и запустите симуляцию</p>
             </div>
           )}
         </div>
@@ -1217,6 +1032,139 @@ const SimulationPage: React.FC = () => {
             <div className="form-actions">
               <button className="action-btn primary" onClick={createNewRoute} disabled={!newRouteNumber || newRouteStops.length < 2}>✅ Создать маршрут</button>
               <button className="action-btn secondary" onClick={() => { setShowNewRouteModal(false); setNewRouteStops([]); setCreationMode(null); }}>❌ Отмена</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Модальное окно с полными результатами */}
+      {showResultsModal && simState.results && (
+        <div className="modal-overlay results-modal-overlay" onClick={() => setShowResultsModal(false)}>
+          <div className="modal-content results-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="results-modal-header">
+              <h2>📊 Результаты моделирования</h2>
+              <button className="close-modal-btn" onClick={() => setShowResultsModal(false)}>✕</button>
+            </div>
+
+            <div className="results-modal-content">
+              <div className="metric-tabs">
+                <button className={`metric-tab ${activeMetricTab === 'basic' ? 'active' : ''}`} onClick={() => setActiveMetricTab('basic')}>
+                  <Activity size={16} /> Основные
+                </button>
+                <button className={`metric-tab ${activeMetricTab === 'throughput' ? 'active' : ''}`} onClick={() => setActiveMetricTab('throughput')}>
+                  <Target size={16} /> Пропускная способность
+                </button>
+                <button className={`metric-tab ${activeMetricTab === 'distribution' ? 'active' : ''}`} onClick={() => setActiveMetricTab('distribution')}>
+                  <PieChart size={16} /> Распределение
+                </button>
+              </div>
+
+              <div className="results-modal-body">
+                {activeMetricTab === 'basic' && (
+                  <>
+                    <div className="panel-section">
+                      <h3 className="panel-title"><TrendingUp size={18} /> Ключевые метрики</h3>
+                      <div className="metrics-comparison">
+                        <div className="metric-row header">
+                          <div className="metric-name">Метрика</div>
+                          <div className="metric-base">Было</div>
+                          <div className="metric-modified">Стало</div>
+                          <div className="metric-change">Δ</div>
+                        </div>
+                        <div className="metric-row">
+                          <div className="metric-name">Ср. время ожидания</div>
+                          <div className="metric-base">{simState.results.baseMetrics.avgWaitTime.toFixed(1)} мин</div>
+                          <div className="metric-modified">{simState.results.modifiedMetrics.avgWaitTime.toFixed(1)} мин</div>
+                          <div className={`metric-change ${simState.results.modifiedMetrics.avgWaitTime > simState.results.baseMetrics.avgWaitTime ? 'negative' : 'positive'}`}>
+                            {((simState.results.modifiedMetrics.avgWaitTime / simState.results.baseMetrics.avgWaitTime - 1) * 100).toFixed(1)}%
+                          </div>
+                        </div>
+                        <div className="metric-row">
+                          <div className="metric-name">Макс. время ожидания</div>
+                          <div className="metric-base">{simState.results.baseMetrics.maxWaitTime.toFixed(1)} мин</div>
+                          <div className="metric-modified">{simState.results.modifiedMetrics.maxWaitTime.toFixed(1)} мин</div>
+                          <div className={`metric-change ${simState.results.modifiedMetrics.maxWaitTime > simState.results.baseMetrics.maxWaitTime ? 'negative' : 'positive'}`}>
+                            {((simState.results.modifiedMetrics.maxWaitTime / simState.results.baseMetrics.maxWaitTime - 1) * 100).toFixed(1)}%
+                          </div>
+                        </div>
+                        <div className="metric-row">
+                          <div className="metric-name">Всего пассажиров</div>
+                          <div className="metric-base">{simState.results.baseMetrics.totalPassengers}</div>
+                          <div className="metric-modified">{simState.results.modifiedMetrics.totalPassengers}</div>
+                          <div className={`metric-change ${simState.results.modifiedMetrics.totalPassengers > simState.results.baseMetrics.totalPassengers ? 'positive' : 'negative'}`}>
+                            {((simState.results.modifiedMetrics.totalPassengers / simState.results.baseMetrics.totalPassengers - 1) * 100).toFixed(1)}%
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="panel-section">
+                      <h3 className="panel-title"><Clock size={18} /> Почасовая динамика</h3>
+                      <div style={{ width: '100%', height: '300px' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart data={simState.results.hourlyData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                            <XAxis dataKey="hour" tickFormatter={(hour) => `${hour}:00`} stroke="#64748b" fontSize={11} />
+                            <YAxis yAxisId="left" stroke="#64748b" fontSize={11} label={{ value: 'Пассажиры', angle: -90, position: 'insideLeft' }} />
+                            <Tooltip />
+                            <Legend />
+                            <Bar yAxisId="left" dataKey="basePassengers" name="Базовый сценарий" fill="#3b82f6" opacity={0.7} radius={[4, 4, 0, 0]} barSize={20} />
+                            <Bar yAxisId="left" dataKey="modifiedPassengers" name="С изменениями" fill="#f59e0b" opacity={0.7} radius={[4, 4, 0, 0]} barSize={20} />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    <div className="panel-section">
+                      <h3 className="panel-title"><AlertTriangle size={18} /> Наиболее затронутые остановки</h3>
+                      <div className="affected-stops-list">
+                        {simState.results.affectedStops.map(stop => (
+                          <div key={stop.id} className={`affected-stop-item ${stop.status}`}>
+                            <div className="stop-address">{stop.address}</div>
+                            <div className="stop-changes">
+                              <div className="change-badge load">
+                                <span className="change-label">Нагрузка</span>
+                                <span className={`change-value ${stop.loadChange > 0 ? 'up' : 'down'}`}>
+                                  {stop.loadChange > 0 ? '↑' : '↓'} {Math.abs(stop.loadChange)}%
+                                </span>
+                              </div>
+                              <div className="change-badge wait">
+                                <span className="change-label">Ожидание</span>
+                                <span className={`change-value ${stop.waitTimeChange > 0 ? 'up' : 'down'}`}>
+                                  {stop.waitTimeChange > 0 ? '↑' : '↓'} {Math.abs(stop.waitTimeChange)} мин
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeMetricTab === 'throughput' && simState.results.baseThroughput && (
+                  <ThroughputMetrics
+                    baseThroughput={simState.results.baseThroughput}
+                    modifiedThroughput={simState.results.modifiedThroughput}
+                  />
+                )}
+
+                {activeMetricTab === 'distribution' && simState.results.baseWaitDistribution && (
+                  <WaitTimeDistributionChart
+                    baseDistribution={simState.results.baseWaitDistribution}
+                    modifiedDistribution={simState.results.modifiedWaitDistribution}
+                  />
+                )}
+              </div>
+
+              <div className="results-modal-footer">
+                <button className="export-btn" onClick={exportResults}>
+                  <Download size={18} /> Экспортировать результаты (JSON)
+                </button>
+                <button className="close-btn" onClick={() => setShowResultsModal(false)}>
+                  Закрыть
+                </button>
+              </div>
             </div>
           </div>
         </div>
