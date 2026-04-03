@@ -19,6 +19,7 @@ import {
   ResponsiveContainer, ComposedChart, Line
 } from 'recharts';
 import KeyMetrics from '../components/KeyMetrics';
+import AffectedStopsList from '../components/AffectedStopsList';
 
 // ========== ТИПЫ ==========
 
@@ -1087,30 +1088,14 @@ const SimulationPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="panel-section">
-                      <h3 className="panel-title"><AlertTriangle size={18} /> Наиболее затронутые остановки</h3>
-                      <div className="affected-stops-list">
-                        {simState.results.affectedStops.map(stop => (
-                          <div key={stop.id} className={`affected-stop-item ${stop.status}`}>
-                            <div className="stop-address">{stop.address}</div>
-                            <div className="stop-changes">
-                              <div className="change-badge load">
-                                <span className="change-label">Нагрузка</span>
-                                <span className={`change-value ${stop.loadChange > 0 ? 'up' : 'down'}`}>
-                                  {stop.loadChange > 0 ? '↑' : '↓'} {Math.abs(stop.loadChange)}%
-                                </span>
-                              </div>
-                              <div className="change-badge wait">
-                                <span className="change-label">Ожидание</span>
-                                <span className={`change-value ${stop.waitTimeChange > 0 ? 'up' : 'down'}`}>
-                                  {stop.waitTimeChange > 0 ? '↑' : '↓'} {Math.abs(stop.waitTimeChange)} мин
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    <AffectedStopsList
+                      stops={simState.results.affectedStops}
+                      onStopClick={(stopId) => {
+                        // Опционально: центрировать карту на остановке
+                        const stop = cityStops.find(s => s.id === stopId);
+                        if (stop) setSelectedStop(stop);
+                      }}
+                    />
                   </>
                 )}
 
