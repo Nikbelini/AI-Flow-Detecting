@@ -3,7 +3,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './SimulationMap.css';
-import { Users, Clock, MapPin } from 'lucide-react';
+import { Users, Clock, MapPin, EyeOff, Route as RouteIcon } from 'lucide-react';
 import type { Stop } from '../../api/types';
 
 interface ExtendedStop extends Stop {
@@ -37,6 +37,10 @@ interface SimulationMapProps {
   onMapClick?: (lngLat: [number, number]) => void;
   selectionMode?: boolean;
   creationMode?: 'stop' | 'route' | null;
+  // НОВЫЕ ПРОПСЫ
+  showStops?: boolean;
+  filteredRouteIds?: Set<number>;
+  onShowStopsChange?: (show: boolean) => void;
 }
 
 const SimulationMap: React.FC<SimulationMapProps> = ({
@@ -48,7 +52,10 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
   onRouteClick,
   onMapClick,
   selectionMode = false,
-  creationMode = null
+  creationMode = null,
+  showStops = true,
+  filteredRouteIds = new Set(),
+  onShowStopsChange
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -59,6 +66,14 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [hoveredStop, setHoveredStop] = useState<ExtendedStop | null>(null);
   const [hoveredRoute, setHoveredRoute] = useState<MapRoute | null>(null);
+
+  // ФИЛЬТРАЦИЯ МАРКЕРОВ
+  const visibleMarkers = showStops ? markers : [];
+  
+  // ФИЛЬТРАЦИЯ МАРШРУТОВ
+  const visibleRoutes = filteredRouteIds.size > 0 
+    ? routes.filter(route => filteredRouteIds.has(route.id))
+    : routes;
 
   // Инициализация карты
   useEffect(() => {
@@ -121,11 +136,9 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
     };
   }, [mapLoaded, onMapClick, creationMode]);
 
-  // Отрисовка маршрутов
+  // Отрисовка маршрутов (используем visibleRoutes)
   useEffect(() => {
-    if (!map.current || !mapLoaded || routes.length === 0) return;
-
-    console.log('🛤️ Отрисовка маршрутов:', routes.length);
+    if (!map.current || !mapLoaded) return;
 
     // Удаляем старые слои
     ['routes', 'routes-outline', 'routes-highlight'].forEach(layerId => {
@@ -138,7 +151,15 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       map.current.removeSource('routes');
     }
 
-    const routesWithColors = routes.map(route => ({
+    // Если нет маршрутов для отображения - выходим
+    if (visibleRoutes.length === 0) {
+      console.log('🛤️ Нет маршрутов для отображения');
+      return;
+    }
+
+    console.log('🛤️ Отрисовка маршрутов:', visibleRoutes.length);
+
+    const routesWithColors = visibleRoutes.map(route => ({
       ...route,
       color: route.color || `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`
     }));
@@ -211,6 +232,12 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       }
     });
 
+    // Удаляем старые обработчики, чтобы не накапливались
+    map.current.off('click', 'routes');
+    map.current.off('mouseenter', 'routes');
+    map.current.off('mouseleave', 'routes');
+    map.current.off('mousemove', 'routes');
+
     map.current.on('click', 'routes', (e) => {
       if (!e.features || e.features.length === 0) return;
       const feature = e.features[0];
@@ -251,18 +278,18 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       setHoveredRoute(null);
     });
 
-  }, [routes, mapLoaded, selectedRouteId, onRouteClick, selectionMode]);
+  }, [visibleRoutes, mapLoaded, selectedRouteId, onRouteClick, selectionMode]);
 
-  // Отрисовка маркеров
+  // Отрисовка маркеров (используем visibleMarkers)
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
 
-    console.log('📍 Отрисовка маркеров:', markers.length);
+    console.log('📍 Отрисовка маркеров:', visibleMarkers.length);
 
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
 
-    markers.forEach(stop => {
+    visibleMarkers.forEach(stop => {
       const el = createMarkerElement(stop);
       
       const marker = new maplibregl.Marker({
@@ -316,7 +343,7 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       }
     }
 
-  }, [markers, mapLoaded, selectedStopId, onMarkerClick]);
+  }, [visibleMarkers, mapLoaded, selectedStopId, onMarkerClick]);
 
   const showStopTooltip = (stop: ExtendedStop) => {
     if (!map.current) return;
@@ -446,6 +473,25 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
         <div className="simulation-map-hint creation">
           <MapPin size={16} />
           <span>Кликните на карту, чтобы добавить новую остановку</span>
+        </div>
+      )}
+
+      {/* НОВЫЙ: Бейдж "Остановки скрыты" */}
+      {!showStops && markers.length > 0 && (
+        <div className="map-status-badge hidden-stops">
+          <EyeOff size={14} />
+          <span>Остановки скрыты</span>
+          {onShowStopsChange && (
+            <button onClick={() => onShowStopsChange(true)}>Показать</button>
+          )}
+        </div>
+      )}
+
+      {/* НОВЫЙ: Бейдж "Фильтрация маршрутов" */}
+      {filteredRouteIds.size > 0 && routes.length > 0 && (
+        <div className="map-status-badge filtered-routes">
+          <RouteIcon size={14} />
+          <span>Показано {filteredRouteIds.size} из {routes.length} маршрутов</span>
         </div>
       )}
 

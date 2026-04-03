@@ -89,21 +89,6 @@ const NavigationHeader: React.FC = () => {
 
           {/* Правая часть - ГОРИЗОНТАЛЬНО */}
           <div className="nav-right">
-            {/* Статусы */}
-            <div className="status-items">
-              {systemStatus.map((status, index) => (
-                <div key={index} className="status-item">
-                  <div className={`status-icon bg-${status.variant}`}>
-                    {status.icon}
-                  </div>
-                  <div className="status-info">
-                    <div className="status-label">{status.label}</div>
-                    <div className="status-value">{status.value}{status.suffix || '%'}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
             {/* Уведомления */}
             <div className="notification-icon">
               <Bell size={20} />

@@ -195,6 +195,10 @@ const SimulationPage: React.FC = () => {
   const { getStops } = useStops();
   const { getAllRoutes } = useRoutes();
 
+  const [showStops, setShowStops] = useState(true);
+  const [searchRouteQuery, setSearchRouteQuery] = useState('');
+  const [filteredRouteIds, setFilteredRouteIds] = useState<Set<number>>(new Set());
+
   // ========== Загрузка данных ==========
 
   useEffect(() => {
@@ -755,6 +759,120 @@ const SimulationPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Панель управления картой */}
+          <div className="panel-section map-controls">
+            <h3 className="panel-title">
+              <Settings size={18} />
+              Управление картой
+            </h3>
+
+            {/* Переключатель видимости остановок */}
+            <div className="map-toggle">
+              <div className="toggle-label">
+                <Bus size={16} />
+                <span>Показывать остановки</span>
+              </div>
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={showStops}
+                  onChange={(e) => setShowStops(e.target.checked)}
+                />
+                <span className="slider round"></span>
+              </label>
+            </div>
+
+            {/* Поиск маршрутов */}
+            <div className="route-search">
+              <div className="search-header">
+                <RouteIcon size={16} />
+                <span>Фильтр маршрутов</span>
+              </div>
+              <div className="search-input-wrapper">
+                <input
+                  type="text"
+                  className="route-search-input"
+                  placeholder="Поиск по номеру или названию..."
+                  value={searchRouteQuery}
+                  onChange={(e) => {
+                    const query = e.target.value.toLowerCase();
+                    setSearchRouteQuery(query);
+
+                    if (query.trim() === '') {
+                      setFilteredRouteIds(new Set());
+                    } else {
+                      const filtered = cityRoutes
+                        .filter(route =>
+                          route.number?.toLowerCase().includes(query) ||
+                          route.name?.toLowerCase().includes(query)
+                        )
+                        .map(route => route.id);
+                      setFilteredRouteIds(new Set(filtered));
+                    }
+                  }}
+                />
+                {searchRouteQuery && (
+                  <button
+                    className="clear-search"
+                    onClick={() => {
+                      setSearchRouteQuery('');
+                      setFilteredRouteIds(new Set());
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Счётчик найденных маршрутов */}
+              {searchRouteQuery && (
+                <div className="search-results-count">
+                  Найдено маршрутов: {filteredRouteIds.size}
+                </div>
+              )}
+
+              {/* Список найденных маршрутов */}
+              {searchRouteQuery && filteredRouteIds.size > 0 && (
+                <div className="search-results-list">
+                  {cityRoutes
+                    .filter(route => filteredRouteIds.has(route.id))
+                    .slice(0, 5)
+                    .map(route => (
+                      <div
+                        key={route.id}
+                        className="search-result-item"
+                        onClick={() => {
+                          setSelectedRoute(route);
+                          setEditMode('select_route');
+                        }}
+                      >
+                        <span className="route-number">{route.number}</span>
+                        <span className="route-name">{route.name}</span>
+                      </div>
+                    ))}
+                  {filteredRouteIds.size > 5 && (
+                    <div className="search-more">и ещё {filteredRouteIds.size - 5}...</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Кнопка сброса фильтров */}
+            {(searchRouteQuery || !showStops) && (
+              <button
+                className="reset-filters-btn"
+                onClick={() => {
+                  setSearchRouteQuery('');
+                  setFilteredRouteIds(new Set());
+                  setShowStops(true);
+                }}
+              >
+                <RotateCcw size={14} />
+                Сбросить все фильтры
+              </button>
+            )}
+          </div>
+
           {/* Индикатор создания маршрута */}
           {creationMode === 'route' && newRouteStops.length > 0 && (
             <div className="panel-section route-creation-indicator">
@@ -949,6 +1067,8 @@ const SimulationPage: React.FC = () => {
               creationMode={creationMode}
               selectedStopId={selectedStop?.id}
               selectedRouteId={selectedRoute?.id}
+              showStops={showStops}
+              filteredRouteIds={filteredRouteIds}
             />
           )}
           {(editMode === 'select_stop' || editMode === 'select_route') && (
