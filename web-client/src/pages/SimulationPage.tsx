@@ -18,6 +18,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ComposedChart, Line
 } from 'recharts';
+import KeyMetrics from '../components/KeyMetrics';
 
 // ========== ТИПЫ ==========
 
@@ -1062,41 +1063,12 @@ const SimulationPage: React.FC = () => {
               <div className="results-modal-body">
                 {activeMetricTab === 'basic' && (
                   <>
-                    <div className="panel-section">
-                      <h3 className="panel-title"><TrendingUp size={18} /> Ключевые метрики</h3>
-                      <div className="metrics-comparison">
-                        <div className="metric-row header">
-                          <div className="metric-name">Метрика</div>
-                          <div className="metric-base">Было</div>
-                          <div className="metric-modified">Стало</div>
-                          <div className="metric-change">Δ</div>
-                        </div>
-                        <div className="metric-row">
-                          <div className="metric-name">Ср. время ожидания</div>
-                          <div className="metric-base">{simState.results.baseMetrics.avgWaitTime.toFixed(1)} мин</div>
-                          <div className="metric-modified">{simState.results.modifiedMetrics.avgWaitTime.toFixed(1)} мин</div>
-                          <div className={`metric-change ${simState.results.modifiedMetrics.avgWaitTime > simState.results.baseMetrics.avgWaitTime ? 'negative' : 'positive'}`}>
-                            {((simState.results.modifiedMetrics.avgWaitTime / simState.results.baseMetrics.avgWaitTime - 1) * 100).toFixed(1)}%
-                          </div>
-                        </div>
-                        <div className="metric-row">
-                          <div className="metric-name">Макс. время ожидания</div>
-                          <div className="metric-base">{simState.results.baseMetrics.maxWaitTime.toFixed(1)} мин</div>
-                          <div className="metric-modified">{simState.results.modifiedMetrics.maxWaitTime.toFixed(1)} мин</div>
-                          <div className={`metric-change ${simState.results.modifiedMetrics.maxWaitTime > simState.results.baseMetrics.maxWaitTime ? 'negative' : 'positive'}`}>
-                            {((simState.results.modifiedMetrics.maxWaitTime / simState.results.baseMetrics.maxWaitTime - 1) * 100).toFixed(1)}%
-                          </div>
-                        </div>
-                        <div className="metric-row">
-                          <div className="metric-name">Всего пассажиров</div>
-                          <div className="metric-base">{simState.results.baseMetrics.totalPassengers}</div>
-                          <div className="metric-modified">{simState.results.modifiedMetrics.totalPassengers}</div>
-                          <div className={`metric-change ${simState.results.modifiedMetrics.totalPassengers > simState.results.baseMetrics.totalPassengers ? 'positive' : 'negative'}`}>
-                            {((simState.results.modifiedMetrics.totalPassengers / simState.results.baseMetrics.totalPassengers - 1) * 100).toFixed(1)}%
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+
+
+                    <KeyMetrics
+                      baseMetrics={simState.results.baseMetrics}
+                      modifiedMetrics={simState.results.modifiedMetrics}
+                    />
 
                     <div className="panel-section">
                       <h3 className="panel-title"><Clock size={18} /> Почасовая динамика</h3>
