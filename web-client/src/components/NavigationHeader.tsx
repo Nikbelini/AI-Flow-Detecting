@@ -30,13 +30,6 @@ const NavigationHeader: React.FC = () => {
   };
 
   const activeKey = getActiveKey();
-  
-  // Статус системы
-  const systemStatus = [
-    { label: 'Сбор данных', value: 87, icon: <CloudArrowUp />, variant: 'success' },
-    { label: 'Прогнозы', value: 92, icon: <GraphUp />, variant: 'primary' },
-    { label: 'Задержка', value: 2.3, suffix: 'с', icon: <Clock />, variant: 'warning' }
-  ];
 
   // Получаем иконку для раздела
   const getSectionIcon = (section: string) => {
