@@ -216,7 +216,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
     try {
       setLoading(true);
       setError(null);
-      const fetchedMarkers = await getMarkers(cityId);
+      const fetchedMarkers = await getMarkers();
       const normalized = fetchedMarkers.map((m: any) => ({ 
         ...m, 
         id: Number(m.id), 
@@ -320,11 +320,12 @@ const MapComponent: React.FC<MapComponentProps> = ({
   useEffect(() => {
     if (!map.current || loading || mapInitializing) return;
 
-    // Удаляем маркеры, которых больше нет
+    // 1. Удаляем маркеры, которых больше нет в списке markers
     markersRef.current.forEach((value, id) => {
       if (!markers.find(m => m.id === id)) {
         const { marker, element } = value;
-        if (element && (element as any)._clickHandler) {
+        // Очищаем слушатели
+        if ((element as any)._clickHandler) {
           element.removeEventListener('click', (element as any)._clickHandler);
           delete (element as any)._clickHandler;
         }
@@ -333,25 +334,41 @@ const MapComponent: React.FC<MapComponentProps> = ({
       }
     });
 
-    // Создаём/обновляем маркеры
+    // 2. Создаём или обновляем маркеры
     markers.forEach(marker => {
       if (!isValidCoordinate(marker.lat, marker.lng)) return;
 
+      // Если маркер уже есть, просто обновляем его вид (цвета/размер)
       if (markersRef.current.has(marker.id)) {
         const existing = markersRef.current.get(marker.id)!;
         updateMarkerElement(existing.element, marker, isCreatingRoute, selectedStops);
-        return;
+        
+        // ⚠️ ВАЖНО: Если режим создания маршрута изменился, нужно перевесить клик?
+        // В твоем коде clickHandler использует onMarkerClickRef, который обновляется отдельно.
+        // Но isCreatingRoute тоже влияет на логику внутри clickHandler.
+        // Поскольку clickHandler замыкает переменные из эффекта, он может "не видеть" новый isCreatingRoute.
+        // РЕШЕНИЕ: Пересоздавать маркер при смене режима ИЛИ использовать ref для isCreatingRoute.
+        
+        return; 
       }
 
+      // Создаём новый маркер
       const el = createCustomMarker(marker, isCreatingRoute, selectedStops);
       
       const clickHandler = (e: MouseEvent) => {
         e.stopPropagation();
-        e.preventDefault();
-        if (isCreatingRoute && onMarkerClickRef.current) {
-          onMarkerClickRef.current(marker);
-          return;
+        // e.preventDefault(); // Убрали, чтобы не ломать нативное поведение карты
+        
+        // Используем Ref для получения актуальной функции
+        const currentOnMarkerClick = onMarkerClickRef.current;
+        
+        // Логика клика
+        if (isCreatingRoute && currentOnMarkerClick) {
+           console.log('🗺️ MapComponent: Marker clicked in route mode', marker);
+           currentOnMarkerClick(marker);
+           return;
         }
+        
         if (!isCreatingRoute && !isCreatingStop) {
           setSelectedModalMarker(marker);
         }
@@ -361,7 +378,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
       (el as any)._clickHandler = clickHandler;
       el.setAttribute('data-marker-id', String(marker.id));
 
-      // ✅ Создаём ОДИН экземпляр маркера
       const markerInstance = new maplibregl.Marker({ 
         element: el, 
         anchor: 'center',
@@ -373,7 +389,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       markersRef.current.set(marker.id, { marker: markerInstance, element: el });
     });
 
-  }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops, mapInitializing]);
+  }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops, mapInitializing]); 
 
   const updateMarkerElement = (el: HTMLDivElement, marker: Stop, isCreatingRoute: boolean, selectedStops: number[]) => {
     const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
