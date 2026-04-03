@@ -1,4 +1,4 @@
-package ru.slivkiai.flowdetect.auth.utils;
+package ru.slivkiai.flowdetect.auth.security;
 
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
