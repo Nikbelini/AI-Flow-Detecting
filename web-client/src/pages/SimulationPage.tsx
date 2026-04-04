@@ -8,7 +8,7 @@ import {
   Play, RotateCcw, Download, Eye, EyeOff,
   Clock, Users, Bus, AlertTriangle, TrendingUp,
   Plus, Trash2, Settings, Route as RouteIcon,
-  PieChart, Activity, Target
+  PieChart, Activity, Target, Save,
 } from 'lucide-react';
 import type { Stop } from '../api/types';
 import StopMetricsModal from '../components/modal/StopMetricsModal';
@@ -20,6 +20,7 @@ import {
 } from 'recharts';
 import KeyMetrics from '../components/KeyMetrics';
 import AffectedStopsList from '../components/AffectedStopsList';
+import ScenarioManager from '../components/ScenarioManager';
 
 // ========== ТИПЫ ==========
 
@@ -1006,6 +1007,27 @@ const SimulationPage: React.FC = () => {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* ===== КОМПОНЕНТ УПРАВЛЕНИЯ СЦЕНАРИЯМИ ===== */}
+          <div className="panel-section">
+            <h3 className="panel-title">
+              <Save size={18} /> Сценарии
+            </h3>
+            <ScenarioManager
+              cityId={CITY_ID}
+              currentModifications={modifications}
+              onLoadScenario={(loadedMods) => {
+                setModifications(loadedMods);
+                // Опционально: сбросить результаты симуляции
+                setSimState(prev => ({ ...prev, status: 'idle', results: null }));
+              }}
+              onScenarioSaved={() => {
+                // Опционально: уведомление
+                console.log('Сценарий сохранён');
+              }}
+              disabled={simState.status === 'running'}
+            />
           </div>
 
           {/* Блок результатов симуляции */}

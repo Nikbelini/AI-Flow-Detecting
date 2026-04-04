@@ -8,7 +8,6 @@ import NavigationHeader from './components/NavigationHeader';
 import MapComponent from './pages/Map/Map';
 import AnalyticsPage from './pages/AnalyticsPage';
 import SimulationPage from './pages/SimulationPage';
-import ScenariosPage from './pages/ScenariosPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from "./pages/RegisterPage";
 
@@ -45,7 +44,6 @@ const App = () => {
 
                                 <Route path="/analytics" element={<AnalyticsPage />} />
                                 <Route path="/simulation" element={<SimulationPage />} />
-                                <Route path="/scenarios" element={<ScenariosPage />} />
                                 
                                 {/* Редирект для несуществующих путей */}
                                 <Route path="*" element={<Navigate to="/map" replace />} />

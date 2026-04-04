@@ -1,7 +1,8 @@
 import sys
 import os
+import uuid
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 import asyncpg
@@ -62,11 +63,6 @@ async def lifespan(app: FastAPI):
             command_timeout=5
         )
         logger.info("✅ PostgreSQL подключен")
-        
-        # Импорт OSM данных (только при первом запуске)
-        # from import_osm_data import run_import_if_needed
-        # await run_import_if_needed(pg_pool)
-        # =========================================
 
         # Инициализация сервисов
         cache_service = CacheService(redis_client)
@@ -333,6 +329,165 @@ async def get_city_routes(city_id: int):
     """
     routes = await db_service.get_routes_with_path(city_id)
     return routes
+
+# ========== ЭНДПОИНТЫ ДЛЯ СЦЕНАРИЕВ ==========
+
+@app.post("/scenario/{city_id}")
+async def create_scenario(city_id: int, request: Request):
+    """
+    Создание нового сценария
+    """
+    try:
+        data = await request.json()
+        scenario_id = str(uuid.uuid4())[:8]
+        
+        scenario_data = {
+            "name": data.get("name", f"Сценарий {scenario_id}"),
+            "description": data.get("description", ""),
+            "modifications": data.get("modifications", []),
+            "created_at": datetime.now().isoformat(),
+            "created_by": data.get("created_by", "user"),
+            "is_favorite": False,
+            "version": 1
+        }
+        
+        saved = await cache_service.save_scenario(city_id, scenario_id, scenario_data)
+        
+        if saved:
+            return {
+                "status": "success",
+                "scenario_id": scenario_id,
+                "scenario": scenario_data
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Ошибка сохранения сценария")
+            
+    except Exception as e:
+        logger.error(f"❌ Ошибка создания сценария: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/scenario/{city_id}/{scenario_id}")
+async def get_scenario(city_id: int, scenario_id: str):
+    """
+    Получение сценария по ID
+    """
+    scenario = await cache_service.get_scenario(city_id, scenario_id)
+    
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Сценарий не найден")
+    
+    return scenario
+
+@app.get("/scenario/{city_id}")
+async def list_scenarios(city_id: int):
+    """
+    Список всех сценариев для города
+    """
+    scenarios = await cache_service.list_scenarios(city_id)
+    return {
+        "city_id": city_id,
+        "scenarios": scenarios,
+        "count": len(scenarios)
+    }
+
+@app.put("/scenario/{city_id}/{scenario_id}")
+async def update_scenario(city_id: int, scenario_id: str, request: Request):
+    """
+    Обновление сценария
+    """
+    try:
+        updates = await request.json()
+        updated = await cache_service.update_scenario(city_id, scenario_id, updates)
+        
+        if updated:
+            scenario = await cache_service.get_scenario(city_id, scenario_id)
+            return {
+                "status": "success",
+                "scenario": scenario
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Сценарий не найден")
+                
+    except Exception as e:
+        logger.error(f"❌ Ошибка обновления сценария: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/scenario/{city_id}/{scenario_id}")
+async def delete_scenario(city_id: int, scenario_id: str):
+    """
+    Удаление сценария
+    """
+    deleted = await cache_service.delete_scenario(city_id, scenario_id)
+    
+    if deleted:
+        return {"status": "deleted", "scenario_id": scenario_id}
+    else:
+        raise HTTPException(status_code=404, detail="Сценарий не найден")
+
+@app.post("/scenario/{city_id}/{scenario_id}/duplicate")
+async def duplicate_scenario(city_id: int, scenario_id: str, request: Request):
+    """
+    Копирование сценария
+    """
+    try:
+        data = await request.json()
+        new_name = data.get("new_name", f"Копия {scenario_id}")
+        
+        new_id = await cache_service.duplicate_scenario(city_id, scenario_id, new_name)
+        
+        if new_id:
+            return {
+                "status": "success",
+                "new_scenario_id": new_id
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Исходный сценарий не найден")
+                
+    except Exception as e:
+        logger.error(f"❌ Ошибка копирования сценария: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/simulate/from_scenario")
+async def simulate_from_scenario(request: Request):
+    """
+    Запуск симуляции из сохранённого сценария
+    """
+    try:
+        data = await request.json()
+        city_id = data.get("city_id")
+        scenario_id = data.get("scenario_id")
+        
+        if not city_id or not scenario_id:
+            raise HTTPException(status_code=400, detail="Не указаны city_id и scenario_id")
+        
+        # Загружаем сценарий
+        scenario = await cache_service.get_scenario(city_id, scenario_id)
+        
+        if not scenario:
+            raise HTTPException(status_code=404, detail="Сценарий не найден")
+        
+        # Запускаем симуляцию
+        modifications = scenario.get("modifications", [])
+        
+        # Преобразуем в нужный формат
+        sim_request = SimulationRequest(
+            city_id=city_id,
+            modifications=[Modification(**m) for m in modifications],
+            simulation_hours=24
+        )
+        
+        results = await run_simulation(sim_request)
+        
+        return {
+            "scenario": scenario,
+            "simulation_results": results
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Ошибка: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Фоновая задача для асинхронной симуляции
 async def run_simulation_background(task_id: str, request: SimulationRequest):
