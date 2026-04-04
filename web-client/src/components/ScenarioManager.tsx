@@ -52,7 +52,7 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
         currentModifications.filter(m => m.enabled),
         scenarioDescription
       );
-      
+
       await loadScenarios();
       setShowSaveModal(false);
       setScenarioName('');
@@ -87,7 +87,7 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
   const deleteScenario = async (scenarioId: string, event: React.MouseEvent) => {
     event.stopPropagation();
     if (!confirm('Удалить сценарий?')) return;
-    
+
     try {
       await scenariosApi.deleteScenario(cityId, scenarioId);
       await loadScenarios();
@@ -103,7 +103,7 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
     event.stopPropagation();
     const newName = prompt('Введите название для копии:');
     if (!newName) return;
-    
+
     try {
       await scenariosApi.duplicateScenario(cityId, scenarioId, { new_name: newName });
       await loadScenarios();
@@ -159,7 +159,7 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
           <Save size={16} />
           Сохранить сценарий
         </button>
-        
+
         <button
           className="action-btn secondary"
           onClick={() => {
@@ -341,27 +341,21 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
                               {scenario.version && <span>v{scenario.version}</span>}
                             </div>
                           </div>
+                          {/* Кнопки в списке сценариев */}
                           <div className="scenario-actions">
-                            <button
-                              className="icon-btn favorite"
-                              onClick={(e) => toggleFavorite(scenario, e)}
-                              title="Добавить в избранное"
-                            >
-                              <StarOff size={16} />
-                            </button>
                             <button
                               className="icon-btn copy"
                               onClick={(e) => duplicateScenario(scenario.id, e)}
                               title="Копировать"
                             >
-                              <Copy size={16} />
+                              📋
                             </button>
                             <button
                               className="icon-btn delete"
                               onClick={(e) => deleteScenario(scenario.id, e)}
                               title="Удалить"
                             >
-                              <Trash2 size={16} />
+                              🗑️
                             </button>
                           </div>
                         </div>

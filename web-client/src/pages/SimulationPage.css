@@ -1482,3 +1482,485 @@ input:checked + .slider:before {
   padding: 40px;
   color: #64748b;
 }
+
+/* ============================================
+   Стили для ScenarioManager
+   ============================================ */
+
+/* Кнопки управления сценариями */
+.scenario-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.scenario-actions .action-btn {
+  flex: 1;
+  justify-content: center;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+/* ============================================
+   Общие стили для модальных окон
+   ============================================ */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-content {
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.3s ease;
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Модальное окно сохранения */
+.save-scenario-modal {
+  width: 500px;
+  max-width: 90vw;
+}
+
+/* Модальное окно загрузки */
+.load-scenario-modal {
+  width: 650px;
+  max-width: 90vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Заголовок модального окна */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+}
+
+.modal-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.close-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f1f5f9;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 18px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+/* Тело модального окна */
+.modal-body {
+  padding: 24px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Футер модального окна */
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+/* Формы */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.2s;
+  background: white;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Превью изменений */
+.scenario-preview {
+  background: #f8fafc;
+  border-radius: 16px;
+  padding: 16px;
+  margin-top: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.preview-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.preview-list {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.preview-item {
+  font-size: 13px;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-item::before {
+  content: "•";
+  color: #3b82f6;
+  font-weight: bold;
+}
+
+.preview-more {
+  font-size: 12px;
+  color: #64748b;
+  padding: 6px 12px;
+  font-style: italic;
+}
+
+/* Поиск */
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f1f5f9;
+  border-radius: 14px;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.search-box:focus-within {
+  background: white;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.search-box input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  padding: 0;
+}
+
+.search-box input::placeholder {
+  color: #94a3b8;
+}
+
+.clear-search {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 16px;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.clear-search:hover {
+  color: #ef4444;
+  background: #fee2e2;
+}
+
+/* Список сценариев */
+.scenarios-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.scenarios-group .group-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Карточка сценария */
+.scenario-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 16px;
+  background: white;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.scenario-item:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateX(2px);
+}
+
+.scenario-item.selected {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+/* Информация о сценарии */
+.scenario-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.scenario-name {
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 4px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scenario-description {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.scenario-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.scenario-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Кнопки действий сценария */
+.scenario-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: #f1f5f9;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  color: #64748b;
+}
+
+.icon-btn:hover {
+  background: #e2e8f0;
+  transform: scale(1.05);
+}
+
+.icon-btn.favorite {
+  color: #f59e0b;
+}
+
+.icon-btn.favorite:hover {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.icon-btn.delete:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.icon-btn.copy:hover {
+  background: #dcfce7;
+  color: #10b981;
+}
+
+/* Пустое состояние */
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: #64748b;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state p {
+  margin: 8px 0;
+}
+
+.empty-hint {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Загрузчик */
+.loading-spinner {
+  text-align: center;
+  padding: 48px;
+  color: #64748b;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+  .modal-content {
+    width: 95vw !important;
+  }
+  
+  .scenario-item {
+    flex-direction: column;
+  }
+  
+  .scenario-actions {
+    margin-left: 0;
+    margin-top: 10px;
+    justify-content: flex-end;
+  }
+  
+  .modal-footer {
+    flex-direction: column-reverse;
+  }
+  
+  .modal-footer button {
+    width: 100%;
+  }
+}
+
+/* Анимация появления элементов */
+.scenario-item {
+  animation: itemFadeIn 0.3s ease backwards;
+}
+
+@keyframes itemFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Стили для скроллбара в модальных окнах */
+.modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
