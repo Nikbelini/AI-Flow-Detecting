@@ -43,8 +43,8 @@ const NavigationHeader: React.FC = () => {
   };
 
   const navItems = [
-    { key: 'map', label: 'Карта', color: 'primary', badge: 'LIVE' },
-    { key: 'analytics', label: 'Аналитика', color: 'info', badge: 'Новое' },
+    { key: 'map', label: 'Карта', color: 'primary'},
+    { key: 'analytics', label: 'Аналитика', color: 'info'},
     { key: 'login', label: 'Логин', color: 'warning' },
     { key: 'simulation', label: 'Симулятор', color: 'danger' }
   ];
@@ -112,36 +112,6 @@ const NavigationHeader: React.FC = () => {
             >
               <PlayCircle /> Быстрый запуск
             </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Вторая строка */}
-      <div className="sub-navbar">
-        <div className="sub-nav-container">
-          <div className="sub-nav-left">
-            <span className="current-mode">
-              {activeKey === 'map' && '🗺️ Режим мониторинга'}
-              {activeKey === 'analytics' && '📊 Аналитический режим'}
-              {activeKey === 'scenarios' && '📁 Управление сценариями'}
-              {activeKey === 'simulation' && '🎮 Режим симуляции'}
-            </span>
-            <span className="last-updated">Обновлено: 15:42</span>
-          </div>
-          
-          <div className="sub-nav-right">
-            <div className="system-status">
-              <CheckCircle className="text-success" />
-              <span>Система активна</span>
-            </div>
-            <div className="system-load">
-              <span>Загрузка:</span>
-              <div className="load-bar">
-                <div className="load-progress" style={{ width: '87%' }}></div>
-              </div>
-              <span>87%</span>
-            </div>
-            <span className="version">v2.1.4</span>
           </div>
         </div>
       </div>

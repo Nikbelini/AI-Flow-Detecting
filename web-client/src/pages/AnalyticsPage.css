@@ -951,3 +951,518 @@ input:checked + .slider:before {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.search-box input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.search-box input::placeholder {
+  color: #94a3b8;
+}
+
+.search-box .clear-search {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+/* Списки с прокруткой */
+.stops-list,
+.routes-list {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Стилизация скроллбара */
+.stops-list::-webkit-scrollbar,
+.routes-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.stops-list::-webkit-scrollbar-track,
+.routes-list::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.stops-list::-webkit-scrollbar-thumb,
+.routes-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.stops-list::-webkit-scrollbar-thumb:hover,
+.routes-list::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Маршрут в списке */
+.route-item {
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.route-item:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.route-item.selected {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.route-item.expanded {
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.route-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.route-number {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.route-icon {
+  font-size: 18px;
+}
+
+.route-number-text {
+  color: #1e293b;
+}
+
+.route-name {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.route-status {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.route-status.active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.route-status.inactive {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Предпросмотр остановок маршрута */
+.route-stops-preview {
+  margin-bottom: 8px;
+  padding: 6px 0;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.stops-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.stops-list-mini {
+  font-size: 11px;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stop-name {
+  font-size: 11px;
+}
+
+.stops-more {
+  font-size: 11px;
+  color: #64748b;
+  margin-left: 4px;
+}
+
+/* Расширенная информация */
+.route-details-expanded {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.details-grid {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.route-directions {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.direction {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.direction-label {
+  font-weight: 500;
+  color: #334155;
+  min-width: 70px;
+}
+
+.stops-full-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.stops-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.stops-list-full {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stop-item-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: white;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.stop-order-mini {
+  width: 20px;
+  height: 20px;
+  background: #e2e8f0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.stop-name-full {
+  flex: 1;
+  color: #334155;
+}
+
+/* Футер маршрута */
+.route-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 6px;
+}
+
+.route-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metric {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.selected-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #3b82f6;
+}
+
+/* Карточка выбранного маршрута */
+.selected-stops-card {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 320px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+}
+
+.selected-stops-card .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.selected-stops-card .card-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.close-card {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  padding: 4px;
+}
+
+.stops-ordered-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.route-instructions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #fef3c7;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 11px;
+  color: #92400e;
+}
+
+.configure-route-btn {
+  width: 100%;
+  padding: 10px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.configure-route-btn:hover {
+  background: #2563eb;
+}
+
+/* Карточка остановок */
+.stops-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.stops-card .card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e9ecef;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stops-card .card-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: #212529;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.refresh-btn {
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  color: #6c757d;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.refresh-btn:hover {
+  background: #f8f9fa;
+  color: #0d6efd;
+}
+
+/* Элемент списка остановок */
+.stop-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  transition: all 0.2s;
+  cursor: pointer;
+  gap: 12px;
+}
+
+.stop-item:hover {
+  background: #f8f9fa;
+}
+
+.stop-item.selected {
+  background: #e3f2fd;
+  border-left: 3px solid #0d6efd;
+}
+
+.stop-marker {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 14px;
+  color: white;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.stop-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.stop-address {
+  font-weight: 500;
+  font-size: 14px;
+  color: #212529;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stop-url {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #0d6efd;
+  text-decoration: none;
+  margin-bottom: 4px;
+}
+
+.stop-url:hover {
+  text-decoration: underline;
+}
+
+.stop-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #6c757d;
+}
+
+.stop-stats .stat {
+  background: #f8f9fa;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.stop-order {
+  width: 28px;
+  height: 28px;
+  background: #0d6efd;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* Пустое состояние */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6c757d;
+}
+
+.empty-state svg {
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.empty-state p {
+  font-size: 14px;
+  margin: 0;
+}
+
+.empty-hint {
+  font-size: 12px;
+  color: #adb5bd;
+  margin-top: 4px;
+}

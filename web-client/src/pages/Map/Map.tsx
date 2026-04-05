@@ -4,7 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import './MapComponent.css';
 import ModalContent from './ModalContent';
 import { getMarkers } from '../../api/markersApi';
-import { Clock, RefreshCw, MapPin, Minimize2, Maximize2, X } from 'lucide-react';
+import { Clock, RefreshCw, MapPin, Minimize2, Maximize2, X, ChevronDown, ChevronUp, TrendingUp, Users, Bus, Activity, Layers } from 'lucide-react';
 import type { Stop, Route as ApiRoute } from '../../api/types';
 
 interface MapComponentProps {
@@ -41,8 +41,15 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const [selectedModalMarker, setSelectedModalMarker] = useState<Stop | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState<'stats' | 'routes'>('stats');
 
   const markers = externalMarkers || localMarkers;
+
+  // Подсчёт общей загрузки
+  const totalLoad = markers.reduce((sum, m) => sum + (m.load || 0), 0);
+  const avgLoad = markers.length > 0 ? (totalLoad / markers.length).toFixed(1) : '0';
+  const totalPassengers = markers.reduce((sum, m) => sum + (m.count || 0), 0);
+  const peakLoadStops = [...markers].sort((a, b) => (b.load || 0) - (a.load || 0)).slice(0, 3);
 
   useEffect(() => {
     onMarkerClickRef.current = onMarkerClick;
@@ -145,26 +152,15 @@ const MapComponent: React.FC<MapComponentProps> = ({
     };
   }, [isCreatingStop]);
 
-  // Отрисовка маршрутов при изменении данных или загрузке карты
+  // Отрисовка маршрутов
   useEffect(() => {
-    if (!map.current || !mapLoaded) {
-      console.log('Map not ready for routes');
-      return;
-    }
-    
-    console.log('Drawing routes, count:', routes.length, 'selectedId:', selectedRouteId);
+    if (!map.current || !mapLoaded) return;
     drawRoutes();
   }, [routes, selectedRouteId, mapLoaded]);
 
   const drawRoutes = () => {
-    if (!map.current) {
-      console.log('No map instance');
-      return;
-    }
+    if (!map.current) return;
 
-    console.log('Starting drawRoutes with routes:', routes.length);
-
-    // Удаляем старые слои и источник
     try {
       if (map.current.getLayer('routes-line-selected')) {
         map.current.removeLayer('routes-line-selected');
@@ -179,36 +175,23 @@ const MapComponent: React.FC<MapComponentProps> = ({
       console.log('Error removing old layers:', error);
     }
 
-    if (routes.length === 0) {
-      console.log('No routes to draw');
-      return;
-    }
+    if (routes.length === 0) return;
 
     const features: any[] = [];
 
     routes.forEach(route => {
-      if (!route.stops || route.stops.length < 2) {
-        console.log(`Route ${route.id} has insufficient stops`);
-        return;
-      }
+      if (!route.stops || route.stops.length < 2) return;
 
       const sortedStops = [...route.stops].sort((a, b) => a.orderInRoute - b.orderInRoute);
       
       const coordinates = sortedStops
         .map(stop => {
-          if (!stop.lng || !stop.lat) {
-            console.warn('Stop missing coordinates:', stop);
-            return null;
-          }
-          // MapLibre ожидает [lng, lat]
+          if (!stop.lng || !stop.lat) return null;
           return [stop.lng, stop.lat];
         })
         .filter(coord => coord !== null);
 
-      if (coordinates.length < 2) {
-        console.log(`Route ${route.id} has insufficient valid coordinates`);
-        return;
-      }
+      if (coordinates.length < 2) return;
 
       features.push({
         type: 'Feature',
@@ -224,12 +207,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       });
     });
 
-    console.log('Features to draw:', features);
-
-    if (features.length === 0) {
-      console.log('No valid features to draw');
-      return;
-    }
+    if (features.length === 0) return;
 
     try {
       map.current.addSource('routes', {
@@ -240,9 +218,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
         }
       });
 
-      console.log('Source added successfully');
-
-      // Невыделенные маршруты (серые, пунктирные)
       map.current.addLayer({
         id: 'routes-line',
         type: 'line',
@@ -260,9 +235,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
         }
       });
 
-      console.log('Base routes layer added');
-
-      // Выделенный маршрут (синий, жирный)
       if (selectedRouteId) {
         map.current.addLayer({
           id: 'routes-line-selected',
@@ -279,10 +251,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
             'line-opacity': 1
           }
         });
-
-        console.log('Selected route layer added');
         
-        // Центрируем карту на выбранном маршруте
         const selectedFeature = features.find(f => f.properties.id === selectedRouteId);
         if (selectedFeature) {
           const bounds = new maplibregl.LngLatBounds();
@@ -416,9 +385,15 @@ const MapComponent: React.FC<MapComponentProps> = ({
           <>
             <div className="panel-header">
               <div className="header-main">
-                <h3>🗺️ Карта пассажиропотоков</h3>
+                <div className="title-section">
+                  <div className="title-icon">🗺️</div>
+                  <div className="title-text">
+                    <h3>Карта пассажиропотоков</h3>
+                    <span className="title-sub">в реальном времени</span>
+                  </div>
+                </div>
                 <div className="time-display">
-                  <Clock size={16} />
+                  <Clock size={14} />
                   <span>{formatTime(currentTime)}</span>
                 </div>
               </div>
@@ -427,59 +402,204 @@ const MapComponent: React.FC<MapComponentProps> = ({
               </button>
             </div>
 
+            {/* Табы */}
+            <div className="panel-tabs">
+              <button 
+                className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`}
+                onClick={() => setActiveTab('stats')}
+              >
+                <Activity size={14} />
+                Статистика
+              </button>
+              <button 
+                className={`tab-btn ${activeTab === 'routes' ? 'active' : ''}`}
+                onClick={() => setActiveTab('routes')}
+              >
+                <Layers size={14} />
+                Маршруты
+              </button>
+            </div>
+
+            {/* Содержимое вкладок */}
+            <div className="panel-content">
+              {activeTab === 'stats' && (
+                <>
+                  {/* Основные метрики */}
+                  <div className="stats-section">
+                    <div className="stats-grid">
+                      <div className="stat-card">
+                        <div className="stat-icon blue">
+                          <MapPin size={20} />
+                        </div>
+                        <div className="stat-info">
+                          <div className="stat-value">{markers.length}</div>
+                          <div className="stat-label">Остановок</div>
+                        </div>
+                      </div>
+                      <div className="stat-card">
+                        <div className="stat-icon purple">
+                          <Bus size={20} />
+                        </div>
+                        <div className="stat-info">
+                          <div className="stat-value">{routes.length}</div>
+                          <div className="stat-label">Маршрутов</div>
+                        </div>
+                      </div>
+                      <div className="stat-card">
+                        <div className="stat-icon green">
+                          <Users size={20} />
+                        </div>
+                        <div className="stat-info">
+                          <div className="stat-value">{totalPassengers.toLocaleString()}</div>
+                          <div className="stat-label">Пассажиров</div>
+                        </div>
+                      </div>
+                      <div className="stat-card">
+                        <div className="stat-icon orange">
+                          <TrendingUp size={20} />
+                        </div>
+                        <div className="stat-info">
+                          <div className="stat-value">{avgLoad}</div>
+                          <div className="stat-label">Ср. загрузка</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Загрузка остановок (простое распределение) */}
+                  <div className="load-distribution">
+                    <div className="section-title">
+                      <div className="title-dot green"></div>
+                      <span>Распределение загрузки</span>
+                    </div>
+                    <div className="load-bars">
+                      <div className="load-bar-item">
+                        <span className="load-label">Низкая (0-3)</span>
+                        <div className="load-bar-bg">
+                          <div 
+                            className="load-bar-fill green" 
+                            style={{ width: `${(markers.filter(m => m.load <= 3).length / markers.length) * 100}%` }}
+                          />
+                        </div>
+                        <span className="load-count">{markers.filter(m => m.load <= 3).length}</span>
+                      </div>
+                      <div className="load-bar-item">
+                        <span className="load-label">Средняя (4-7)</span>
+                        <div className="load-bar-bg">
+                          <div 
+                            className="load-bar-fill orange" 
+                            style={{ width: `${(markers.filter(m => m.load > 3 && m.load <= 7).length / markers.length) * 100}%` }}
+                          />
+                        </div>
+                        <span className="load-count">{markers.filter(m => m.load > 3 && m.load <= 7).length}</span>
+                      </div>
+                      <div className="load-bar-item">
+                        <span className="load-label">Высокая (8-10)</span>
+                        <div className="load-bar-bg">
+                          <div 
+                            className="load-bar-fill red" 
+                            style={{ width: `${(markers.filter(m => m.load > 7).length / markers.length) * 100}%` }}
+                          />
+                        </div>
+                        <span className="load-count">{markers.filter(m => m.load > 7).length}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Топ загруженных остановок */}
+                  <div className="top-stops">
+                    <div className="section-title">
+                      <div className="title-dot red"></div>
+                      <span>Наиболее загруженные</span>
+                    </div>
+                    <div className="top-stops-list">
+                      {peakLoadStops.map((stop, idx) => (
+                        <div key={stop.id} className="top-stop-item">
+                          <div className="top-stop-rank">#{idx + 1}</div>
+                          <div className="top-stop-address">{stop.address}</div>
+                          <div className="top-stop-load">{stop.load}/10</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {activeTab === 'routes' && (
+                <div className="routes-info">
+                  <div className="section-title">
+                    <div className="title-dot blue"></div>
+                    <span>Маршруты в системе</span>
+                  </div>
+                  <div className="routes-stats">
+                    <div className="route-stat-item">
+                      <span className="route-stat-label">Всего маршрутов</span>
+                      <span className="route-stat-value">{routes.length}</span>
+                    </div>
+                    <div className="route-stat-item">
+                      <span className="route-stat-label">Активных</span>
+                      <span className="route-stat-value active">{routes.filter(r => r.isActive).length}</span>
+                    </div>
+                    <div className="route-stat-item">
+                      <span className="route-stat-label">Средний интервал</span>
+                      <span className="route-stat-value">
+                        {routes.length > 0 
+                          ? Math.round(routes.reduce((sum, r) => sum + (r.intervalMinutes || 15), 0) / routes.length)
+                          : 0} мин
+                      </span>
+                    </div>
+                  </div>
+                  {selectedRouteId && (
+                    <div className="selected-route-info">
+                      <div className="selected-route-header">
+                        <span>✅ Выбран на карте</span>
+                      </div>
+                      <div className="selected-route-detail">
+                        Маршрут #{routes.find(r => r.id === selectedRouteId)?.number}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Кнопка обновления */}
+            <div className="actions-section">
+              <button className="action-btn primary" onClick={fetchMarkers} disabled={loading}>
+                <RefreshCw size={16} className={loading ? 'spin' : ''} />
+                {loading ? 'Обновление...' : 'Обновить данные'}
+              </button>
+            </div>
+
+            {/* Индикатор режима создания */}
             {(isCreatingStop || isCreatingRoute) && (
               <div className="creation-mode-info">
                 <div className="mode-indicator">
+                  <div className="mode-dot"></div>
                   {isCreatingStop ? (
-                    <>
-                      <MapPin size={18} />
-                      <span>Режим создания остановки - кликните на карту</span>
-                    </>
+                    <span>Режим создания остановки — кликните на карту</span>
                   ) : (
-                    <>
-                      <MapPin size={18} />
-                      <span>Режим создания маршрута - кликайте на остановки</span>
-                    </>
+                    <span>Режим создания маршрута — кликайте на остановки</span>
                   )}
                 </div>
               </div>
             )}
-
-            <div className="stats-section">
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-icon">
-                    <MapPin size={20} />
-                  </div>
-                  <div className="stat-info">
-                    <div className="stat-value">{markers.length}</div>
-                    <div className="stat-label">Остановок</div>
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">
-                    <RefreshCw size={20} />
-                  </div>
-                  <div className="stat-info">
-                    <div className="stat-value">{routes.length}</div>
-                    <div className="stat-label">Маршрутов</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="actions-section">
-              <button className="action-btn primary" onClick={fetchMarkers} disabled={loading}>
-                <RefreshCw size={18} />
-                {loading ? 'Обновление...' : 'Обновить данные'}
-              </button>
-            </div>
           </>
         ) : (
           <div className="collapsed-panel">
             <button className="expand-btn" onClick={() => setIsPanelCollapsed(false)}>
               <Maximize2 size={24} />
             </button>
+            <div className="collapsed-stats">
+              <div className="collapsed-stat">
+                <MapPin size={14} />
+                <span>{markers.length}</span>
+              </div>
+              <div className="collapsed-stat">
+                <Bus size={14} />
+                <span>{routes.length}</span>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -514,15 +634,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
           isOpen={!!selectedModalMarker}
           onClose={() => setSelectedModalMarker(null)}
         />
-      )}
-
-      {selectedModalMarker && !isCreatingRoute && !isCreatingStop && (
-        <button
-          className="modal-close-btn"
-          onClick={() => setSelectedModalMarker(null)}
-        >
-          <X size={20} />
-        </button>
       )}
     </div>
   );

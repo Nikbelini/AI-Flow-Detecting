@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import MapComponent from './Map/Map';
-import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, CheckCircle, Bus, Link } from 'lucide-react';
+import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, CheckCircle, Bus, Link, Search, Clock, Navigation } from 'lucide-react';
 import { useStops } from '../hooks/api/useStops';
 import { useRoutes } from '../hooks/api/useRoutes';
 import type { 
@@ -8,7 +8,7 @@ import type {
   Route as ApiRoute, 
   TransportType, 
   RouteCreateRequest,
-  RouteStopRequest  // Добавляем правильный тип
+  RouteStopRequest
 } from '../api/types';
 import './AnalyticsPage.css';
 
@@ -43,12 +43,18 @@ const AnalyticsPage: React.FC = () => {
   const [notificationMessage, setNotificationMessage] = useState('');
   const [notificationType, setNotificationType] = useState<'info' | 'success' | 'error'>('info');
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
+  const [routeSearchQuery, setRouteSearchQuery] = useState('');
+  const [stopSearchQuery, setStopSearchQuery] = useState('');
+  const [expandedRouteId, setExpandedRouteId] = useState<number | null>(null);
 
   const { getStops, createStop } = useStops();
   const { getAllRoutes, createRoute } = useRoutes();
 
   const [stops, setStops] = useState<Stop[]>([]);
   const [routes, setRoutes] = useState<ApiRoute[]>([]);
+
+  const stopsListRef = useRef<HTMLDivElement>(null);
+  const routesListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadData();
@@ -58,12 +64,11 @@ const AnalyticsPage: React.FC = () => {
     try {
       const [stopsData, routesData] = await Promise.all([getStops(), getAllRoutes()]);
       
-      // Нормализуем остановки
       const normalizedStops = stopsData.map((stop: any) => ({
         ...stop,
         id: Number(stop.id),
         address: String(stop.address || '').trim(),
-        url: stop.url || '' // Сохраняем URL если есть
+        url: stop.url || ''
       }));
       
       console.log('Loaded stops:', normalizedStops);
@@ -118,6 +123,18 @@ const AnalyticsPage: React.FC = () => {
     showNotificationFunc(`Остановка "${marker.address}" добавлена (${selectedStopsForRoute.length + 1})`, 'info');
   };
 
+  // Обработчик клика на маршрут в списке
+  const handleRouteClick = (routeId: number) => {
+    setSelectedRouteId(routeId);
+    // Прокручиваем карту к маршруту (опционально)
+    // Можно добавить центрирование карты
+  };
+
+  // Обработчик двойного клика для раскрытия
+  const handleRouteDoubleClick = (routeId: number) => {
+    setExpandedRouteId(expandedRouteId === routeId ? null : routeId);
+  };
+
   const handleCreateStopSubmit = async () => {
     try {
       if (!newStopData.address.trim()) {
@@ -129,11 +146,9 @@ const AnalyticsPage: React.FC = () => {
         return;
       }
 
-      // Если URL не указан, отправляем пустую строку
-      // Бэкенд сам сгенерирует URL или сохранит как null
       const stopData = {
         address: newStopData.address.trim(),
-        url: newStopData.url.trim() || '', // Отправляем пустую строку, если URL не указан
+        url: newStopData.url.trim() || '',
         lat: newStopData.lat,
         lng: newStopData.lng,
         count: newStopData.count,
@@ -144,8 +159,6 @@ const AnalyticsPage: React.FC = () => {
 
       console.log('Creating stop with data:', stopData);
       await createStop(stopData);
-
-      // Перезагружаем данные
       await loadData();
 
       setShowStopModal(false);
@@ -181,9 +194,8 @@ const AnalyticsPage: React.FC = () => {
 
       const sortedStops = [...selectedStopsForRoute].sort((a, b) => a.order - b.order);
 
-      // Используем правильный тип RouteStopRequest
       const routeStops: RouteStopRequest[] = sortedStops.map((item, index) => ({
-        stopId: item.id,  // Только stopId, как в типе
+        stopId: item.id,
         order: index + 1,
         direction: 'A',
         travelTimeToNext: index < sortedStops.length - 1 ? 5 : 0
@@ -275,6 +287,17 @@ const AnalyticsPage: React.FC = () => {
     }
   };
 
+  // Фильтрация маршрутов
+  const filteredRoutes = routes.filter(route =>
+    route.number.toLowerCase().includes(routeSearchQuery.toLowerCase()) ||
+    (route.name && route.name.toLowerCase().includes(routeSearchQuery.toLowerCase()))
+  );
+
+  // Фильтрация остановок
+  const filteredStops = stops.filter(stop =>
+    stop.address.toLowerCase().includes(stopSearchQuery.toLowerCase())
+  );
+
   return (
     <div className="analytics-page">
       {showNotification && (
@@ -313,6 +336,7 @@ const AnalyticsPage: React.FC = () => {
               <button
                 className={`mode-btn ${creationMode === 'stop' ? 'active' : ''}`}
                 onClick={() => setCreationMode('stop')}
+                title="Добавить остановку"
               >
                 <MapPin size={16} />
               </button>
@@ -323,6 +347,7 @@ const AnalyticsPage: React.FC = () => {
                   setSelectedStopsForRoute([]);
                   showNotificationFunc('Выберите остановки для маршрута по порядку', 'info');
                 }}
+                title="Создать маршрут"
               >
                 <Route size={16} />
               </button>
@@ -333,7 +358,7 @@ const AnalyticsPage: React.FC = () => {
                       <Trash2 size={16} />
                     </button>
                   )}
-                  <button className="mode-btn cancel" onClick={cancelCreationMode}>
+                  <button className="mode-btn cancel" onClick={cancelCreationMode} title="Отменить создание">
                     <X size={16} />
                   </button>
                 </div>
@@ -355,142 +380,263 @@ const AnalyticsPage: React.FC = () => {
         </div>
 
         <div className="sidebar">
+          {/* Блок остановок с поиском и прокруткой */}
           <div className="stops-card">
             <div className="card-header">
               <h3>Остановки ({stops.length})</h3>
-              <button className="refresh-btn" onClick={loadData}>
-                <RefreshCw size={16} />
-              </button>
+              <div className="card-actions">
+                <button className="refresh-btn" onClick={loadData} title="Обновить">
+                  <RefreshCw size={16} />
+                </button>
+              </div>
             </div>
-            <div className="card-body stops-list">
-              {stops.slice(0, 10).map((stop) => (
-                <div
-                  key={stop.id}
-                  className={`stop-item ${selectedStopsForRoute.some(s => s.id === stop.id) ? 'selected' : ''}`}
-                >
-                  <div className="stop-marker" style={{ backgroundColor: getMarkerColor(stop.load) }}>
-                    {stop.load}
-                  </div>
-                  <div className="stop-info">
-                    <div className="stop-address">{stop.address}</div>
-                    {stop.url && stop.url.trim() !== '' && (
-                      <a 
-                        href={stop.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="stop-url"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Link size={12} />
-                        <span>Ссылка</span>
-                      </a>
-                    )}
-                    <div className="stop-stats">
-                      <span className="stat">{stop.count} чел</span>
-                      <span className="stat">{stop.load}/10</span>
-                    </div>
-                  </div>
-                  {selectedStopsForRoute.some(s => s.id === stop.id) && (
-                    <div className="stop-order">
-                      #{selectedStopsForRoute.find(s => s.id === stop.id)?.order}
-                    </div>
-                  )}
+            <div className="search-box">
+              <Search size={14} />
+              <input
+                type="text"
+                placeholder="Поиск остановок..."
+                value={stopSearchQuery}
+                onChange={(e) => setStopSearchQuery(e.target.value)}
+              />
+              {stopSearchQuery && (
+                <button className="clear-search" onClick={() => setStopSearchQuery('')}>✕</button>
+              )}
+            </div>
+            <div className="card-body stops-list" ref={stopsListRef}>
+              {filteredStops.length === 0 ? (
+                <div className="empty-state">
+                  <MapPin size={24} />
+                  <p>Остановок не найдено</p>
                 </div>
-              ))}
+              ) : (
+                filteredStops.map((stop) => (
+                  <div
+                    key={stop.id}
+                    className={`stop-item ${selectedStopsForRoute.some(s => s.id === stop.id) ? 'selected' : ''} ${selectedRouteId === stop.id ? 'active' : ''}`}
+                    onClick={() => {
+                      if (creationMode === 'route') {
+                        handleMarkerClick(stop);
+                      }
+                    }}
+                  >
+                    <div className="stop-marker" style={{ backgroundColor: getMarkerColor(stop.load) }}>
+                      {stop.load}
+                    </div>
+                    <div className="stop-info">
+                      <div className="stop-address">{stop.address}</div>
+                      {stop.url && stop.url.trim() !== '' && (
+                        <a 
+                          href={stop.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="stop-url"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Link size={12} />
+                          <span>Ссылка</span>
+                        </a>
+                      )}
+                      <div className="stop-stats">
+                        <span className="stat">{stop.count} чел</span>
+                        <span className="stat">{stop.load}/10</span>
+                      </div>
+                    </div>
+                    {selectedStopsForRoute.some(s => s.id === stop.id) && (
+                      <div className="stop-order">
+                        #{selectedStopsForRoute.find(s => s.id === stop.id)?.order}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
+          {/* Блок маршрутов с поиском, дизайном и прокруткой */}
           <div className="routes-card">
             <div className="card-header">
               <h3>Маршруты ({routes.length})</h3>
-            </div>
-            <div className="card-body routes-list">
-              {routes.map((route) => (
-                <div
-                  key={route.id}
-                  className={`route-item ${selectedRouteId === route.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedRouteId(route.id)}
+              <div className="card-actions">
+                <button 
+                  className="refresh-btn" 
+                  onClick={loadData} 
+                  title="Обновить"
                 >
-                  <div className="route-header">
-                    <span className="route-number">
-                      {getTransportIcon(route.transportType)} {route.number}
-                    </span>
-                    <span className={`route-status ${route.isActive ? 'active' : 'inactive'}`}>
-                      {route.isActive ? 'Активен' : 'Неактивен'}
-                    </span>
-                  </div>
-                  {route.name && <div className="route-name">{route.name}</div>}
-                  <div className="route-stops">
-                    {route.stops.slice(0, 3).map((stop, idx) => (
-                      <span key={stop.stopId}>
-                        {stop.address.split(',')[1]?.trim() || stop.address}
-                        {idx < Math.min(route.stops.length, 3) - 1 && ' → '}
-                      </span>
-                    ))}
-                    {route.stops.length > 3 && ' ...'}
-                  </div>
-                  <div className="route-details">
-                    <span>Интервал: {route.intervalMinutes} мин</span>
-                    <span>•</span>
-                    <span>{route.operatingHours}</span>
-                  </div>
-                </div>
-              ))}
-              {routes.length === 0 && (
+                  <RefreshCw size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="search-box">
+              <Search size={14} />
+              <input
+                type="text"
+                placeholder="Поиск по номеру или названию..."
+                value={routeSearchQuery}
+                onChange={(e) => setRouteSearchQuery(e.target.value)}
+              />
+              {routeSearchQuery && (
+                <button className="clear-search" onClick={() => setRouteSearchQuery('')}>✕</button>
+              )}
+            </div>
+            <div className="card-body routes-list" ref={routesListRef}>
+              {filteredRoutes.length === 0 ? (
                 <div className="empty-state">
                   <Bus size={24} />
-                  <p>Нет созданных маршрутов</p>
+                  <p>Маршрутов не найдено</p>
                 </div>
+              ) : (
+                filteredRoutes.map((route) => (
+                  <div
+                    key={route.id}
+                    className={`route-item ${selectedRouteId === route.id ? 'selected' : ''} ${expandedRouteId === route.id ? 'expanded' : ''}`}
+                    onClick={() => handleRouteClick(route.id)}
+                    onDoubleClick={() => handleRouteDoubleClick(route.id)}
+                  >
+                    <div className="route-header">
+                      <div className="route-number">
+                        <span className="route-icon">{getTransportIcon(route.transportType)}</span>
+                        <span className="route-number-text">{route.number}</span>
+                      </div>
+                      <span className={`route-status ${route.isActive ? 'active' : 'inactive'}`}>
+                        {route.isActive ? 'Активен' : 'Неактивен'}
+                      </span>
+                    </div>
+                    
+                    {route.name && (
+                      <div className="route-name">{route.name}</div>
+                    )}
+                    
+                    {/* Остановки маршрута (сворачиваемые) */}
+                    <div className="route-stops-preview">
+                      <div className="stops-preview-header">
+                        <Navigation size={12} />
+                        <span>Остановки: {route.stops.length}</span>
+                      </div>
+                      <div className="stops-list-mini">
+                        {route.stops.slice(0, 3).map((stop, idx) => (
+                          <span key={stop.stopId} className="stop-name">
+                            {stop.address.split(',')[1]?.trim() || stop.address.substring(0, 30)}
+                            {idx < Math.min(route.stops.length, 3) - 1 && ' → '}
+                          </span>
+                        ))}
+                        {route.stops.length > 3 && (
+                          <span className="stops-more"> +{route.stops.length - 3}</span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Расширенная информация (по двойному клику) */}
+                    {expandedRouteId === route.id && (
+                      <div className="route-details-expanded">
+                        <div className="details-grid">
+                          <div className="detail-item">
+                            <Clock size={12} />
+                            <span>Интервал: {route.intervalMinutes} мин</span>
+                          </div>
+                          <div className="detail-item">
+                            <span>Время работы: {route.operatingHours || 'Круглосуточно'}</span>
+                          </div>
+                        </div>
+                        {route.directionAName && route.directionBName && (
+                          <div className="route-directions">
+                            <div className="direction">
+                              <span className="direction-label">Направление А:</span>
+                              <span>{route.directionAName}</span>
+                            </div>
+                            <div className="direction">
+                              <span className="direction-label">Направление Б:</span>
+                              <span>{route.directionBName}</span>
+                            </div>
+                          </div>
+                        )}
+                        <div className="stops-full-list">
+                          <div className="stops-title">Все остановки:</div>
+                          <div className="stops-list-full">
+                            {route.stops.map((stop, idx) => (
+                              <div key={stop.stopId} className="stop-item-mini">
+                                <span className="stop-order-mini">{idx + 1}</span>
+                                <span className="stop-name-full">{stop.address}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="route-footer">
+                      <div className="route-metrics">
+                        <span className="metric">
+                          {getTransportIcon(route.transportType)}
+                        </span>
+                        <span className="metric">
+                          <Clock size={12} /> {route.intervalMinutes} мин
+                        </span>
+                      </div>
+                      {selectedRouteId === route.id && (
+                        <div className="selected-indicator">
+                          <CheckCircle size={14} />
+                          <span>Выбран на карте</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
         </div>
 
+        {/* Панель создания маршрута */}
         {creationMode === 'route' && selectedStopsForRoute.length > 0 && (
           <div className="selected-stops-card">
             <div className="card-header">
               <h3>Маршрут в разработке ({selectedStopsForRoute.length})</h3>
+              <button className="close-card" onClick={() => setCreationMode('none')}>
+                <X size={16} />
+              </button>
             </div>
             <div className="card-body selected-stops-list">
               <div className="route-instructions">
                 <AlertCircle size={14} />
                 <span>Выберите остановки на карте в нужном порядке</span>
               </div>
-              {selectedStopsForRoute.map((item, index) => (
-                <div key={item.id} className="selected-stop-item">
-                  <div className="stop-order-badge">#{item.order}</div>
-                  <div className="stop-info">
-                    <div className="stop-address" title={item.address}>
-                      {item.address}
-                    </div>
-                    <div className="stop-actions">
-                      <button
-                        className="action-btn"
-                        onClick={() => moveStopUp(index)}
-                        disabled={index === 0}
-                        title="Переместить выше"
-                      >
-                        <ChevronUp size={14} />
-                      </button>
-                      <button
-                        className="action-btn"
-                        onClick={() => moveStopDown(index)}
-                        disabled={index === selectedStopsForRoute.length - 1}
-                        title="Переместить ниже"
-                      >
-                        <ChevronDown size={14} />
-                      </button>
-                      <button
-                        className="action-btn remove"
-                        onClick={() => removeStopFromRoute(item.id)}
-                        title="Удалить из маршрута"
-                      >
-                        <X size={14} />
-                      </button>
+              <div className="stops-ordered-list">
+                {selectedStopsForRoute.map((item, index) => (
+                  <div key={item.id} className="selected-stop-item">
+                    <div className="stop-order-badge">#{item.order}</div>
+                    <div className="stop-info">
+                      <div className="stop-address" title={item.address}>
+                        {item.address}
+                      </div>
+                      <div className="stop-actions">
+                        <button
+                          className="action-btn"
+                          onClick={() => moveStopUp(index)}
+                          disabled={index === 0}
+                          title="Переместить выше"
+                        >
+                          <ChevronUp size={14} />
+                        </button>
+                        <button
+                          className="action-btn"
+                          onClick={() => moveStopDown(index)}
+                          disabled={index === selectedStopsForRoute.length - 1}
+                          title="Переместить ниже"
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                        <button
+                          className="action-btn remove"
+                          onClick={() => removeStopFromRoute(item.id)}
+                          title="Удалить из маршрута"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
               <button
                 className="configure-route-btn"
                 onClick={() => {
@@ -508,7 +654,9 @@ const AnalyticsPage: React.FC = () => {
         )}
       </div>
 
+      {/* Модальные окна (оставлены без изменений) */}
       {showStopModal && (
+        // ... модальное окно создания остановки (без изменений)
         <div className="modal-overlay" onClick={() => setShowStopModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -528,7 +676,6 @@ const AnalyticsPage: React.FC = () => {
                   required
                 />
               </div>
-              
               <div className="form-group">
                 <label>URL (необязательно)</label>
                 <div className="url-input-wrapper">
@@ -544,7 +691,6 @@ const AnalyticsPage: React.FC = () => {
                   Оставьте пустым, если не нужен
                 </small>
               </div>
-
               <div className="form-group">
                 <label>Координаты</label>
                 <div className="coordinates-inputs">
@@ -564,7 +710,6 @@ const AnalyticsPage: React.FC = () => {
                   />
                 </div>
               </div>
-              
               <div className="stats-grid">
                 <div className="form-group">
                   <label>Количество людей</label>
@@ -614,13 +759,11 @@ const AnalyticsPage: React.FC = () => {
       )}
 
       {showRouteModal && (
+        // ... модальное окно создания маршрута (без изменений)
         <div className="modal-overlay" onClick={() => setShowRouteModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>
-                Завершение создания маршрута
-                <span className="stops-count">{selectedStopsForRoute.length} остановок</span>
-              </h3>
+              <h3>Завершение создания маршрута</h3>
               <button className="modal-close" onClick={() => setShowRouteModal(false)}>
                 <X size={20} />
               </button>
