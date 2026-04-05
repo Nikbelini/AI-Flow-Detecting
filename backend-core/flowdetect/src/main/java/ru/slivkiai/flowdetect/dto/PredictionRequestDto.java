@@ -1,14 +1,12 @@
 package ru.slivkiai.flowdetect.dto;
 
-import java.util.List;
-
+import lombok.Builder;
 import lombok.Data;
 
 @Data
+@Builder
 public class PredictionRequestDto {
     
-    private Long cityId;
-    
-    private List<StopContextDto> knownStops;
-    private List<StopContextDto> unknownStops;
+    private Integer cityId;
+    private Integer horizon;
 }

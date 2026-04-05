@@ -9,9 +9,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import ru.slivkiai.flowdetect.dto.PredictionRequestDto;
 import ru.slivkiai.flowdetect.dto.PredictionResponseDto;
 
-@FeignClient(name = "flow-prediction-ml", url = "http://flow-prediction:8083")
+@FeignClient(name = "flow-prediction-ml", url = "http://localhost:8083")
 public interface FlowPredictionClient {
     
-    @PostMapping("/predict")
+    @PostMapping("/forecast")
     List<PredictionResponseDto> predict(@RequestBody PredictionRequestDto request);
 }
