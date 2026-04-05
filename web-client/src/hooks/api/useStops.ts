@@ -62,6 +62,33 @@ export const useStops = () => {
     }
   }, []);
 
+  const updateStop = useCallback(async (id: number, request: any) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const stop = await stopsApi.updateStop(id, request);
+      return stop;
+    } catch (err: any) {
+      setError(err.message || 'Failed to update stop');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const deleteStop = useCallback(async (id: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await stopsApi.deleteStop(id);
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete stop');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -69,5 +96,7 @@ export const useStops = () => {
     getStopsByCity,
     createStop,
     updateStopStats,
+    updateStop,
+    deleteStop,
   };
 };

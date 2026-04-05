@@ -13,6 +13,17 @@ export interface StopRequest {
   lng: number;
 }
 
+export interface StopUpdateRequest {
+  address?: string;
+  url?: string;
+  count?: number;
+  velocity?: number;
+  load?: number;
+  lat?: number;
+  lng?: number;
+  cityId?: number;
+}
+
 export interface StopResponse extends Stop {
   url?: string;
 }
@@ -98,6 +109,16 @@ export const stopsApi = {
       return response.data;
     } catch (error) {
       console.error(`Error updating stop stats ${id}:`, error);
+      throw error;
+    }
+  },
+
+  updateStop: async (id: number, request: StopUpdateRequest): Promise<StopResponse> => {
+    try {
+      const response = await apiClient.put<StopResponse>(`/stops/${id}`, request);
+      return response.data;
+    } catch (error) {
+      console.error(`Error updating stop ${id}:`, error);
       throw error;
     }
   },

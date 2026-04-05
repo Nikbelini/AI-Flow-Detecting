@@ -4,7 +4,8 @@ import { routesApi } from '../../api/routesApi';
 import type {
   RouteCreateRequest,
   RouteSearchRequest,
-  RouteStopRequest
+  RouteStopRequest,
+  RouteUpdateRequest
 } from '../../api/types';
 
 export const useRoutes = () => {
@@ -76,6 +77,45 @@ export const useRoutes = () => {
     }
   }, []);
 
+  const updateRoute = useCallback(async (id: number, request: RouteUpdateRequest) => {
+    setLoading(true);
+    setError(null);
+    try {
+      return await routesApi.updateRoute(id, request);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update route');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const deleteRoute = useCallback(async (id: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await routesApi.deleteRoute(id);
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete route');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const toggleRouteActive = useCallback(async (id: number, active: boolean) => {
+    setLoading(true);
+    setError(null);
+    try {
+      return await routesApi.toggleRouteActive(id, active);
+    } catch (err: any) {
+      setError(err.message || 'Failed to toggle route active status');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -84,5 +124,8 @@ export const useRoutes = () => {
     createRoute,
     searchRoutes,
     updateRouteStops,
+    updateRoute,
+    deleteRoute,
+    toggleRouteActive,
   };
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MapComponent from './Map/Map';
-import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, CheckCircle, Bus, Link, Search, Clock, Navigation } from 'lucide-react';
+import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, CheckCircle, Bus, Link, Search, Clock, Navigation, Edit2 } from 'lucide-react';
 import { useStops } from '../hooks/api/useStops';
 import { useRoutes } from '../hooks/api/useRoutes';
 import type { 
@@ -37,6 +37,13 @@ const AnalyticsPage: React.FC = () => {
     intervalMinutes: 15,
     operatingHours: '06:00-23:00'
   });
+  
+  // Состояния для редактирования
+  const [editingRoute, setEditingRoute] = useState<ApiRoute | null>(null);
+  const [showEditRouteModal, setShowEditRouteModal] = useState(false);
+  const [editingStop, setEditingStop] = useState<Stop | null>(null);
+  const [showEditStopModal, setShowEditStopModal] = useState(false);
+  
   const [showStopModal, setShowStopModal] = useState(false);
   const [showRouteModal, setShowRouteModal] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
@@ -47,8 +54,8 @@ const AnalyticsPage: React.FC = () => {
   const [stopSearchQuery, setStopSearchQuery] = useState('');
   const [expandedRouteId, setExpandedRouteId] = useState<number | null>(null);
 
-  const { getStops, createStop } = useStops();
-  const { getAllRoutes, createRoute } = useRoutes();
+  const { getStops, createStop, updateStop, deleteStop } = useStops();
+  const { getAllRoutes, createRoute, updateRoute, deleteRoute } = useRoutes();
 
   const [stops, setStops] = useState<Stop[]>([]);
   const [routes, setRoutes] = useState<ApiRoute[]>([]);
@@ -95,44 +102,183 @@ const AnalyticsPage: React.FC = () => {
 
   const handleMarkerClick = (marker: Stop) => {
     console.log('Marker clicked:', marker);
-    if (creationMode !== 'route') return;
+    
+    // Если в режиме создания маршрута
+    if (creationMode === 'route') {
+      const markerId = Number(marker.id);
+      if (isNaN(markerId) || markerId === 0) {
+        console.error('Invalid marker id:', marker);
+        showNotificationFunc('Ошибка: некорректный ID остановки', 'error');
+        return;
+      }
 
-    const markerId = Number(marker.id);
-    if (isNaN(markerId) || markerId === 0) {
-      console.error('Invalid marker id:', marker);
-      showNotificationFunc('Ошибка: некорректный ID остановки', 'error');
+      const alreadySelected = selectedStopsForRoute.some(
+        stop => stop.id === markerId
+      );
+
+      if (alreadySelected) {
+        showNotificationFunc(`Остановка "${marker.address}" уже добавлена в маршрут`, 'info');
+        return;
+      }
+
+      const newStop = {
+        id: markerId,
+        order: selectedStopsForRoute.length + 1,
+        address: marker.address
+      };
+
+      setSelectedStopsForRoute(prev => [...prev, newStop]);
+      showNotificationFunc(`Остановка "${marker.address}" добавлена (${selectedStopsForRoute.length + 1})`, 'info');
       return;
     }
-
-    const alreadySelected = selectedStopsForRoute.some(
-      stop => stop.id === markerId
-    );
-
-    if (alreadySelected) {
-      showNotificationFunc(`Остановка "${marker.address}" уже добавлена в маршрут`, 'info');
-      return;
-    }
-
-    const newStop = {
-      id: markerId,
-      order: selectedStopsForRoute.length + 1,
-      address: marker.address
-    };
-
-    setSelectedStopsForRoute(prev => [...prev, newStop]);
-    showNotificationFunc(`Остановка "${marker.address}" добавлена (${selectedStopsForRoute.length + 1})`, 'info');
+    
+    // Обычный клик - показываем модалку редактирования
+    setEditingStop(marker);
+    setShowEditStopModal(true);
   };
 
   // Обработчик клика на маршрут в списке
   const handleRouteClick = (routeId: number) => {
     setSelectedRouteId(routeId);
-    // Прокручиваем карту к маршруту (опционально)
-    // Можно добавить центрирование карты
+  };
+
+  // Обработчик клика на маршрут на карте
+  const handleRouteClickOnMap = (route: ApiRoute) => {
+    setSelectedRouteId(route.id);
+    showNotificationFunc(`Маршрут ${route.number} выбран`, 'info');
   };
 
   // Обработчик двойного клика для раскрытия
   const handleRouteDoubleClick = (routeId: number) => {
     setExpandedRouteId(expandedRouteId === routeId ? null : routeId);
+  };
+
+  // ========== ФУНКЦИИ РЕДАКТИРОВАНИЯ МАРШРУТА ==========
+  
+  const handleEditRoute = (route: ApiRoute) => {
+    setEditingRoute(route);
+    setNewRouteData({
+      number: route.number,
+      name: route.name || '',
+      transportType: route.transportType,
+      cityId: route.cityId || 1,
+      directionAName: route.directionAName || '',
+      directionBName: route.directionBName || '',
+      intervalMinutes: route.intervalMinutes || 15,
+      operatingHours: route.operatingHours || '06:00-23:00'
+    });
+    setShowEditRouteModal(true);
+  };
+
+  const handleUpdateRouteSubmit = async () => {
+    if (!editingRoute) return;
+    
+    try {
+      if (!newRouteData.number.trim()) {
+        showNotificationFunc('Введите номер маршрута', 'error');
+        return;
+      }
+
+      const requestData = {
+        number: newRouteData.number,
+        name: newRouteData.name || undefined,
+        transportType: newRouteData.transportType,
+        directionAName: newRouteData.directionAName || undefined,
+        directionBName: newRouteData.directionBName || undefined,
+        intervalMinutes: newRouteData.intervalMinutes,
+        operatingHours: newRouteData.operatingHours
+      };
+
+      console.log('Updating route:', editingRoute.id, requestData);
+      await updateRoute(editingRoute.id, requestData);
+      await loadData();
+      
+      setShowEditRouteModal(false);
+      setEditingRoute(null);
+      showNotificationFunc(`Маршрут "${newRouteData.number}" обновлён!`, 'success');
+    } catch (error) {
+      console.error('Route update error:', error);
+      showNotificationFunc('Ошибка при обновлении маршрута', 'error');
+    }
+  };
+
+  // ========== ФУНКЦИИ УДАЛЕНИЯ МАРШРУТА ==========
+  
+  const handleDeleteRoute = async (routeId: number) => {
+    if (!confirm('Удалить этот маршрут? Это действие нельзя отменить.')) return;
+    
+    try {
+      await deleteRoute(routeId);
+      await loadData();
+      if (selectedRouteId === routeId) setSelectedRouteId(null);
+      showNotificationFunc('Маршрут удалён', 'success');
+    } catch (error) {
+      console.error('Route delete error:', error);
+      showNotificationFunc('Ошибка при удалении маршрута', 'error');
+    }
+  };
+
+  // ========== ФУНКЦИИ РЕДАКТИРОВАНИЯ ОСТАНОВКИ ==========
+  
+  const handleEditStop = (stop: Stop) => {
+    setEditingStop(stop);
+    setNewStopData({
+      address: stop.address,
+      url: stop.url || '',
+      lat: stop.lat,
+      lng: stop.lng,
+      count: stop.count || 0,
+      velocity: stop.velocity || 0,
+      load: stop.load || 0,
+      cityId: stop.cityId || 1
+    });
+    setShowEditStopModal(true);
+  };
+
+  const handleUpdateStopSubmit = async () => {
+    if (!editingStop) return;
+    
+    try {
+      if (!newStopData.address.trim()) {
+        showNotificationFunc('Введите адрес остановки', 'error');
+        return;
+      }
+
+      const stopData = {
+        address: newStopData.address.trim(),
+        url: newStopData.url.trim() || '',
+        lat: newStopData.lat,
+        lng: newStopData.lng,
+        count: newStopData.count,
+        velocity: newStopData.velocity,
+        load: newStopData.load,
+        cityId: newStopData.cityId
+      };
+
+      console.log('Updating stop:', editingStop.id, stopData);
+      await updateStop(editingStop.id, stopData);
+      await loadData();
+      
+      setShowEditStopModal(false);
+      setEditingStop(null);
+      showNotificationFunc(`Остановка "${newStopData.address}" обновлена!`, 'success');
+    } catch (error) {
+      console.error('Stop update error:', error);
+      showNotificationFunc('Ошибка при обновлении остановки', 'error');
+    }
+  };
+
+  const handleDeleteStop = async (stopId: number) => {
+    if (!confirm('Удалить эту остановку? Это действие нельзя отменить.')) return;
+    
+    try {
+      await deleteStop(stopId);
+      await loadData();
+      showNotificationFunc('Остановка удалена', 'success');
+    } catch (error) {
+      console.error('Stop delete error:', error);
+      showNotificationFunc('Ошибка при удалении остановки', 'error');
+    }
   };
 
   const handleCreateStopSubmit = async () => {
@@ -372,6 +518,11 @@ const AnalyticsPage: React.FC = () => {
               selectedRouteId={selectedRouteId}
               onMapClick={handleMapClick}
               onMarkerClick={handleMarkerClick}
+              onRouteClick={handleRouteClickOnMap}
+              onEditRoute={handleEditRoute}
+              onDeleteRoute={handleDeleteRoute}
+              onEditStop={handleEditStop}
+              onDeleteStop={handleDeleteStop}
               isCreatingStop={creationMode === 'stop'}
               isCreatingRoute={creationMode === 'route'}
               selectedStops={selectedStopsForRoute.map(s => s.id)}
@@ -380,7 +531,7 @@ const AnalyticsPage: React.FC = () => {
         </div>
 
         <div className="sidebar">
-          {/* Блок остановок с поиском и прокруткой */}
+          {/* Блок остановок */}
           <div className="stops-card">
             <div className="card-header">
               <h3>Остановки ({stops.length})</h3>
@@ -412,12 +563,8 @@ const AnalyticsPage: React.FC = () => {
                 filteredStops.map((stop) => (
                   <div
                     key={stop.id}
-                    className={`stop-item ${selectedStopsForRoute.some(s => s.id === stop.id) ? 'selected' : ''} ${selectedRouteId === stop.id ? 'active' : ''}`}
-                    onClick={() => {
-                      if (creationMode === 'route') {
-                        handleMarkerClick(stop);
-                      }
-                    }}
+                    className={`stop-item ${selectedStopsForRoute.some(s => s.id === stop.id) ? 'selected' : ''}`}
+                    onClick={() => handleEditStop(stop)}
                   >
                     <div className="stop-marker" style={{ backgroundColor: getMarkerColor(stop.load) }}>
                       {stop.load}
@@ -441,6 +588,26 @@ const AnalyticsPage: React.FC = () => {
                         <span className="stat">{stop.load}/10</span>
                       </div>
                     </div>
+                    <div className="stop-actions">
+                      <button 
+                        className="stop-edit-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditStop(stop);
+                        }}
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button 
+                        className="stop-delete-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteStop(stop.id);
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                     {selectedStopsForRoute.some(s => s.id === stop.id) && (
                       <div className="stop-order">
                         #{selectedStopsForRoute.find(s => s.id === stop.id)?.order}
@@ -452,16 +619,12 @@ const AnalyticsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Блок маршрутов с поиском, дизайном и прокруткой */}
+          {/* Блок маршрутов */}
           <div className="routes-card">
             <div className="card-header">
               <h3>Маршруты ({routes.length})</h3>
               <div className="card-actions">
-                <button 
-                  className="refresh-btn" 
-                  onClick={loadData} 
-                  title="Обновить"
-                >
+                <button className="refresh-btn" onClick={loadData} title="Обновить">
                   <RefreshCw size={16} />
                 </button>
               </div>
@@ -497,16 +660,32 @@ const AnalyticsPage: React.FC = () => {
                         <span className="route-icon">{getTransportIcon(route.transportType)}</span>
                         <span className="route-number-text">{route.number}</span>
                       </div>
-                      <span className={`route-status ${route.isActive ? 'active' : 'inactive'}`}>
-                        {route.isActive ? 'Активен' : 'Неактивен'}
-                      </span>
+                      <div className="route-header-actions">
+                        <button 
+                          className="route-edit-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditRoute(route);
+                          }}
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button 
+                          className="route-delete-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteRoute(route.id);
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                     
                     {route.name && (
                       <div className="route-name">{route.name}</div>
                     )}
                     
-                    {/* Остановки маршрута (сворачиваемые) */}
                     <div className="route-stops-preview">
                       <div className="stops-preview-header">
                         <Navigation size={12} />
@@ -525,7 +704,6 @@ const AnalyticsPage: React.FC = () => {
                       </div>
                     </div>
                     
-                    {/* Расширенная информация (по двойному клику) */}
                     {expandedRouteId === route.id && (
                       <div className="route-details-expanded">
                         <div className="details-grid">
@@ -565,9 +743,7 @@ const AnalyticsPage: React.FC = () => {
                     
                     <div className="route-footer">
                       <div className="route-metrics">
-                        <span className="metric">
-                          {getTransportIcon(route.transportType)}
-                        </span>
+                        <span className="metric">{getTransportIcon(route.transportType)}</span>
                         <span className="metric">
                           <Clock size={12} /> {route.intervalMinutes} мин
                         </span>
@@ -654,9 +830,8 @@ const AnalyticsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Модальные окна (оставлены без изменений) */}
+      {/* Модальное окно создания остановки */}
       {showStopModal && (
-        // ... модальное окно создания остановки (без изменений)
         <div className="modal-overlay" onClick={() => setShowStopModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -665,6 +840,7 @@ const AnalyticsPage: React.FC = () => {
                 <X size={20} />
               </button>
             </div>
+            {/* ... содержимое модалки создания остановки ... */}
             <div className="modal-body">
               <div className="form-group">
                 <label>Адрес остановки *</label>
@@ -687,9 +863,7 @@ const AnalyticsPage: React.FC = () => {
                     placeholder="https://example.com/stop/123"
                   />
                 </div>
-                <small className="field-hint">
-                  Оставьте пустым, если не нужен
-                </small>
+                <small className="field-hint">Оставьте пустым, если не нужен</small>
               </div>
               <div className="form-group">
                 <label>Координаты</label>
@@ -742,24 +916,110 @@ const AnalyticsPage: React.FC = () => {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowStopModal(false)}>
-                Отмена
-              </button>
-              <button
-                className="btn-primary"
-                onClick={handleCreateStopSubmit}
-                disabled={!newStopData.address.trim()}
-              >
-                <Save size={16} />
-                Создать остановку
+              <button className="btn-secondary" onClick={() => setShowStopModal(false)}>Отмена</button>
+              <button className="btn-primary" onClick={handleCreateStopSubmit} disabled={!newStopData.address.trim()}>
+                <Save size={16} /> Создать остановку
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Модальное окно редактирования остановки */}
+      {showEditStopModal && editingStop && (
+        <div className="modal-overlay" onClick={() => setShowEditStopModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>✏️ Редактирование остановки</h3>
+              <button className="modal-close" onClick={() => setShowEditStopModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Адрес остановки *</label>
+                <input
+                  type="text"
+                  value={newStopData.address}
+                  onChange={(e) => setNewStopData(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder="Введите адрес"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>URL (необязательно)</label>
+                <div className="url-input-wrapper">
+                  <Link size={16} className="url-icon" />
+                  <input
+                    type="url"
+                    value={newStopData.url}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, url: e.target.value }))}
+                    placeholder="https://example.com/stop/123"
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Координаты</label>
+                <div className="coordinates-inputs">
+                  <input
+                    type="number"
+                    step="0.000001"
+                    value={newStopData.lat}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, lat: parseFloat(e.target.value) || 0 }))}
+                    placeholder="Широта"
+                  />
+                  <input
+                    type="number"
+                    step="0.000001"
+                    value={newStopData.lng}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, lng: parseFloat(e.target.value) || 0 }))}
+                    placeholder="Долгота"
+                  />
+                </div>
+              </div>
+              <div className="stats-grid">
+                <div className="form-group">
+                  <label>Количество людей</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newStopData.count}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, count: parseInt(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Скорость потока</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newStopData.velocity}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, velocity: parseInt(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Загрузка (1-10)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={newStopData.load}
+                    onChange={(e) => setNewStopData(prev => ({ ...prev, load: parseInt(e.target.value) || 1 }))}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowEditStopModal(false)}>Отмена</button>
+              <button className="btn-primary" onClick={handleUpdateStopSubmit}>
+                <Save size={16} /> Сохранить изменения
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Модальное окно создания маршрута */}
       {showRouteModal && (
-        // ... модальное окно создания маршрута (без изменений)
         <div className="modal-overlay" onClick={() => setShowRouteModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -851,16 +1111,108 @@ const AnalyticsPage: React.FC = () => {
                   setCreationMode('none');
                 }}
               >
-                <Trash2 size={16} />
-                Отменить
+                <Trash2 size={16} /> Отменить
               </button>
               <button
                 className="btn-primary"
                 onClick={handleCreateRouteSubmit}
                 disabled={!newRouteData.number.trim() || selectedStopsForRoute.length < 2}
               >
-                <Save size={16} />
-                Создать маршрут
+                <Save size={16} /> Создать маршрут
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Модальное окно редактирования маршрута */}
+      {showEditRouteModal && editingRoute && (
+        <div className="modal-overlay" onClick={() => setShowEditRouteModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>✏️ Редактирование маршрута {editingRoute.number}</h3>
+              <button className="modal-close" onClick={() => setShowEditRouteModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Номер маршрута *</label>
+                <input
+                  type="text"
+                  value={newRouteData.number}
+                  onChange={(e) => setNewRouteData(prev => ({ ...prev, number: e.target.value }))}
+                  placeholder="105"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Название маршрута</label>
+                <input
+                  type="text"
+                  value={newRouteData.name}
+                  onChange={(e) => setNewRouteData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Центр - Южный район"
+                />
+              </div>
+              <div className="form-group">
+                <label>Тип транспорта *</label>
+                <select
+                  value={newRouteData.transportType}
+                  onChange={(e) => setNewRouteData(prev => ({ ...prev, transportType: e.target.value as TransportType }))}
+                  required
+                >
+                  <option value="BUS">Автобус</option>
+                  <option value="TROLLEYBUS">Троллейбус</option>
+                  <option value="TRAM">Трамвай</option>
+                  <option value="MINIBUS">Маршрутка</option>
+                  <option value="METRO">Метро</option>
+                  <option value="TRAIN">Поезд</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Название направления А</label>
+                <input
+                  type="text"
+                  value={newRouteData.directionAName}
+                  onChange={(e) => setNewRouteData(prev => ({ ...prev, directionAName: e.target.value }))}
+                  placeholder="Откуда"
+                />
+              </div>
+              <div className="form-group">
+                <label>Название направления Б</label>
+                <input
+                  type="text"
+                  value={newRouteData.directionBName}
+                  onChange={(e) => setNewRouteData(prev => ({ ...prev, directionBName: e.target.value }))}
+                  placeholder="Куда"
+                />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Интервал (мин)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newRouteData.intervalMinutes}
+                    onChange={(e) => setNewRouteData(prev => ({ ...prev, intervalMinutes: parseInt(e.target.value) || 15 }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Время работы</label>
+                  <input
+                    type="text"
+                    value={newRouteData.operatingHours}
+                    onChange={(e) => setNewRouteData(prev => ({ ...prev, operatingHours: e.target.value }))}
+                    placeholder="06:00-23:00"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowEditRouteModal(false)}>Отмена</button>
+              <button className="btn-primary" onClick={handleUpdateRouteSubmit}>
+                <Save size={16} /> Сохранить изменения
               </button>
             </div>
           </div>

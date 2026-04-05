@@ -4,7 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import './MapComponent.css';
 import ModalContent from './ModalContent';
 import { getMarkers } from '../../api/markersApi';
-import { Clock, RefreshCw, MapPin, Minimize2, Maximize2, X, ChevronDown, ChevronUp, TrendingUp, Users, Bus, Activity, Layers } from 'lucide-react';
+import { Clock, RefreshCw, MapPin, Minimize2, Maximize2, X, ChevronDown, ChevronUp, TrendingUp, Users, Bus, Activity, Layers, Edit2, Trash2, Info } from 'lucide-react';
 import type { Stop, Route as ApiRoute } from '../../api/types';
 
 interface MapComponentProps {
@@ -13,6 +13,11 @@ interface MapComponentProps {
   selectedRouteId?: number | null;
   onMapClick?: (lat: number, lng: number) => void;
   onMarkerClick?: (marker: Stop) => void;
+  onRouteClick?: (route: ApiRoute) => void;
+  onEditStop?: (stop: Stop) => void;
+  onDeleteStop?: (stopId: number) => void;
+  onEditRoute?: (route: ApiRoute) => void;
+  onDeleteRoute?: (routeId: number) => void;
   isCreatingStop?: boolean;
   isCreatingRoute?: boolean;
   selectedStops?: number[];
@@ -24,6 +29,11 @@ const MapComponent: React.FC<MapComponentProps> = ({
   selectedRouteId,
   onMapClick,
   onMarkerClick,
+  onRouteClick,
+  onEditStop,
+  onDeleteStop,
+  onEditRoute,
+  onDeleteRoute,
   isCreatingStop = false,
   isCreatingRoute = false,
   selectedStops = []
@@ -33,15 +43,18 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const onMarkerClickRef = useRef(onMarkerClick);
   const onMapClickRef = useRef(onMapClick);
+  const onRouteClickRef = useRef(onRouteClick);
 
   const [localMarkers, setLocalMarkers] = useState<Stop[]>([]);
   const [loading, setLoading] = useState(!externalMarkers);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedModalMarker, setSelectedModalMarker] = useState<Stop | null>(null);
+  const [selectedRouteTooltip, setSelectedRouteTooltip] = useState<ApiRoute | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<'stats' | 'routes'>('stats');
+  const [hoveredRouteId, setHoveredRouteId] = useState<number | null>(null);
 
   const markers = externalMarkers || localMarkers;
 
@@ -54,7 +67,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
   useEffect(() => {
     onMarkerClickRef.current = onMarkerClick;
     onMapClickRef.current = onMapClick;
-  }, [onMarkerClick, onMapClick]);
+    onRouteClickRef.current = onRouteClick;
+  }, [onMarkerClick, onMapClick, onRouteClick]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -152,7 +166,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
     };
   }, [isCreatingStop]);
 
-  // Отрисовка маршрутов
+  // Отрисовка маршрутов с обработчиками кликов
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
     drawRoutes();
@@ -167,6 +181,9 @@ const MapComponent: React.FC<MapComponentProps> = ({
       }
       if (map.current.getLayer('routes-line')) {
         map.current.removeLayer('routes-line');
+      }
+      if (map.current.getLayer('routes-hover')) {
+        map.current.removeLayer('routes-hover');
       }
       if (map.current.getSource('routes')) {
         map.current.removeSource('routes');
@@ -183,7 +200,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       if (!route.stops || route.stops.length < 2) return;
 
       const sortedStops = [...route.stops].sort((a, b) => a.orderInRoute - b.orderInRoute);
-      
+
       const coordinates = sortedStops
         .map(stop => {
           if (!stop.lng || !stop.lat) return null;
@@ -202,7 +219,13 @@ const MapComponent: React.FC<MapComponentProps> = ({
         properties: {
           id: route.id,
           number: route.number,
-          isSelected: route.id === selectedRouteId
+          name: route.name || '',
+          transportType: route.transportType,
+          intervalMinutes: route.intervalMinutes,
+          stopsCount: route.stops.length,
+          isActive: route.isActive,
+          isSelected: route.id === selectedRouteId,
+          isHovered: route.id === hoveredRouteId
         }
       });
     });
@@ -218,6 +241,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         }
       });
 
+      // Слой для невыделенных маршрутов
       map.current.addLayer({
         id: 'routes-line',
         type: 'line',
@@ -235,6 +259,24 @@ const MapComponent: React.FC<MapComponentProps> = ({
         }
       });
 
+      // Слой для подсветки при наведении
+      map.current.addLayer({
+        id: 'routes-hover',
+        type: 'line',
+        source: 'routes',
+        filter: ['==', ['get', 'isHovered'], true],
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#f59e0b',
+          'line-width': 6,
+          'line-opacity': 0.8
+        }
+      });
+
+      // Слой для выделенного маршрута
       if (selectedRouteId) {
         map.current.addLayer({
           id: 'routes-line-selected',
@@ -251,7 +293,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
             'line-opacity': 1
           }
         });
-        
+
         const selectedFeature = features.find(f => f.properties.id === selectedRouteId);
         if (selectedFeature) {
           const bounds = new maplibregl.LngLatBounds();
@@ -261,8 +303,195 @@ const MapComponent: React.FC<MapComponentProps> = ({
           map.current.fitBounds(bounds, { padding: 50, duration: 1000 });
         }
       }
+
+      // Добавляем обработчики событий на маршруты
+      setupRouteEventHandlers();
+
     } catch (error) {
       console.error('Error adding routes to map:', error);
+    }
+  };
+
+  const setupRouteEventHandlers = () => {
+    if (!map.current) return;
+
+    // Обработчик клика по маршруту
+    map.current.on('click', 'routes-line', (e) => {
+      if (!e.features || e.features.length === 0) return;
+      const feature = e.features[0];
+      const routeId = feature.properties?.id;
+      const route = routes.find(r => r.id === routeId);
+
+      if (route && onRouteClickRef.current) {
+        console.log('Route clicked:', route);
+        onRouteClickRef.current(route);
+        showRouteTooltip(route, e.lngLat);
+      }
+    });
+
+    map.current.on('click', 'routes-line-selected', (e) => {
+      if (!e.features || e.features.length === 0) return;
+      const feature = e.features[0];
+      const routeId = feature.properties?.id;
+      const route = routes.find(r => r.id === routeId);
+
+      if (route && onRouteClickRef.current) {
+        console.log('Selected route clicked:', route);
+        onRouteClickRef.current(route);
+        showRouteTooltip(route, e.lngLat);
+      }
+    });
+
+    // Обработчик наведения для подсветки
+    map.current.on('mouseenter', 'routes-line', (e) => {
+      if (!e.features || e.features.length === 0) return;
+      const feature = e.features[0];
+      const routeId = feature.properties?.id;
+      setHoveredRouteId(routeId);
+      map.current!.getCanvas().style.cursor = 'pointer';
+    });
+
+    map.current.on('mouseenter', 'routes-line-selected', (e) => {
+      map.current!.getCanvas().style.cursor = 'pointer';
+    });
+
+    map.current.on('mouseleave', 'routes-line', () => {
+      setHoveredRouteId(null);
+      map.current!.getCanvas().style.cursor = '';
+    });
+
+    map.current.on('mouseleave', 'routes-line-selected', () => {
+      map.current!.getCanvas().style.cursor = '';
+    });
+
+    // Всплывающая подсказка при наведении
+    map.current.on('mousemove', 'routes-line', (e) => {
+      if (!e.features || e.features.length === 0) return;
+      const feature = e.features[0];
+      const routeId = feature.properties?.id;
+      const route = routes.find(r => r.id === routeId);
+
+      if (route && e.lngLat) {
+        showRouteTooltip(route, e.lngLat);
+      }
+    });
+
+    map.current.on('mousemove', 'routes-line-selected', (e) => {
+      if (!e.features || e.features.length === 0) return;
+      const feature = e.features[0];
+      const routeId = feature.properties?.id;
+      const route = routes.find(r => r.id === routeId);
+
+      if (route && e.lngLat) {
+        showRouteTooltip(route, e.lngLat);
+      }
+    });
+  };
+
+  const showRouteTooltip = (route: ApiRoute, lngLat: maplibregl.LngLat) => {
+    if (!map.current) return;
+
+    // Удаляем старый попап
+    if ((map.current as any)._routePopup) {
+      (map.current as any)._routePopup.remove();
+    }
+
+    const transportIcon = getTransportIcon(route.transportType);
+    const statusIcon = route.isActive ? '✅' : '⛔';
+    const statusText = route.isActive ? 'Активен' : 'Неактивен';
+
+    const popup = new maplibregl.Popup({
+      closeButton: true,
+      closeOnClick: false,
+      offset: [0, -10],
+      className: 'route-popup',
+      maxWidth: '300px'
+    })
+      .setLngLat(lngLat)
+      .setHTML(`
+    <div class="route-popup-content">
+      <div class="route-popup-header">
+        <div class="route-popup-icon">${transportIcon}</div>
+        <div class="route-popup-info">
+          <div class="route-popup-number">${route.number}</div>
+        </div>
+        <div class="route-popup-status ${route.isActive ? 'active' : 'inactive'}">${statusText}</div>
+      </div>
+      ${route.name ? `<div class="route-popup-name-row">
+        <div class="route-popup-name-icon">📋</div>
+        <div class="route-popup-name">${route.name}</div>
+      </div>` : ''}
+      <div class="route-popup-details">
+        <div class="detail-item">
+          <span class="detail-icon">⏱️</span>
+          <span class="detail-label">Интервал</span>
+          <span class="detail-value">${route.intervalMinutes} мин</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-icon">🚏</span>
+          <span class="detail-label">Остановок</span>
+          <span class="detail-value">${route.stops.length}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-icon">🕐</span>
+          <span class="detail-label">Время работы</span>
+          <span class="detail-value">${route.operatingHours || '06:00-23:00'}</span>
+        </div>
+      </div>
+      <div class="route-popup-actions">
+        <button class="popup-edit-btn" data-route-id="${route.id}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 3l4 4-7 7H10v-4l7-7z"/>
+            <path d="M4 20h16"/>
+          </svg>
+          <span>Редактировать</span>
+        </button>
+        <button class="popup-delete-btn" data-route-id="${route.id}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 7h16M10 11v6M14 11v6M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13"/>
+            <path d="M9 4h6"/>
+          </svg>
+          <span>Удалить</span>
+        </button>
+      </div>
+    </div>
+  `)
+      .addTo(map.current);
+
+
+    // Добавляем обработчики для кнопок в попапе
+    const popupElement = popup.getElement();
+    const editBtn = popupElement.querySelector('.popup-edit-btn');
+    const deleteBtn = popupElement.querySelector('.popup-delete-btn');
+
+    if (editBtn) {
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        popup.remove();
+        if (onEditRoute) onEditRoute(route);
+      });
+    }
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        popup.remove();
+        if (onDeleteRoute && confirm(`Удалить маршрут ${route.number}?`)) {
+          onDeleteRoute(route.id);
+        }
+      });
+    }
+
+    (map.current as any)._routePopup = popup;
+  };
+
+  const getTransportIcon = (type: string): string => {
+    switch (type) {
+      case 'BUS': return '🚌';
+      case 'TROLLEYBUS': return '🚎';
+      case 'TRAM': return '🚊';
+      case 'MINIBUS': return '🚐';
+      default: return '🚌';
     }
   };
 
@@ -404,14 +633,14 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
             {/* Табы */}
             <div className="panel-tabs">
-              <button 
+              <button
                 className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`}
                 onClick={() => setActiveTab('stats')}
               >
                 <Activity size={14} />
                 Статистика
               </button>
-              <button 
+              <button
                 className={`tab-btn ${activeTab === 'routes' ? 'active' : ''}`}
                 onClick={() => setActiveTab('routes')}
               >
@@ -424,7 +653,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
             <div className="panel-content">
               {activeTab === 'stats' && (
                 <>
-                  {/* Основные метрики */}
                   <div className="stats-section">
                     <div className="stats-grid">
                       <div className="stat-card">
@@ -466,7 +694,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
                     </div>
                   </div>
 
-                  {/* Загрузка остановок (простое распределение) */}
                   <div className="load-distribution">
                     <div className="section-title">
                       <div className="title-dot green"></div>
@@ -476,8 +703,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
                       <div className="load-bar-item">
                         <span className="load-label">Низкая (0-3)</span>
                         <div className="load-bar-bg">
-                          <div 
-                            className="load-bar-fill green" 
+                          <div
+                            className="load-bar-fill green"
                             style={{ width: `${(markers.filter(m => m.load <= 3).length / markers.length) * 100}%` }}
                           />
                         </div>
@@ -486,8 +713,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
                       <div className="load-bar-item">
                         <span className="load-label">Средняя (4-7)</span>
                         <div className="load-bar-bg">
-                          <div 
-                            className="load-bar-fill orange" 
+                          <div
+                            className="load-bar-fill orange"
                             style={{ width: `${(markers.filter(m => m.load > 3 && m.load <= 7).length / markers.length) * 100}%` }}
                           />
                         </div>
@@ -496,8 +723,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
                       <div className="load-bar-item">
                         <span className="load-label">Высокая (8-10)</span>
                         <div className="load-bar-bg">
-                          <div 
-                            className="load-bar-fill red" 
+                          <div
+                            className="load-bar-fill red"
                             style={{ width: `${(markers.filter(m => m.load > 7).length / markers.length) * 100}%` }}
                           />
                         </div>
@@ -506,7 +733,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
                     </div>
                   </div>
 
-                  {/* Топ загруженных остановок */}
                   <div className="top-stops">
                     <div className="section-title">
                       <div className="title-dot red"></div>
@@ -514,7 +740,13 @@ const MapComponent: React.FC<MapComponentProps> = ({
                     </div>
                     <div className="top-stops-list">
                       {peakLoadStops.map((stop, idx) => (
-                        <div key={stop.id} className="top-stop-item">
+                        <div
+                          key={stop.id}
+                          className="top-stop-item"
+                          onClick={() => {
+                            if (onMarkerClick) onMarkerClick(stop);
+                          }}
+                        >
                           <div className="top-stop-rank">#{idx + 1}</div>
                           <div className="top-stop-address">{stop.address}</div>
                           <div className="top-stop-load">{stop.load}/10</div>
@@ -543,12 +775,59 @@ const MapComponent: React.FC<MapComponentProps> = ({
                     <div className="route-stat-item">
                       <span className="route-stat-label">Средний интервал</span>
                       <span className="route-stat-value">
-                        {routes.length > 0 
+                        {routes.length > 0
                           ? Math.round(routes.reduce((sum, r) => sum + (r.intervalMinutes || 15), 0) / routes.length)
                           : 0} мин
                       </span>
                     </div>
                   </div>
+
+                  {/* Список маршрутов */}
+                  <div className="routes-list-sidebar">
+                    {routes.map(route => (
+                      <div
+                        key={route.id}
+                        className={`route-list-item ${selectedRouteId === route.id ? 'selected' : ''}`}
+                        onClick={() => onRouteClick?.(route)}
+                      >
+                        <div className="route-list-header">
+                          <span className="route-list-icon">{getTransportIcon(route.transportType)}</span>
+                          <span className="route-list-number">{route.number}</span>
+                          <span className={`route-list-status ${route.isActive ? 'active' : 'inactive'}`}>
+                            {route.isActive ? 'Активен' : 'Неактивен'}
+                          </span>
+                        </div>
+                        {route.name && <div className="route-list-name">{route.name}</div>}
+                        <div className="route-list-details">
+                          <span>🕐 {route.intervalMinutes} мин</span>
+                          <span>🛑 {route.stops.length} ост.</span>
+                        </div>
+                        <div className="route-list-actions">
+                          <button
+                            className="route-edit-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditRoute?.(route);
+                            }}
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            className="route-delete-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Удалить маршрут ${route.number}?`)) {
+                                onDeleteRoute?.(route.id);
+                              }
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
                   {selectedRouteId && (
                     <div className="selected-route-info">
                       <div className="selected-route-header">
@@ -563,7 +842,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
               )}
             </div>
 
-            {/* Кнопка обновления */}
             <div className="actions-section">
               <button className="action-btn primary" onClick={fetchMarkers} disabled={loading}>
                 <RefreshCw size={16} className={loading ? 'spin' : ''} />
@@ -571,7 +849,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
               </button>
             </div>
 
-            {/* Индикатор режима создания */}
             {(isCreatingStop || isCreatingRoute) && (
               <div className="creation-mode-info">
                 <div className="mode-indicator">
