@@ -1,5 +1,6 @@
 // src/hooks/api/useModeling.ts
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { modelingApi } from '../../api/modelingApi';
 import type {
     ModelingRequest,
@@ -10,101 +11,62 @@ import type {
     VisualizationRequest
 } from '../../api/types';
 
+const HEALTH_QUERY_KEY = ['modeling', 'health'];
+const SIMULATION_RESULT_KEY = (cityId: number) => ['modeling', 'simulation', cityId];
+
 export const useModeling = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const checkHealth = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await modelingApi.checkHealth();
-    } catch (err: any) {
-      setError(err.message || 'Failed to check modeling service health');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ========== HEALTH CHECK ==========
+  const {
+    data: healthStatus,
+    isLoading: healthLoading,
+    error: healthError,
+    refetch: checkHealth,
+  } = useQuery({
+    queryKey: HEALTH_QUERY_KEY,
+    queryFn: () => modelingApi.checkHealth(),
+    staleTime: 30 * 1000, // 30 секунд
+    retry: 2,
+  });
 
-  const runSimulation = useCallback(async (request: ModelingRequest) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await modelingApi.runSimulation(request);
-    } catch (err: any) {
-      setError(err.message || 'Failed to run simulation');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ========== RUN SIMULATION (мутация с кэшированием результата) ==========
+  const runSimulationMutation = useMutation({
+    mutationFn: (request: ModelingRequest) => modelingApi.runSimulation(request),
+    onSuccess: (data, variables) => {
+      // Кэшируем результат симуляции для города
+      if (variables.city_id) {
+        queryClient.setQueryData(SIMULATION_RESULT_KEY(variables.city_id), data);
+      }
+    },
+  });
 
-  const analyzeCity = useCallback(async (request: CityAnalysisRequest) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await modelingApi.analyzeCity(request);
-    } catch (err: any) {
-      setError(err.message || 'Failed to analyze city');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ========== ANALYZE CITY ==========
+  const analyzeCityMutation = useMutation({
+    mutationFn: (request: CityAnalysisRequest) => modelingApi.analyzeCity(request),
+  });
 
-  const predictDemand = useCallback(async (request: DemandPredictionRequest) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await modelingApi.predictDemand(request);
-    } catch (err: any) {
-      setError(err.message || 'Failed to predict demand');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ========== PREDICT DEMAND ==========
+  const predictDemandMutation = useMutation({
+    mutationFn: (request: DemandPredictionRequest) => modelingApi.predictDemand(request),
+  });
 
-  const optimizeRoutes = useCallback(async (request: RouteOptimizationRequest) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await modelingApi.optimizeRoutes(request);
-    } catch (err: any) {
-      setError(err.message || 'Failed to optimize routes');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ========== OPTIMIZE ROUTES ==========
+  const optimizeRoutesMutation = useMutation({
+    mutationFn: (request: RouteOptimizationRequest) => modelingApi.optimizeRoutes(request),
+  });
 
-  const evaluateScenario = useCallback(async (request: ScenarioEvaluationRequest) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await modelingApi.evaluateScenario(request);
-    } catch (err: any) {
-      setError(err.message || 'Failed to evaluate scenario');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ========== EVALUATE SCENARIO ==========
+  const evaluateScenarioMutation = useMutation({
+    mutationFn: (request: ScenarioEvaluationRequest) => modelingApi.evaluateScenario(request),
+  });
 
-  const runFullPipeline = useCallback(async (cityId: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await modelingApi.runFullPipeline(cityId);
-    } catch (err: any) {
-      setError(err.message || 'Failed to run full pipeline');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ========== RUN FULL PIPELINE ==========
+  const runFullPipelineMutation = useMutation({
+    mutationFn: (cityId: number) => modelingApi.runFullPipeline(cityId),
+  });
 
+  // ========== MONITOR SIMULATION ==========
   const monitorSimulation = useCallback(async (
     simulationId: string,
     interval?: number,
@@ -112,34 +74,38 @@ export const useModeling = () => {
     onComplete?: (result: any) => void,
     onError?: (error: any) => void
   ) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await modelingApi.monitorSimulation(
-        simulationId,
-        interval,
-        onUpdate,
-        onComplete,
-        onError
-      );
-    } catch (err: any) {
-      setError(err.message || 'Failed to monitor simulation');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
+    // Для мониторинга оставляем прямой вызов (не кэшируется)
+    return await modelingApi.monitorSimulation(
+      simulationId,
+      interval,
+      onUpdate,
+      onComplete,
+      onError
+    );
   }, []);
 
+  // Получаем результат симуляции из кэша
+  const getSimulationResult = useCallback((cityId: number) => {
+    return queryClient.getQueryData(SIMULATION_RESULT_KEY(cityId));
+  }, [queryClient]);
+
+  const error = healthError instanceof Error ? healthError.message : (healthError as string) || null;
+
   return {
-    loading,
+    loading: healthLoading,
     error,
+    healthStatus,
     checkHealth,
-    runSimulation,
-    analyzeCity,
-    predictDemand,
-    optimizeRoutes,
-    evaluateScenario,
-    runFullPipeline,
+    runSimulation: runSimulationMutation.mutateAsync,
+    analyzeCity: analyzeCityMutation.mutateAsync,
+    predictDemand: predictDemandMutation.mutateAsync,
+    optimizeRoutes: optimizeRoutesMutation.mutateAsync,
+    evaluateScenario: evaluateScenarioMutation.mutateAsync,
+    runFullPipeline: runFullPipelineMutation.mutateAsync,
     monitorSimulation,
+    getSimulationResult,
+    // Для доступа к состоянию мутаций (если нужно)
+    isSimulating: runSimulationMutation.isPending,
+    simulationError: runSimulationMutation.error,
   };
 };

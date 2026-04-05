@@ -1,5 +1,6 @@
 // src/hooks/api/useRoutes.ts
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { routesApi } from '../../api/routesApi';
 import type {
   RouteCreateRequest,
@@ -7,82 +8,88 @@ import type {
   RouteStopRequest
 } from '../../api/types';
 
+const ROUTES_QUERY_KEY = ['routes'];
+const ROUTE_BY_ID_KEY = (id: number) => ['routes', id];
+
 export const useRoutes = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const getAllRoutes = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await routesApi.getAllRoutes();
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch routes');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ========== GET ALL ROUTES ==========
+  const {
+    data: routes,
+    isLoading: loading,
+    error: queryError,
+    refetch,
+  } = useQuery({
+    queryKey: ROUTES_QUERY_KEY,
+    queryFn: () => routesApi.getAllRoutes(),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
 
+  // ========== GET ROUTE BY ID ==========
   const getRouteById = useCallback(async (id: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await routesApi.getRouteById(id);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch route');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    return await queryClient.fetchQuery({
+      queryKey: ROUTE_BY_ID_KEY(id),
+      queryFn: () => routesApi.getRouteById(id),
+      staleTime: 5 * 60 * 1000,
+    });
+  }, [queryClient]);
+
+  // ========== CREATE ROUTE (мутация) ==========
+  const createRouteMutation = useMutation({
+    mutationFn: (request: RouteCreateRequest) => routesApi.createRoute(request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTES_QUERY_KEY });
+    },
+  });
+
+  // ========== DELETE ROUTE (НОВАЯ МУТАЦИЯ) ==========
+  const deleteRouteMutation = useMutation({
+    mutationFn: (id: number) => routesApi.deleteRoute(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTES_QUERY_KEY });
+    },
+  });
+
+  // ========== UPDATE ROUTE STOPS ==========
+  const updateRouteStopsMutation = useMutation({
+    mutationFn: ({ routeId, stops }: { routeId: number; stops: RouteStopRequest[] }) =>
+      routesApi.updateRouteStops(routeId, stops),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTES_QUERY_KEY });
+    },
+  });
+
+  // Обёртки для сохранения API
+  const getAllRoutes = useCallback(async () => {
+    if (routes) return routes;
+    return await refetch();
+  }, [routes, refetch]);
 
   const createRoute = useCallback(async (request: RouteCreateRequest) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await routesApi.createRoute(request);
-    } catch (err: any) {
-      setError(err.message || 'Failed to create route');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    return await createRouteMutation.mutateAsync(request);
+  }, [createRouteMutation]);
 
-  const searchRoutes = useCallback(async (request: RouteSearchRequest) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await routesApi.searchRoutes(request);
-    } catch (err: any) {
-      setError(err.message || 'Failed to search routes');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const deleteRoute = useCallback(async (id: number) => {
+    return await deleteRouteMutation.mutateAsync(id);
+  }, [deleteRouteMutation]);
 
   const updateRouteStops = useCallback(async (routeId: number, stops: RouteStopRequest[]) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await routesApi.updateRouteStops(routeId, stops);
-    } catch (err: any) {
-      setError(err.message || 'Failed to update route stops');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    return await updateRouteStopsMutation.mutateAsync({ routeId, stops });
+  }, [updateRouteStopsMutation]);
+
+  const error = queryError instanceof Error ? queryError.message : (queryError as string) || null;
 
   return {
     loading,
     error,
+    routes,
     getAllRoutes,
     getRouteById,
     createRoute,
-    searchRoutes,
+    deleteRoute,        // ← НОВАЯ ФУНКЦИЯ
+    searchRoutes: routesApi.searchRoutes,
     updateRouteStops,
   };
 };
