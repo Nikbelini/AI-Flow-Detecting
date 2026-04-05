@@ -47,10 +47,10 @@ class SpatialGraphConv(nn.Module):
         # Compute Chebyshev polynomials
         cheb_polys = [x]  # T_0 = x
         if self.k > 1:
-            cheb_polys.append(torch.einsum('bnct,nm->bmct', x, adj_norm))  # T_1
+            cheb_polys.append(torch.einsum('bcnt,nm->bcmt', x, adj_norm))  # T_1
             
         for i in range(2, self.k):
-            new_poly = 2 * torch.einsum('bnct,nm->bmct', cheb_polys[-1], adj_norm) - cheb_polys[-2]
+            new_poly = 2 * torch.einsum('bcnt,nm->bcmt', cheb_polys[-1], adj_norm) - cheb_polys[-2]
             cheb_polys.append(new_poly)
         
         # Apply weights
@@ -110,22 +110,22 @@ class STGCN(nn.Module):
             )
         
         self.dropout = nn.Dropout(0.3)
+        self.final_projection = nn.Linear(hidden_channels * num_nodes, num_nodes)
         
     def forward(self, x, adj):
-        # x: [B, T, N] -> [B, 1, N, T]
+        # Input: [B, T, N]
         if x.dim() == 3:
-            x = x.transpose(1, 2).unsqueeze(1)
-        elif x.dim() == 4 and x.size(1) == 1:
-            # [B, 1, T, N] -> [B, 1, N, T]
-            x = x.transpose(2, 3)
+            x = x.transpose(1, 2).unsqueeze(1) # -> [B, 1, N, T]
         
-        # Apply ST-Conv blocks
         for block in self.blocks:
             x = block(x, adj)
             x = self.dropout(x)
-        
-        # [B, C, N, T] -> [B, T, C*N]
+            
+        # x: [B, C, N, T]
         B, C, N, T = x.shape
+        # Reshape to [B, T, C*N]
         x = x.permute(0, 3, 1, 2).reshape(B, T, C * N)
+        # Project to [B, T, N]
+        x = self.final_projection(x)
         
         return x
