@@ -122,6 +122,46 @@ def debug_train(city_id: int = 1, force: bool = False):
         traceback.print_exc(file=sys.stderr)
         return {"error": str(e), "traceback": traceback.format_exc()}
 
+
+@app.get("/ml/cluster")
+def get_clusters(city_id: int = 1, n_clusters: int = 5):
+    """
+    🔍 Возвращает кластеризацию остановок города.
+    Для визуализации в админке.
+    """
+    from data.clustering import StopClusteringService
+    from database.db import load_stop_history
+    
+    df = load_stop_history(city_id)
+    if df.empty:
+        return {"error": "No data"}
+    
+    # Готовим данные для кластеризации
+    stops = df.groupby('address').agg({
+        'lat': 'first',
+        'lng': 'first', 
+        'count': 'mean'
+    }).reset_index()
+    
+    # Запускаем кластеризацию
+    clusters = StopClusteringService().cluster(
+        stops.itertuples(index=False), 
+        n_clusters=n_clusters
+    )
+    
+    # Формируем ответ
+    result = []
+    for addr, lat, lng, cluster in zip(stops['address'], stops['lat'], stops['lng'], clusters):
+        result.append({
+            "address": addr,
+            "lat": float(lat),
+            "lng": float(lng),
+            "cluster": int(cluster)
+        })
+    
+    return {"city_id": city_id, "n_clusters": n_clusters, "stops": result}
+
+
 @app.get("/ml/train/{job_id}")
 def get_training_status(job_id: str):
     """Получить статус задачи обучения"""

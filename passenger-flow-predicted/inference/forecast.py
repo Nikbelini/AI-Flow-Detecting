@@ -2,19 +2,57 @@ import os
 import torch
 import numpy as np
 import logging
-from typing import Dict, List
+from typing import Dict
 from datetime import datetime
 
-from database.db import load_stop_history
+from database.db import load_stop_history, get_all_stops_in_city
 from services.graph_builder import GraphBuilder
 from database.dataset_builder import build_sequences
 from models.factory import build_model
-from services.data_guard import has_enough_data, split_camera_blind
+from services.data_guard import has_enough_data
 from services.data_preprocessor import DataPreprocessor
 from services.model_io import load_model_with_metadata
 from services.locks import MODEL_LOCK
 
 logger = logging.getLogger(__name__)
+
+# ===========================
+# POST-PROCESSING FORMULAS
+# ===========================
+
+def compute_load(count: float, max_people: int = 50) -> int:
+    """
+    Load: 1..10
+    10 достигается при 50+ людях.
+    """
+    if count is None:
+        return None
+    load = 1 + 9 * (count / max_people)
+    return int(round(min(10, max(1, load))))
+
+
+def compute_velocity(count: float, base_speed: float = 40.0) -> float:
+    """
+    Velocity падает при росте количества людей.
+    """
+    if count is None:
+        return None
+    factor = 1.0 / (1.0 + (count / 30.0))
+    return round(base_speed * factor, 2)
+
+
+def compute_surge_index(forecast: list[int]) -> float:
+    """
+    Surge = средний рост count между шагами.
+    10 человек прироста за шаг = surge 1.0
+    """
+    if not forecast or len(forecast) < 2:
+        return 0.0
+    diffs = [forecast[i] - forecast[i - 1] for i in range(1, len(forecast))]
+    avg_growth = sum(diffs) / len(diffs)
+    surge = avg_growth / 10.0
+    return round(max(0.0, surge), 2)
+
 
 def forecast_city_blind_stops(city_id: int, horizon: int) -> Dict:
     """
@@ -28,14 +66,15 @@ def forecast_city_blind_stops(city_id: int, horizon: int) -> Dict:
     
     predictions_list = []
     for stop in result.get("stops", []):
-        raw_forecast = stop.get("forecast", [])
-        if raw_forecast and raw_forecast[0] is not None:
+        forecast = stop.get("forecast", [])
 
-            predicted_count = int(round(raw_forecast[0]))
-            full_forecast = [int(round(v)) for v in raw_forecast]
-        else:
-            predicted_count = None
-            full_forecast = []
+        full_forecast = [int(round(v)) for v in forecast]
+        predicted_count = int(round(forecast[0])) if forecast else None
+        predicted_load = compute_load(predicted_count) if predicted_count is not None else None
+        predicted_velocity = compute_velocity(predicted_count) if predicted_count is not None else None
+
+        surge_index = compute_surge_index(full_forecast)
+        full_forecast = [int(round(v)) for v in forecast]
         
         predictions_list.append({
             "address": stop["address"],
@@ -43,8 +82,9 @@ def forecast_city_blind_stops(city_id: int, horizon: int) -> Dict:
             "lng": stop["lng"],
             "has_camera": False,
             "predicted_count": predicted_count,
-            "predicted_velocity": None,
-            "predicted_load": None,
+            "predicted_velocity": predicted_velocity,
+            "predicted_load": predicted_load,
+            "surge_index": surge_index,
             "forecast_horizon": len(full_forecast),
             "full_forecast": full_forecast
         })
@@ -52,7 +92,7 @@ def forecast_city_blind_stops(city_id: int, horizon: int) -> Dict:
     return {
         "city_id": city_id,
         "timestamp": datetime.now().isoformat(),
-        "predictions": predictions_list,  # ← Этот список возвращаем в /forecast
+        "predictions": predictions_list,
         "meta": result.get("metadata", {})
     }
 
@@ -67,6 +107,7 @@ def _forecast_internal(city_id: int, horizon: int, blind_only: bool = True) -> D
         return {"status": "NOT_READY", "message": "Not enough data"}
     
     model_path = f"result/models/city_{city_id}.pt"
+
     if not os.path.exists(model_path):
         logger.warning(f"Model not found: {model_path}")
         return {"status": "NOT_TRAINED", "message": "Model not trained"}
@@ -77,72 +118,94 @@ def _forecast_internal(city_id: int, horizon: int, blind_only: bool = True) -> D
     
     metadata = loaded.get('metadata', {})
     scaler = metadata.get('scaler')
-    nodes = metadata.get('nodes', [])
+    nodes_order = metadata.get("nodes_order")
+    time_steps = metadata.get("time_steps", 12)
+    sigma = metadata.get("sigma", 0.5)
     
-    if not scaler or not nodes:
+    if scaler is None or not nodes_order:
         return {"status": "ERROR", "message": "Model metadata corrupted"}
     
-    # Нормализация + последовательности
-    df_norm, _ = DataPreprocessor.normalize(df, scaler=scaler)
-    X_seq, _, all_nodes = build_sequences(df_norm, time_steps=12)
-    
-    # Граф
-    coords = df[['lat', 'lng']].drop_duplicates().values
-    adj = GraphBuilder(sigma=0.5).build_from_coordinates(coords)
-    
-    # Модель
-    model = build_model(len(nodes))
+    # === ВСЕ остановки города (для координат) ===
+    all_stops = get_all_stops_in_city(city_id)
+    if all_stops.empty:
+        all_stops = df[["address", "lat", "lng"]].drop_duplicates("address")
+
+    coords = (
+        all_stops.set_index("address")
+        .reindex(nodes_order)[["lat", "lng"]]
+        .fillna(0.0)
+        .values
+    )
+
+    adj = GraphBuilder(sigma=sigma).build_from_coordinates(coords)
+
+    # === нормализация ===
+    df_norm, _ = DataPreprocessor.normalize(df, scaler=scaler, fit=False)
+
+    # === последовательности на ВСЕХ nodes_order ===
+    X_seq, _ = build_sequences(df_norm, nodes_order, time_steps=time_steps)
+    input_seq = X_seq[-1:].clone()  # [1, T, N]
+
+    # === модель ===
+    model = build_model(len(nodes_order))
     with MODEL_LOCK:
-        model.load_state_dict(loaded['state_dict'])
+        model.load_state_dict(loaded["state_dict"])
         model.eval()
-    
-    # Прогноз
-    input_seq = X_seq[-1:].clone()
-    predictions = []
-    
+
+    # === autoregressive прогноз ===
+    preds_steps = []
     with torch.no_grad():
         for _ in range(horizon):
-            pred = model(input_seq, adj)
-            predictions.append(pred.squeeze(0).cpu().numpy())
-            input_seq = torch.cat([input_seq[:, 1:], pred.unsqueeze(1)], dim=1)
-    
-    # Формирование ответа
-    node_info = df[['address', 'lat', 'lng', 'has_camera']].drop_duplicates().set_index('address')
-    
-    # сколько всего узлов и сколько из них слепых
-    total_nodes = len(all_nodes)
-    blind_nodes = 0
-    
+            pred = model(input_seq, adj)  # [1, N]
+            preds_steps.append(pred.squeeze(0).cpu().numpy())
+
+            # input_seq: [B, T, C, N]
+            # pred_step: [B, 1, C, N]
+            pred_step = torch.zeros(
+                (input_seq.size(0), 1, input_seq.size(2), input_seq.size(3)),
+                device=input_seq.device
+            )
+
+            # count в канал 0
+            pred_step[:, 0, 0, :] = pred
+
+            # остальные каналы (time embeddings) копируем из последнего timestep
+            pred_step[:, 0, 1:, :] = input_seq[:, -1, 1:, :]
+
+            # sliding window
+            input_seq = torch.cat([input_seq[:, 1:], pred_step], dim=1)
+
+    preds_steps = np.stack(preds_steps, axis=0)  # [H, N]
+
+    # === определяем камеры по данным (правильнее чем has_camera) ===
+    camera_set = set(df[df["count"] > 0]["address"].unique().tolist())
+
     stops_result = []
-    for i, node in enumerate(all_nodes):
-        if i >= len(predictions[0]):
-            continue
-            
-        raw_preds = [pred[i] for pred in predictions]
-        denorm_preds = DataPreprocessor.denormalize_count(np.array(raw_preds), scaler).tolist()
-        
-        info = node_info.loc[node] if node in node_info.index else None
-        has_cam = bool(info['has_camera']) if info is not None and 'has_camera' in info else False
-        
+    blind_nodes = 0
+
+    for idx, addr in enumerate(nodes_order):
+        has_cam = addr in camera_set
+
         if not has_cam:
             blind_nodes += 1
-            
-        # если blind_only=True — пропускаем камеры
+
         if blind_only and has_cam:
-            logger.debug(f"Skipping camera stop: {node}")
             continue
-        
+
+        forecast_norm = preds_steps[:, idx]
+        forecast = DataPreprocessor.denormalize_count(forecast_norm, scaler)
+
+        # защита от отрицательных значений
+        forecast = [int(round(max(0, v))) for v in forecast]
+
         stops_result.append({
-            'address': node,
-            'lat': float(info['lat']) if info is not None else 0.0,
-            'lng': float(info['lng']) if info is not None else 0.0,
-            'has_camera': has_cam,
-            'forecast': [round(p, 2) for p in denorm_preds]
+            "address": addr,
+            "lat": float(coords[idx][0]),
+            "lng": float(coords[idx][1]),
+            "has_camera": has_cam,
+            "forecast": forecast
         })
-    
-    logger.info(f"Processed {total_nodes} nodes: {blind_nodes} blind, {total_nodes - blind_nodes} with cameras")
-    logger.info(f"Returning {len(stops_result)} stops (blind_only={blind_only})")
-    
+
     return {
         "status": "success",
         "city_id": city_id,
@@ -150,9 +213,10 @@ def _forecast_internal(city_id: int, horizon: int, blind_only: bool = True) -> D
         "timestamp": datetime.now().isoformat(),
         "stops": stops_result,
         "metadata": {
-            "total_returned": len(stops_result),
-            "blind_only": blind_only,
-            "total_nodes": total_nodes,
-            "blind_nodes": blind_nodes
+            "total_nodes": len(nodes_order),
+            "blind_nodes": blind_nodes,
+            "camera_nodes": len(nodes_order) - blind_nodes,
+            "returned": len(stops_result),
+            "blind_only": blind_only
         }
     }

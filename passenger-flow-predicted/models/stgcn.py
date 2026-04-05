@@ -113,9 +113,17 @@ class STGCN(nn.Module):
         self.final_projection = nn.Linear(hidden_channels * num_nodes, num_nodes)
         
     def forward(self, x, adj):
-        # Input: [B, T, N]
+        # x: [B,T,N] or [B,T,C,N]
         if x.dim() == 3:
+            # [B,T,N] -> [B,1,N,T]
             x = x.transpose(1, 2).unsqueeze(1) # -> [B, 1, N, T]
+        
+        elif x.dim() == 4:
+            # [B,T,C,N] -> [B,C,N,T]
+            x = x.permute(0, 2, 3, 1)
+
+        else:
+            raise ValueError(f"Invalid input shape: {x.shape}")
         
         for block in self.blocks:
             x = block(x, adj)

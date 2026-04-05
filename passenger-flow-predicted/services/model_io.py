@@ -9,7 +9,7 @@ from services.locks import MODEL_LOCK
 def save_model_atomic(model: torch.nn.Module, path: str, metadata: Optional[Dict[str, Any]] = None):
     """
     Атомарное сохранение модели + метаданных.
-    🔥 Исправлено: работает на Windows при разных дисках для temp и target.
+    Исправлено: работает на Windows при разных дисках для temp и target.
     """
     with MODEL_LOCK:
         os.makedirs(os.path.dirname(path), exist_ok=True)

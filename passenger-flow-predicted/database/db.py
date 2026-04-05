@@ -18,6 +18,7 @@ CSV_FALLBACK_PATH = BASE_DIR / "data" / "fallback_{city_id}.csv"
 
 engine = create_engine(DB_URL, pool_pre_ping=True)
 
+
 def load_stop_history(city_id: int, use_csv_fallback: bool = True) -> pd.DataFrame:
     """Загружает историю остановок с колонкой has_camera"""
     
@@ -25,12 +26,7 @@ def load_stop_history(city_id: int, use_csv_fallback: bool = True) -> pd.DataFra
     query = text("""
         SELECT 
             sh.address, sh.count, sh.velocity, sh.load, sh.datetime,
-            s.lat, s.lng,
-            CASE 
-                WHEN s.url IS NOT NULL AND TRIM(COALESCE(s.url, '')) != '' 
-                THEN TRUE 
-                ELSE FALSE 
-            END AS has_camera
+            s.lat, s.lng
         FROM stops_history sh
         LEFT JOIN stops s ON s.address = sh.address AND s.city_id = sh.city_id
         WHERE sh.city_id = :city_id
@@ -43,8 +39,8 @@ def load_stop_history(city_id: int, use_csv_fallback: bool = True) -> pd.DataFra
         if not df.empty:
             logger.info(f"DB: loaded {len(df)} rows for city {city_id}")
             return _ensure_schema(df)
-    except Exception as e:
-        logger.warning(f"DB connection failed: {e}")
+    except Exception as exception:
+        logger.warning(f"DB connection failed: {exception}")
     
     # Фоллбэк на CSV
     if use_csv_fallback:
@@ -55,26 +51,40 @@ def load_stop_history(city_id: int, use_csv_fallback: bool = True) -> pd.DataFra
     logger.warning(f"No data for city {city_id}")
     return _empty_df()
 
+
+def get_all_stops_in_city(city_id: int) -> pd.DataFrame:
+    """
+    Получает ВСЕ остановки города для построения графа.
+    """
+    query = text("""
+        SELECT DISTINCT address, lat, lng 
+        FROM stops 
+        WHERE city_id = :city_id AND lat IS NOT NULL AND lng IS NOT NULL
+        ORDER BY address
+    """)
+    try:
+        df = pd.read_sql(query, engine, params={"city_id": city_id})
+        # Добавляем адреса из истории, если их нет в stops
+        return df
+    except:
+        return pd.DataFrame(columns=['address', 'lat', 'lng'])
+
+
 def _ensure_schema(df: pd.DataFrame) -> pd.DataFrame:
     """Гарантирует наличие всех нужных колонок"""
-    if 'has_camera' not in df.columns:
-        df['has_camera'] = df.get('url', pd.Series([True]*len(df))).notna()
+    result = df.copy()
     
-    for col in ['lat', 'lng']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+    for col in ['lat', 'lng', 'count', 'velocity', 'load']:
+        if col in result.columns:
+            result[col] = pd.to_numeric(result[col], errors='coerce').fillna(0)
     
-    for col in ['count', 'velocity', 'load']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-    
-    return df
+    return result
 
 def _empty_df() -> pd.DataFrame:
     """Пустой DataFrame с правильной схемой"""
     return pd.DataFrame(columns=[
         'address', 'count', 'velocity', 'load', 'datetime',
-        'lat', 'lng', 'has_camera'
+        'lat', 'lng'
     ])
 
 def _load_csv_fallback(city_id: int) -> pd.DataFrame:
@@ -88,21 +98,9 @@ def _load_csv_fallback(city_id: int) -> pd.DataFrame:
     try:
         df = pd.read_csv(csv_path, parse_dates=['datetime'])
         
-        if 'url' in df.columns:
-            df['has_camera'] = df['url'].notna() & (df['url'].astype(str).str.strip() != '')
-        elif 'has_camera' not in df.columns:
-            df['has_camera'] = True
-        
         logger.info(f"CSV: loaded {len(df)} rows from {csv_path}")
         return _ensure_schema(df)
         
-    except Exception as e:
-        logger.error(f"❌ CSV error: {e}")
+    except Exception as exception:
+        logger.error(f"CSV error: {exception}")
         return _empty_df()
-
-def save_to_csv_fallback(df: pd.DataFrame, city_id: int):
-    """Утилита: сохранить в CSV"""
-    csv_path = str(CSV_FALLBACK_PATH).format(city_id=city_id)
-    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-    df.to_csv(csv_path, index=False)
-    logger.info(f"Saved to {csv_path}")

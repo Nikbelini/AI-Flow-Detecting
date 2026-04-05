@@ -5,6 +5,24 @@ def has_enough_data(df: pd.DataFrame, min_steps: int = 32) -> bool:
         return False
     return df['datetime'].nunique() >= min_steps
 
+
+def split_training_data(df: pd.DataFrame) -> tuple[pd.DataFrame, set]:
+    """
+    Для обучения: "камера" = есть исторические данные (count > 0)
+    """
+
+    if df.empty:
+        return df.copy(), set()
+    
+    # Камера = есть хоть одна запись с count > 0
+    camera_addresses = df[df['count'] > 0]['address'].unique()
+    all_addresses = set(df['address'].unique())
+
+    camera_df = df[df['address'].isin(camera_addresses)].copy()
+
+    return camera_df, all_addresses
+
+
 def count_camera_vs_blind(df: pd.DataFrame) -> tuple[int, int]:
     """Считает остановки с камерами и без по колонке has_camera"""
     if df.empty or 'has_camera' not in df.columns:

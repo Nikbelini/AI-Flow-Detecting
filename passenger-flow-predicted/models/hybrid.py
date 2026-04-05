@@ -7,5 +7,5 @@ class STGCN_LSTM(nn.Module):
         self.lstm = lstm
 
     def forward(self, x, adj):
-        x = self.stgcn(x, adj)       # [B, C, T, N]
+        x = self.stgcn(x, adj)       # [B, T, N]
         return self.lstm(x)

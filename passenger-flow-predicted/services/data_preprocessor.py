@@ -17,53 +17,32 @@ class DataPreprocessor:
     
     @staticmethod
     def normalize(df: pd.DataFrame, scaler: Optional[StandardScaler] = None, 
-        features: Optional[List[str]] = None) -> Tuple[pd.DataFrame, StandardScaler]:
+        fit: bool = True) -> Tuple[pd.DataFrame, StandardScaler]:
         """Нормализует числовые признаки"""
         df_norm = df.copy()
         
+        if "count" not in df_norm.columns:
+            df_norm["count"] = 0.0
+
+        df_norm["count"] = pd.to_numeric(df_norm["count"], errors="coerce").fillna(0.0)
+
         if scaler is None:
             scaler = StandardScaler()
 
-        target_features = features if features is not None else DataPreprocessor.FEATURES
-        valid_features = [f for f in target_features if f in df_norm.columns]
-        
-        if not valid_features:
-            logger.warning("None of the target features found in DataFrame")
-            return df_norm, scaler or StandardScaler()
-        
+        X = df_norm[["count"]].values.astype(float)
 
-        for col in valid_features:
-            df_norm[col] = pd.to_numeric(df_norm[col], errors='coerce').astype(float)
-        
-        # Fit только на непустых значениях
-        mask = df_norm[DataPreprocessor.FEATURES].notna().all(axis=1)
-        if mask.sum() > 0:
-            df_norm.loc[mask, DataPreprocessor.FEATURES] = scaler.fit_transform(
-                df_norm.loc[mask, DataPreprocessor.FEATURES]
-            )
-        else:
-            mask = df_norm[DataPreprocessor.FEATURES].notna().all(axis=1)
-            if mask.sum() > 0:
-                df_norm.loc[mask, DataPreprocessor.FEATURES] = scaler.transform(
-                    df_norm.loc[mask, DataPreprocessor.FEATURES]
-                )
-        
+        if fit:
+            scaler.fit(X)
+
+        df_norm[["count"]] = scaler.transform(X)
         return df_norm, scaler
+    
     
     @staticmethod
     def denormalize_count(values: np.ndarray, scaler: StandardScaler) -> np.ndarray:
         """Денормализует ТОЛЬКО count (первый признак)"""
-        # Создаём "шаблон" для inverse_transform
-        dummy = np.zeros((len(values), len(DataPreprocessor.FEATURES)))
-        dummy[:, 0] = values  # count — первый в FEATURES
-        
-        try:
-            denorm = scaler.inverse_transform(dummy)
-            return denorm[:, 0]  # возвращаем только count
-        except:
-            # Fallback: если scaler не fit'нут, возвращаем как есть
-            logger.warning("Scaler not fitted, returning raw values")
-            return values
+        values = np.asarray(values, dtype=np.float32).reshape(-1, 1)
+        return scaler.inverse_transform(values).reshape(-1)
     
     @staticmethod
     def save_scaler(scaler: StandardScaler, path: str):
