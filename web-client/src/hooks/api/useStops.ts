@@ -1,102 +1,103 @@
 // src/hooks/api/useStops.ts
-import { useState, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { stopsApi, type StopResponse, type StopStatsUpdateRequest } from '../../api/stopsApi';
 
+// Ключи кэша
+const STOPS_QUERY_KEY = ['stops'] as const;
+const STOPS_BY_CITY_QUERY_KEY = (cityId: number) => ['stops', 'city', cityId] as const;
+
 export const useStops = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const getStops = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const stops = await stopsApi.getStops();
-      return stops;
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch stops');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ---- QUERIES (автоматическая загрузка!) ----
+  const getStopsQuery = useQuery({
+    queryKey: STOPS_QUERY_KEY,
+    queryFn: () => stopsApi.getStops(),
+    staleTime: 1000 * 60 * 5,      // 5 минут свежести
+    gcTime: 1000 * 60 * 10,        // 10 минут в кэше
+    retry: 1,
+  });
 
-  const getStopsByCity = useCallback(async (cityId: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const stops = await stopsApi.getStopsByCity(cityId);
-      return stops;
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch stops for city');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const getStopsByCity = (cityId: number) => {
+    return useQuery({
+      queryKey: STOPS_BY_CITY_QUERY_KEY(cityId),
+      queryFn: () => stopsApi.getStopsByCity(cityId),
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+      enabled: !!cityId,
+    });
+  };
 
-  const createStop = useCallback(async (request: Parameters<typeof stopsApi.createStop>[0]) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const stop = await stopsApi.createStop(request);
-      return stop;
-    } catch (err: any) {
-      setError(err.message || 'Failed to create stop');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ---- MUTATIONS ----
+  const createStopMutation = useMutation({
+    mutationFn: (request: Parameters<typeof stopsApi.createStop>[0]) => stopsApi.createStop(request),
+    onSuccess: () => {
+      // Инвалидируем кэш после успешного создания
+      queryClient.invalidateQueries({ queryKey: STOPS_QUERY_KEY });
+    },
+  });
 
-  const updateStopStats = useCallback(async (id: number, request: StopStatsUpdateRequest) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const stop = await stopsApi.updateStopStats(id, request);
-      return stop;
-    } catch (err: any) {
-      setError(err.message || 'Failed to update stop stats');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const updateStopStatsMutation = useMutation({
+    mutationFn: ({ id, request }: { id: number; request: StopStatsUpdateRequest }) =>
+      stopsApi.updateStopStats(id, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: STOPS_QUERY_KEY });
+    },
+  });
 
-  const updateStop = useCallback(async (id: number, request: any) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const stop = await stopsApi.updateStop(id, request);
-      return stop;
-    } catch (err: any) {
-      setError(err.message || 'Failed to update stop');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const updateStopMutation = useMutation({
+    mutationFn: ({ id, request }: { id: number; request: any }) =>
+      stopsApi.updateStop(id, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: STOPS_QUERY_KEY });
+    },
+  });
 
-  const deleteStop = useCallback(async (id: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      await stopsApi.deleteStop(id);
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete stop');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const deleteStopMutation = useMutation({
+    mutationFn: (id: number) => stopsApi.deleteStop(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: STOPS_QUERY_KEY });
+    },
+  });
+
+  // ---- УПРОЩЁННЫЙ API (для обратной совместимости) ----
+  const getStops = async () => {
+    // Просто возвращаем данные из кэша или ждём загрузки
+    return getStopsQuery.data ?? [];
+  };
+
+  const createStop = async (request: Parameters<typeof stopsApi.createStop>[0]) => {
+    return await createStopMutation.mutateAsync(request);
+  };
+
+  const updateStopStats = async (id: number, request: StopStatsUpdateRequest) => {
+    return await updateStopStatsMutation.mutateAsync({ id, request });
+  };
+
+  const updateStop = async (id: number, request: any) => {
+    return await updateStopMutation.mutateAsync({ id, request });
+  };
+
+  const deleteStop = async (id: number) => {
+    await deleteStopMutation.mutateAsync(id);
+  };
 
   return {
-    loading,
-    error,
+    // Данные
+    stops: getStopsQuery.data ?? [],
+    isLoading: getStopsQuery.isLoading,
+    isError: getStopsQuery.isError,
+    error: getStopsQuery.error,
+    
+    // Функции (совместимые со старым API)
     getStops,
     getStopsByCity,
     createStop,
     updateStopStats,
     updateStop,
     deleteStop,
+    
+    // Для совместимости со старым API (loading, error)
+    loading: getStopsQuery.isLoading,
   };
 };

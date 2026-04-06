@@ -1,5 +1,5 @@
 // src/hooks/api/useRoutes.ts
-import { useState, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { routesApi } from '../../api/routesApi';
 import type {
   RouteCreateRequest,
@@ -8,117 +8,106 @@ import type {
   RouteUpdateRequest
 } from '../../api/types';
 
+// Ключи кэша
+const ROUTES_QUERY_KEY = ['routes'] as const;
+
 export const useRoutes = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const getAllRoutes = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await routesApi.getAllRoutes();
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch routes');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ---- QUERIES (автоматическая загрузка!) ----
+  const getAllRoutesQuery = useQuery({
+    queryKey: ROUTES_QUERY_KEY,
+    queryFn: () => routesApi.getAllRoutes(),
+    staleTime: 1000 * 60 * 5,      // 5 минут свежести
+    gcTime: 1000 * 60 * 10,        // 10 минут в кэше
+    retry: 1,
+  });
 
-  const getRouteById = useCallback(async (id: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await routesApi.getRouteById(id);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch route');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ---- MUTATIONS ----
+  const createRouteMutation = useMutation({
+    mutationFn: (request: RouteCreateRequest) => routesApi.createRoute(request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTES_QUERY_KEY });
+    },
+  });
 
-  const createRoute = useCallback(async (request: RouteCreateRequest) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await routesApi.createRoute(request);
-    } catch (err: any) {
-      setError(err.message || 'Failed to create route');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const updateRouteMutation = useMutation({
+    mutationFn: ({ id, request }: { id: number; request: RouteUpdateRequest }) =>
+      routesApi.updateRoute(id, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTES_QUERY_KEY });
+    },
+  });
 
-  const searchRoutes = useCallback(async (request: RouteSearchRequest) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await routesApi.searchRoutes(request);
-    } catch (err: any) {
-      setError(err.message || 'Failed to search routes');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const deleteRouteMutation = useMutation({
+    mutationFn: (id: number) => routesApi.deleteRoute(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTES_QUERY_KEY });
+    },
+  });
 
-  const updateRouteStops = useCallback(async (routeId: number, stops: RouteStopRequest[]) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await routesApi.updateRouteStops(routeId, stops);
-    } catch (err: any) {
-      setError(err.message || 'Failed to update route stops');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const updateRouteStopsMutation = useMutation({
+    mutationFn: ({ routeId, stops }: { routeId: number; stops: RouteStopRequest[] }) =>
+      routesApi.updateRouteStops(routeId, stops),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTES_QUERY_KEY });
+    },
+  });
 
-  const updateRoute = useCallback(async (id: number, request: RouteUpdateRequest) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await routesApi.updateRoute(id, request);
-    } catch (err: any) {
-      setError(err.message || 'Failed to update route');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const toggleRouteActiveMutation = useMutation({
+    mutationFn: ({ id, active }: { id: number; active: boolean }) =>
+      routesApi.toggleRouteActive(id, active),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTES_QUERY_KEY });
+    },
+  });
 
-  const deleteRoute = useCallback(async (id: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      await routesApi.deleteRoute(id);
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete route');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ---- УПРОЩЁННЫЙ API ----
+  const getAllRoutes = async () => {
+    return getAllRoutesQuery.data ?? [];
+  };
 
-  const toggleRouteActive = useCallback(async (id: number, active: boolean) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await routesApi.toggleRouteActive(id, active);
-    } catch (err: any) {
-      setError(err.message || 'Failed to toggle route active status');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const getRouteById = async (id: number) => {
+    const routes = getAllRoutesQuery.data ?? [];
+    return routes.find(r => r.id === id);
+  };
+
+  const createRoute = async (request: RouteCreateRequest) => {
+    return await createRouteMutation.mutateAsync(request);
+  };
+
+  const searchRoutes = async (request: RouteSearchRequest) => {
+    const routes = getAllRoutesQuery.data ?? [];
+    // Простой поиск по номеру
+    return routes.filter(r => 
+      r.number.toLowerCase().includes(request.query?.toLowerCase() || '')
+    );
+  };
+
+  const updateRouteStops = async (routeId: number, stops: RouteStopRequest[]) => {
+    return await updateRouteStopsMutation.mutateAsync({ routeId, stops });
+  };
+
+  const updateRoute = async (id: number, request: RouteUpdateRequest) => {
+    return await updateRouteMutation.mutateAsync({ id, request });
+  };
+
+  const deleteRoute = async (id: number) => {
+    await deleteRouteMutation.mutateAsync(id);
+  };
+
+  const toggleRouteActive = async (id: number, active: boolean) => {
+    return await toggleRouteActiveMutation.mutateAsync({ id, active });
+  };
 
   return {
-    loading,
-    error,
+    // Данные
+    routes: getAllRoutesQuery.data ?? [],
+    isLoading: getAllRoutesQuery.isLoading,
+    isError: getAllRoutesQuery.isError,
+    error: getAllRoutesQuery.error,
+    
+    // Функции
     getAllRoutes,
     getRouteById,
     createRoute,
@@ -127,5 +116,8 @@ export const useRoutes = () => {
     updateRoute,
     deleteRoute,
     toggleRouteActive,
+    
+    // Для совместимости
+    loading: getAllRoutesQuery.isLoading,
   };
 };

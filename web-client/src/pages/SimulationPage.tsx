@@ -1,5 +1,5 @@
 // src/pages/SimulationPage.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './SimulationPage.css';
 import SimulationMap, { type MapRoute } from './Map/SimulationMap';
 import { useStops } from '../hooks/api/useStops';
@@ -169,7 +169,6 @@ const SimulationPage: React.FC = () => {
   const [selectedHour, setSelectedHour] = useState(8);
   const [cityStops, setCityStops] = useState<ExtendedStop[]>([]);
   const [cityRoutes, setCityRoutes] = useState<MapRoute[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [serviceAvailable, setServiceAvailable] = useState(true);
 
   // Состояния для создания элементов
@@ -193,81 +192,106 @@ const SimulationPage: React.FC = () => {
 
   const CITY_ID = 1;
 
-  const { getStops } = useStops();
-  const { getAllRoutes } = useRoutes();
-
   const [showStops, setShowStops] = useState(true);
   const [searchRouteQuery, setSearchRouteQuery] = useState('');
   const [filteredRouteIds, setFilteredRouteIds] = useState<Set<number>>(new Set());
 
-  // ========== Загрузка данных ==========
+  // ✅ ИСПРАВЛЕНО: используем реактивные данные из хуков
+  const { 
+    getStops, 
+    stops: stopsFromQuery,
+    isLoading: stopsLoading 
+  } = useStops();
+  
+  const { 
+    getAllRoutes, 
+    routes: routesFromQuery,
+    isLoading: routesLoading 
+  } = useRoutes();
 
+  // ✅ Флаг для предотвращения двойной загрузки
+  const initialLoadDone = useRef(false);
+
+  // ✅ Реактивное обновление остановок из React Query
   useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        setIsLoading(true);
+    if (stopsFromQuery && stopsFromQuery.length > 0) {
+      const stopsWithCoords: ExtendedStop[] = stopsFromQuery.map((stop: any) => ({
+        id: Number(stop.id),
+        address: stop.address || `Остановка ${stop.id}`,
+        lat: stop.lat,
+        lng: stop.lng,
+        url: stop.url || '',
+        count: stop.count || 0,
+        velocity: stop.velocity || 0,
+        load: stop.load || 3,
+        cityId: CITY_ID,
+        avg_load: stop.avg_load,
+        avg_count: stop.avg_count,
+        avg_wait_time: stop.avg_wait_time || 8.2,
+        max_count: stop.max_count,
+        cluster: stop.cluster,
+        peak_hours: stop.peak_hours,
+        avg_pattern: stop.avg_pattern,
+        color: getStopColor(stop.id)
+      }));
+      setCityStops(stopsWithCoords);
+      console.log('✅ Остановки обновлены из кэша:', stopsWithCoords.length);
+    }
+  }, [stopsFromQuery, CITY_ID]);
 
+  // ✅ Реактивное обновление маршрутов из React Query
+  useEffect(() => {
+    if (routesFromQuery && routesFromQuery.length > 0) {
+      const routesForMap: MapRoute[] = routesFromQuery.map((route: any) => {
+        const path = generateRoutePath(route.stops || [], cityStops);
+        return {
+          id: route.id,
+          number: route.number || String(route.id),
+          name: route.name,
+          path: path,
+          color: `#${Math.floor(Math.random() * 16777215).toString(16)}`,
+          stops: route.stops?.map((s: any) => s.stopId || s.id) || [],
+          intervalMinutes: route.intervalMinutes || 15,
+          transportType: route.transportType || 'BUS',
+          isActive: route.isActive,
+          cityId: route.cityId
+        };
+      });
+      setCityRoutes(routesForMap);
+      console.log('✅ Маршруты обновлены из кэша:', routesForMap.length);
+    }
+  }, [routesFromQuery, cityStops]);
+
+  // ✅ Проверка здоровья сервиса при монтировании
+  useEffect(() => {
+    const checkServiceHealth = async () => {
+      try {
         const healthResponse = await fetch('http://localhost:8084/health');
         const healthData = await healthResponse.json();
         setServiceAvailable(healthData.status === 'healthy');
-
-        const [stopsData, routesData] = await Promise.all([
-          getStops(),
-          getAllRoutes()
-        ]);
-
-        const stopsWithCoords: ExtendedStop[] = stopsData.map((stop: any) => ({
-          id: Number(stop.id),
-          address: stop.address || `Остановка ${stop.id}`,
-          lat: stop.lat,
-          lng: stop.lng,
-          url: stop.url || '',
-          count: stop.count || 0,
-          velocity: stop.velocity || 0,
-          load: stop.load || 3,
-          cityId: CITY_ID,
-          avg_load: stop.avg_load,
-          avg_count: stop.avg_count,
-          avg_wait_time: stop.avg_wait_time || 8.2,
-          max_count: stop.max_count,
-          cluster: stop.cluster,
-          peak_hours: stop.peak_hours,
-          avg_pattern: stop.avg_pattern,
-          color: getStopColor(stop.id)
-        }));
-
-        const routesForMap: MapRoute[] = routesData.map((route: any) => {
-          const path = generateRoutePath(route.stops || [], stopsWithCoords);
-          return {
-            id: route.id,
-            number: route.number || String(route.id),
-            name: route.name,
-            path: path,
-            color: `#${Math.floor(Math.random() * 16777215).toString(16)}`,
-            stops: route.stops?.map((s: any) => s.stopId || s.id) || [],
-            intervalMinutes: route.intervalMinutes || 15,
-            transportType: route.transportType || 'BUS',
-            isActive: route.isActive,
-            cityId: route.cityId
-          };
-        });
-
-        setCityStops(stopsWithCoords);
-        setCityRoutes(routesForMap);
-        console.log('✅ Загружено:', { stops: stopsWithCoords.length, routes: routesForMap.length });
       } catch (error) {
-        console.error('❌ Ошибка загрузки данных:', error);
+        console.error('❌ Сервис моделирования недоступен:', error);
         setServiceAvailable(false);
-      } finally {
-        setIsLoading(false);
       }
     };
-
-    loadInitialData();
+    checkServiceHealth();
   }, []);
 
+  // ✅ Триггер загрузки данных (один раз при монтировании)
+  useEffect(() => {
+    if (!initialLoadDone.current) {
+      initialLoadDone.current = true;
+      // Вызываем getStops и getAllRoutes - они заполнят кэш React Query
+      getStops().catch(console.error);
+      getAllRoutes().catch(console.error);
+    }
+  }, [getStops, getAllRoutes]);
+
+  // ✅ Загрузка маршрутов из modeling-service (дополнительно)
   useEffect(() => {
     const loadRoutesFromModelingService = async () => {
+      if (!serviceAvailable) return;
+      
       try {
         const response = await fetch('http://localhost:8084/routes/1');
         if (response.ok) {
@@ -293,10 +317,11 @@ const SimulationPage: React.FC = () => {
       }
     };
 
-    if (serviceAvailable) {
-      loadRoutesFromModelingService();
-    }
+    loadRoutesFromModelingService();
   }, [serviceAvailable]);
+
+  // ✅ Показываем индикатор загрузки только при первой загрузке
+  const isLoading = (stopsLoading || routesLoading) && cityStops.length === 0 && cityRoutes.length === 0;
 
   const generateRoutePath = (stops: any[], allStops: ExtendedStop[]): [number, number][] => {
     if (!stops || stops.length === 0) return [];
@@ -767,7 +792,6 @@ const SimulationPage: React.FC = () => {
               Управление картой
             </h3>
 
-            {/* Переключатель видимости остановок */}
             <div className="map-toggle">
               <div className="toggle-label">
                 <Bus size={16} />
@@ -783,7 +807,6 @@ const SimulationPage: React.FC = () => {
               </label>
             </div>
 
-            {/* Поиск маршрутов */}
             <div className="route-search">
               <div className="search-header">
                 <RouteIcon size={16} />
@@ -825,14 +848,12 @@ const SimulationPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Счётчик найденных маршрутов */}
               {searchRouteQuery && (
                 <div className="search-results-count">
                   Найдено маршрутов: {filteredRouteIds.size}
                 </div>
               )}
 
-              {/* Список найденных маршрутов */}
               {searchRouteQuery && filteredRouteIds.size > 0 && (
                 <div className="search-results-list">
                   {cityRoutes
@@ -858,7 +879,6 @@ const SimulationPage: React.FC = () => {
               )}
             </div>
 
-            {/* Кнопка сброса фильтров */}
             {(searchRouteQuery || !showStops) && (
               <button
                 className="reset-filters-btn"
@@ -1019,11 +1039,9 @@ const SimulationPage: React.FC = () => {
               currentModifications={modifications}
               onLoadScenario={(loadedMods) => {
                 setModifications(loadedMods);
-                // Опционально: сбросить результаты симуляции
                 setSimState(prev => ({ ...prev, status: 'idle', results: null }));
               }}
               onScenarioSaved={() => {
-                // Опционально: уведомление
                 console.log('Сценарий сохранён');
               }}
               disabled={simState.status === 'running'}
@@ -1206,8 +1224,6 @@ const SimulationPage: React.FC = () => {
               <div className="results-modal-body">
                 {activeMetricTab === 'basic' && (
                   <>
-
-
                     <KeyMetrics
                       baseMetrics={simState.results.baseMetrics}
                       modifiedMetrics={simState.results.modifiedMetrics}
@@ -1233,7 +1249,6 @@ const SimulationPage: React.FC = () => {
                     <AffectedStopsList
                       stops={simState.results.affectedStops}
                       onStopClick={(stopId) => {
-                        // Опционально: центрировать карту на остановке
                         const stop = cityStops.find(s => s.id === stopId);
                         if (stop) setSelectedStop(stop);
                       }}

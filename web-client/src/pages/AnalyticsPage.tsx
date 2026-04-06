@@ -3,10 +3,10 @@ import MapComponent from './Map/Map';
 import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, CheckCircle, Bus, Link, Search, Clock, Navigation, Edit2 } from 'lucide-react';
 import { useStops } from '../hooks/api/useStops';
 import { useRoutes } from '../hooks/api/useRoutes';
-import type { 
-  Stop, 
-  Route as ApiRoute, 
-  TransportType, 
+import type {
+  Stop,
+  Route as ApiRoute,
+  TransportType,
   RouteCreateRequest,
   RouteStopRequest
 } from '../api/types';
@@ -37,13 +37,12 @@ const AnalyticsPage: React.FC = () => {
     intervalMinutes: 15,
     operatingHours: '06:00-23:00'
   });
-  
-  // Состояния для редактирования
+
   const [editingRoute, setEditingRoute] = useState<ApiRoute | null>(null);
   const [showEditRouteModal, setShowEditRouteModal] = useState(false);
   const [editingStop, setEditingStop] = useState<Stop | null>(null);
   const [showEditStopModal, setShowEditStopModal] = useState(false);
-  
+
   const [showStopModal, setShowStopModal] = useState(false);
   const [showRouteModal, setShowRouteModal] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
@@ -54,36 +53,41 @@ const AnalyticsPage: React.FC = () => {
   const [stopSearchQuery, setStopSearchQuery] = useState('');
   const [expandedRouteId, setExpandedRouteId] = useState<number | null>(null);
 
-  const { getStops, createStop, updateStop, deleteStop } = useStops();
-  const { getAllRoutes, createRoute, updateRoute, deleteRoute } = useRoutes();
-
+  // ========== Локальное состояние ==========
   const [stops, setStops] = useState<Stop[]>([]);
   const [routes, setRoutes] = useState<ApiRoute[]>([]);
 
+  // ========== REFS (ДОБАВЛЯЕМ ОБЪЯВЛЕНИЕ) ==========
   const stopsListRef = useRef<HTMLDivElement>(null);
   const routesListRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // ========== ХУКИ ==========
+  const { stops: stopsData, isLoading: stopsLoading, createStop, updateStop, deleteStop } = useStops();
+  const { routes: routesData, isLoading: routesLoading, createRoute, updateRoute, deleteRoute } = useRoutes();
 
-  const loadData = async () => {
-    try {
-      const [stopsData, routesData] = await Promise.all([getStops(), getAllRoutes()]);
-      
+  // ========== СИНХРОНИЗАЦИЯ ==========
+  useEffect(() => {
+    if (stopsData) {
       const normalizedStops = stopsData.map((stop: any) => ({
         ...stop,
         id: Number(stop.id),
         address: String(stop.address || '').trim(),
         url: stop.url || ''
       }));
-      
-      console.log('Loaded stops:', normalizedStops);
       setStops(normalizedStops);
-      setRoutes(routesData);
-    } catch (error) {
-      showNotificationFunc('Ошибка при загрузке данных', 'error');
     }
+  }, [stopsData]);
+
+  useEffect(() => {
+    if (routesData) {
+      setRoutes(routesData);
+    }
+  }, [routesData]);
+
+  const isLoading = stopsLoading || routesLoading;
+
+  const refreshData = () => {
+    window.location.reload();
   };
 
   const showNotificationFunc = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
@@ -102,8 +106,7 @@ const AnalyticsPage: React.FC = () => {
 
   const handleMarkerClick = (marker: Stop) => {
     console.log('Marker clicked:', marker);
-    
-    // Если в режиме создания маршрута
+
     if (creationMode === 'route') {
       const markerId = Number(marker.id);
       if (isNaN(markerId) || markerId === 0) {
@@ -131,30 +134,24 @@ const AnalyticsPage: React.FC = () => {
       showNotificationFunc(`Остановка "${marker.address}" добавлена (${selectedStopsForRoute.length + 1})`, 'info');
       return;
     }
-    
-    // Обычный клик - показываем модалку редактирования
+
     setEditingStop(marker);
     setShowEditStopModal(true);
   };
 
-  // Обработчик клика на маршрут в списке
   const handleRouteClick = (routeId: number) => {
     setSelectedRouteId(routeId);
   };
 
-  // Обработчик клика на маршрут на карте
   const handleRouteClickOnMap = (route: ApiRoute) => {
     setSelectedRouteId(route.id);
     showNotificationFunc(`Маршрут ${route.number} выбран`, 'info');
   };
 
-  // Обработчик двойного клика для раскрытия
   const handleRouteDoubleClick = (routeId: number) => {
     setExpandedRouteId(expandedRouteId === routeId ? null : routeId);
   };
 
-  // ========== ФУНКЦИИ РЕДАКТИРОВАНИЯ МАРШРУТА ==========
-  
   const handleEditRoute = (route: ApiRoute) => {
     setEditingRoute(route);
     setNewRouteData({
@@ -172,7 +169,7 @@ const AnalyticsPage: React.FC = () => {
 
   const handleUpdateRouteSubmit = async () => {
     if (!editingRoute) return;
-    
+
     try {
       if (!newRouteData.number.trim()) {
         showNotificationFunc('Введите номер маршрута', 'error');
@@ -191,8 +188,7 @@ const AnalyticsPage: React.FC = () => {
 
       console.log('Updating route:', editingRoute.id, requestData);
       await updateRoute(editingRoute.id, requestData);
-      await loadData();
-      
+
       setShowEditRouteModal(false);
       setEditingRoute(null);
       showNotificationFunc(`Маршрут "${newRouteData.number}" обновлён!`, 'success');
@@ -202,14 +198,11 @@ const AnalyticsPage: React.FC = () => {
     }
   };
 
-  // ========== ФУНКЦИИ УДАЛЕНИЯ МАРШРУТА ==========
-  
   const handleDeleteRoute = async (routeId: number) => {
     if (!confirm('Удалить этот маршрут? Это действие нельзя отменить.')) return;
-    
+
     try {
       await deleteRoute(routeId);
-      await loadData();
       if (selectedRouteId === routeId) setSelectedRouteId(null);
       showNotificationFunc('Маршрут удалён', 'success');
     } catch (error) {
@@ -218,8 +211,6 @@ const AnalyticsPage: React.FC = () => {
     }
   };
 
-  // ========== ФУНКЦИИ РЕДАКТИРОВАНИЯ ОСТАНОВКИ ==========
-  
   const handleEditStop = (stop: Stop) => {
     setEditingStop(stop);
     setNewStopData({
@@ -237,7 +228,7 @@ const AnalyticsPage: React.FC = () => {
 
   const handleUpdateStopSubmit = async () => {
     if (!editingStop) return;
-    
+
     try {
       if (!newStopData.address.trim()) {
         showNotificationFunc('Введите адрес остановки', 'error');
@@ -257,8 +248,7 @@ const AnalyticsPage: React.FC = () => {
 
       console.log('Updating stop:', editingStop.id, stopData);
       await updateStop(editingStop.id, stopData);
-      await loadData();
-      
+
       setShowEditStopModal(false);
       setEditingStop(null);
       showNotificationFunc(`Остановка "${newStopData.address}" обновлена!`, 'success');
@@ -270,10 +260,9 @@ const AnalyticsPage: React.FC = () => {
 
   const handleDeleteStop = async (stopId: number) => {
     if (!confirm('Удалить эту остановку? Это действие нельзя отменить.')) return;
-    
+
     try {
       await deleteStop(stopId);
-      await loadData();
       showNotificationFunc('Остановка удалена', 'success');
     } catch (error) {
       console.error('Stop delete error:', error);
@@ -305,7 +294,6 @@ const AnalyticsPage: React.FC = () => {
 
       console.log('Creating stop with data:', stopData);
       await createStop(stopData);
-      await loadData();
 
       setShowStopModal(false);
       setNewStopData({
@@ -332,7 +320,7 @@ const AnalyticsPage: React.FC = () => {
         showNotificationFunc('Выберите минимум 2 остановки', 'error');
         return;
       }
-      
+
       if (!newRouteData.number.trim()) {
         showNotificationFunc('Введите номер маршрута', 'error');
         return;
@@ -422,7 +410,7 @@ const AnalyticsPage: React.FC = () => {
   };
 
   const getTransportIcon = (type: TransportType) => {
-    switch(type) {
+    switch (type) {
       case 'BUS': return '🚌';
       case 'TROLLEYBUS': return '🚎';
       case 'TRAM': return '🚊';
@@ -433,16 +421,23 @@ const AnalyticsPage: React.FC = () => {
     }
   };
 
-  // Фильтрация маршрутов
   const filteredRoutes = routes.filter(route =>
     route.number.toLowerCase().includes(routeSearchQuery.toLowerCase()) ||
     (route.name && route.name.toLowerCase().includes(routeSearchQuery.toLowerCase()))
   );
 
-  // Фильтрация остановок
   const filteredStops = stops.filter(stop =>
     stop.address.toLowerCase().includes(stopSearchQuery.toLowerCase())
   );
+
+  if (isLoading && stops.length === 0 && routes.length === 0) {
+    return (
+      <div className="analytics-page loading-state">
+        <div className="spinner"></div>
+        <p>Загрузка данных...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="analytics-page">
@@ -531,12 +526,11 @@ const AnalyticsPage: React.FC = () => {
         </div>
 
         <div className="sidebar">
-          {/* Блок остановок */}
           <div className="stops-card">
             <div className="card-header">
               <h3>Остановки ({stops.length})</h3>
               <div className="card-actions">
-                <button className="refresh-btn" onClick={loadData} title="Обновить">
+                <button className="refresh-btn" onClick={refreshData} title="Обновить">
                   <RefreshCw size={16} />
                 </button>
               </div>
@@ -572,9 +566,9 @@ const AnalyticsPage: React.FC = () => {
                     <div className="stop-info">
                       <div className="stop-address">{stop.address}</div>
                       {stop.url && stop.url.trim() !== '' && (
-                        <a 
-                          href={stop.url} 
-                          target="_blank" 
+                        <a
+                          href={stop.url}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="stop-url"
                           onClick={(e) => e.stopPropagation()}
@@ -589,7 +583,7 @@ const AnalyticsPage: React.FC = () => {
                       </div>
                     </div>
                     <div className="stop-actions">
-                      <button 
+                      <button
                         className="stop-edit-btn"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -598,7 +592,7 @@ const AnalyticsPage: React.FC = () => {
                       >
                         <Edit2 size={14} />
                       </button>
-                      <button 
+                      <button
                         className="stop-delete-btn"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -619,12 +613,11 @@ const AnalyticsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Блок маршрутов */}
           <div className="routes-card">
             <div className="card-header">
               <h3>Маршруты ({routes.length})</h3>
               <div className="card-actions">
-                <button className="refresh-btn" onClick={loadData} title="Обновить">
+                <button className="refresh-btn" onClick={refreshData} title="Обновить">
                   <RefreshCw size={16} />
                 </button>
               </div>
@@ -661,7 +654,7 @@ const AnalyticsPage: React.FC = () => {
                         <span className="route-number-text">{route.number}</span>
                       </div>
                       <div className="route-header-actions">
-                        <button 
+                        <button
                           className="route-edit-btn"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -670,7 +663,7 @@ const AnalyticsPage: React.FC = () => {
                         >
                           <Edit2 size={14} />
                         </button>
-                        <button 
+                        <button
                           className="route-delete-btn"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -681,11 +674,11 @@ const AnalyticsPage: React.FC = () => {
                         </button>
                       </div>
                     </div>
-                    
+
                     {route.name && (
                       <div className="route-name">{route.name}</div>
                     )}
-                    
+
                     <div className="route-stops-preview">
                       <div className="stops-preview-header">
                         <Navigation size={12} />
@@ -703,7 +696,7 @@ const AnalyticsPage: React.FC = () => {
                         )}
                       </div>
                     </div>
-                    
+
                     {expandedRouteId === route.id && (
                       <div className="route-details-expanded">
                         <div className="details-grid">
@@ -740,7 +733,7 @@ const AnalyticsPage: React.FC = () => {
                         </div>
                       </div>
                     )}
-                    
+
                     <div className="route-footer">
                       <div className="route-metrics">
                         <span className="metric">{getTransportIcon(route.transportType)}</span>
@@ -762,7 +755,6 @@ const AnalyticsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Панель создания маршрута */}
         {creationMode === 'route' && selectedStopsForRoute.length > 0 && (
           <div className="selected-stops-card">
             <div className="card-header">
@@ -830,7 +822,7 @@ const AnalyticsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Модальное окно создания остановки */}
+      {/* Модальные окна - без изменений */}
       {showStopModal && (
         <div className="modal-overlay" onClick={() => setShowStopModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -840,7 +832,6 @@ const AnalyticsPage: React.FC = () => {
                 <X size={20} />
               </button>
             </div>
-            {/* ... содержимое модалки создания остановки ... */}
             <div className="modal-body">
               <div className="form-group">
                 <label>Адрес остановки *</label>
@@ -925,7 +916,6 @@ const AnalyticsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Модальное окно редактирования остановки */}
       {showEditStopModal && editingStop && (
         <div className="modal-overlay" onClick={() => setShowEditStopModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1018,7 +1008,6 @@ const AnalyticsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Модальное окно создания маршрута */}
       {showRouteModal && (
         <div className="modal-overlay" onClick={() => setShowRouteModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1125,7 +1114,6 @@ const AnalyticsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Модальное окно редактирования маршрута */}
       {showEditRouteModal && editingRoute && (
         <div className="modal-overlay" onClick={() => setShowEditRouteModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
