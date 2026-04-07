@@ -47,4 +47,9 @@ public class StopControllerImpl implements StopController {
             StopStatsUpdateRequest request) {
         return stopServiceImpl.updateStopStats(id, request);
     }
+
+    @Override
+    public StopResponse updateStop(Long id, StopRequest request) {
+        return stopServiceImpl.updateStop(id, request);
+    }
 }

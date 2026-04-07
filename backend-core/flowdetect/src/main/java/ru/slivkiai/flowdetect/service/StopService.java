@@ -19,4 +19,6 @@ public interface StopService {
     List<StopResponse> getAllStopsByCityId(Long cityId);
 
     List<StopResponseUrl> getAllStopsUrl();
+
+    StopResponse updateStop(Long id, StopRequest stopRequest);
 }
