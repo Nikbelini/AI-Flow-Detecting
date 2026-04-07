@@ -955,8 +955,8 @@ const SimulationPage: React.FC = () => {
               )}
               <div className="quick-actions">
                 <button className="quick-action-btn" onClick={() => addStopModification('close_stop')}>🚫 Закрыть</button>
-                <button className="quick-action-btn" onClick={() => addStopModification('change_interval')}>⏱️ Интервал</button>
-                <button className="quick-action-btn" onClick={() => addStopModification('change_capacity')}>📦 Вместимость</button>
+                {/* <button className="quick-action-btn" onClick={() => addStopModification('change_interval')}>⏱️ Интервал</button>
+                <button className="quick-action-btn" onClick={() => addStopModification('change_capacity')}>📦 Вместимость</button> */}
               </div>
               {simState.results?.baseStopMetrics?.[selectedStop.id] && (
                 <button className="quick-action-btn details" onClick={() => setSelectedStopForMetrics(selectedStop.id)}>

@@ -41,7 +41,7 @@ const App = () => {
                                     <Route path="/" element={<Navigate to="/map" replace />} />
                                     
                                     {/* Карта в реальном времени (существующий функционал) */}
-                                    <Route path="/map" element={<MapComponent />} />
+                                    {/* <Route path="/map" element={<MapComponent />} /> */}
                                     
                                     {/* Новые страницы для аналитики */}
                                     <Route path="/login" element={<LoginPage />} />

@@ -491,7 +491,7 @@ const ModalContent: React.FC<ModalContentProps> = ({
           )}
         </div>
 
-        {/* Modal Footer */}
+        {/* Modal Footer
         <div className="modal-footer">
           <div className="footer-actions">
             <button 
@@ -518,7 +518,7 @@ const ModalContent: React.FC<ModalContentProps> = ({
               Координаты: {marker.lat.toFixed(4)}, {marker.lng.toFixed(4)}
             </span>
           </div>
-        </div>
+        </div> */}
       </div>
     </>
   );
