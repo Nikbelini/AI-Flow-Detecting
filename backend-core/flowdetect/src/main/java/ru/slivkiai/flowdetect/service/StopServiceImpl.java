@@ -197,4 +197,55 @@ public class StopServiceImpl implements StopService {
                 ))
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public StopResponse updateStop(Long id, StopRequest request) {
+        // Находим существующую остановку
+        StopEntity existingStop = stopRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Остановка не найдена: " + id));
+
+        // Обновляем только разрешённые поля (координаты НЕ трогаем)
+        if (request.getAddress() != null) {
+            existingStop.setAddress(request.getAddress());
+        }
+        if (request.getUrl() != null) {
+            existingStop.setUrl(request.getUrl());
+        }
+        if (request.getCount() != null) {
+            existingStop.setCount(request.getCount());
+        }
+        if (request.getVelocity() != null) {
+            existingStop.setVelocity(request.getVelocity());
+        }
+        if (request.getLoad() != null) {
+            existingStop.setLoad(request.getLoad());
+        }
+
+        // Обновляем город, если нужно
+        if (request.getCityId() != null && !request.getCityId().equals(existingStop.getCity().getId())) {
+            CityEntity city = cityRepository.findById(request.getCityId())
+                    .orElseThrow(() -> new RuntimeException("Город не найден: " + request.getCityId()));
+            existingStop.setCity(city);
+        }
+
+        StopEntity saved = stopRepository.save(existingStop);
+
+        // Сохраняем историю
+        StopHistoryEntity history = StopHistoryEntity.builder()
+                .city(saved.getCity())
+                .address(saved.getAddress())
+                .count(saved.getCount())
+                .velocity(saved.getVelocity())
+                .load(saved.getLoad())
+                .datetime(LocalDateTime.now())
+                .build();
+        stopHistoryRepository.save(history);
+
+        return StopResponse.builder()
+                .address(saved.getAddress())
+                .count(saved.getCount())
+                .velocity(saved.getVelocity())
+                .load(saved.getLoad())
+                .build();
+    }
 }
