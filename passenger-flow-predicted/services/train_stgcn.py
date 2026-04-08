@@ -2,20 +2,26 @@ import logging
 import os
 
 import pandas as pd
+from tqdm import tqdm
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader, random_split
-from typing import Dict, Optional
+from typing import Dict
 
 from database.db import load_stop_history, get_all_stops_in_city
-from services.graph_builder import GraphBuilder
 from database.dataset_builder import build_sequences
 from services.model_io import save_model_atomic
 from models.factory import build_model
-from services.data_guard import has_enough_data, split_training_data
+from services.graph_builder import GraphBuilder
+from services.data_guard import has_enough_data
 from services.data_preprocessor import DataPreprocessor
 from services.masked_loss import masked_loss
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +130,7 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
             model.train()
             train_loss = 0.0
 
-            for X_batch, y_batch in train_loader:
+            for i, (X_batch, y_batch) in enumerate(tqdm(train_loader, desc=f"City {city_id} Epoch {epoch+1}"), 1):
                 optimizer.zero_grad()
                 pred = model(X_batch, adj)
                 
@@ -135,6 +141,10 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
                 optimizer.step()
                 train_loss += loss.item()
             
+                # лог каждые 10 батчей
+                if i % 10 == 0 or i == len(train_loader):
+                    logger.info(f"[{city_id}] Epoch {epoch+1} Batch {i}/{len(train_loader)} loss={loss.item():.4f}")
+
             # Validate
             train_loss /= len(train_loader)
             
