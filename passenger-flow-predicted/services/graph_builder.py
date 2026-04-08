@@ -7,7 +7,7 @@ class GraphBuilder:
     def __init__(self, sigma: float = 0.5):
         self.sigma = sigma
 
-    def build_from_coordinates(self, coords: np.ndarray) -> torch.Tensor:
+    def build_from_coordinates(self, coords: np.ndarray, device: torch.device = None) -> torch.Tensor:
         """
         Строит матрицу смежности по координатам.
         """
@@ -22,4 +22,4 @@ class GraphBuilder:
         A = np.exp(-(dist ** 2) / (2 * self.sigma ** 2))
         np.fill_diagonal(A, 1.0)
 
-        return torch.tensor(A, dtype=torch.float32)
+        return torch.tensor(A, dtype=torch.float32, device=device)

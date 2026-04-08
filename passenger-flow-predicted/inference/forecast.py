@@ -131,23 +131,29 @@ def _forecast_internal(city_id: int, horizon: int, blind_only: bool = True) -> D
         all_stops = df[["address", "lat", "lng"]].drop_duplicates("address")
 
     coords = (
-        all_stops.set_index("address")
-        .reindex(nodes_order)[["lat", "lng"]]
+        all_stops
+        .drop_duplicates(subset=["address"], keep="first")  # Убираем дубли адресов
+        .set_index("address")                                # Теперь индекс уникальный
+        .reindex(nodes_order)[["lat", "lng"]]                # reindex работает
         .fillna(0.0)
         .values
     )
 
-    adj = GraphBuilder(sigma=sigma).build_from_coordinates(coords)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Inference device: {device}")
+
+    # Вычисление на устройстве
+    adj = GraphBuilder(sigma=sigma).build_from_coordinates(coords, device=device)
 
     # === нормализация ===
     df_norm, _ = DataPreprocessor.normalize(df, scaler=scaler, fit=False)
 
     # === последовательности на ВСЕХ nodes_order ===
     X_seq, _ = build_sequences(df_norm, nodes_order, time_steps=time_steps)
-    input_seq = X_seq[-1:].clone()  # [1, T, N]
+    input_seq = X_seq[-1:].clone().to(device)  # [1, T, N]
 
     # === модель ===
-    model = build_model(len(nodes_order))
+    model = build_model(len(nodes_order)).to(device)
     with MODEL_LOCK:
         model.load_state_dict(loaded["state_dict"])
         model.eval()
@@ -163,7 +169,7 @@ def _forecast_internal(city_id: int, horizon: int, blind_only: bool = True) -> D
             # pred_step: [B, 1, C, N]
             pred_step = torch.zeros(
                 (input_seq.size(0), 1, input_seq.size(2), input_seq.size(3)),
-                device=input_seq.device
+                device=device
             )
 
             # count в канал 0

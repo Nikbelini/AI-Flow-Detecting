@@ -1,11 +1,13 @@
 import logging
 import os
 
-import pandas as pd
-from tqdm import tqdm
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader, random_split
+
+import pandas as pd
+import numpy as np
+from tqdm import tqdm
 from typing import Dict
 
 from database.db import load_stop_history, get_all_stops_in_city
@@ -16,6 +18,7 @@ from services.graph_builder import GraphBuilder
 from services.data_guard import has_enough_data
 from services.data_preprocessor import DataPreprocessor
 from services.masked_loss import masked_loss
+from services.metrics import calculate_metrics
 
 
 logging.basicConfig(
@@ -69,12 +72,11 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
                 .values
              )
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         logger.info(f"Using device: {device}")
 
         sigma = 0.5
-        adj_np = GraphBuilder(sigma=sigma).build_from_coordinates(coords)
-        adj = adj_np.to(device)
+        adj = GraphBuilder(sigma=sigma).build_from_coordinates(coords, device=device)
 
         # камеры = есть реальные записи count > 0
         camera_addresses = set(df[df["count"] > 0]["address"].unique().tolist())
@@ -85,7 +87,8 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
          # camera mask по nodes_order
         camera_mask = torch.tensor(
             [1.0 if addr in camera_addresses else 0.0 for addr in nodes_order],
-            dtype=torch.float32
+            dtype=torch.float32,
+            device=device
         )
 
         # scaler fit только на камерах
@@ -114,32 +117,50 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
             generator=torch.Generator().manual_seed(42)
         )
 
+        use_pin_memory = torch.cuda.is_available() and os.name != "nt" 
+
         train_loader = DataLoader(
             train_ds, 
             batch_size=32, 
             shuffle=True, 
-            num_workers=2,  # Параллельная загрузка
-            pin_memory=torch.cuda.is_available() 
+            num_workers=0 if os.name == "nt" else 2,
+            pin_memory=use_pin_memory
         )
 
         val_loader = DataLoader(
             val_ds, 
             batch_size=32,
-            num_workers=2,
-            pin_memory=torch.cuda.is_available()
+            num_workers=0 if os.name == "nt" else 2,
+            pin_memory=use_pin_memory
         )
 
         # Модель
-        model = build_model(num_nodes)
+        model = build_model(num_nodes).to(device)
+
+        # ===== Training loop =====
+        best_val_loss = float('inf')
+        best_val_mae = float('inf') 
+        patience_counter = 0
+        max_patience = 20
+        epochs = 200
+
+        # Принудительная синхронизация весов
+        for p in model.parameters():
+            p.data = p.data.to(device, non_blocking=False).contiguous()
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-5)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5, factor=0.5)
         
-        # ===== 8. Training loop =====
-        best_val_loss = float('inf')
-        patience_counter = 0
-        max_patience = 10
-        epochs = 100
+        # Проактивен (рису застрять на низких колебаниях для больших моделей и долгого обучения)
+        # если модель "задумалась" на 2-3 эпохи, LR резко падает, и обучение может застрять в локальном минимуме.
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
+
+        # Реактивная (для маленьких датасетов, быстрой сходимости, резкие падения и ждёт ухудшения)
+        # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5, factor=0.5)
+    
+
+        test_X, test_y = next(iter(train_loader))
+        test_X = test_X.to(device, non_blocking=False)
+        logger.info(f"[DEBUG] Batch device: {test_X.device}, Model device: {next(model.parameters()).device}")
         
         for epoch in range(epochs):
             # Train
@@ -148,11 +169,21 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
 
             for i, (X_batch, y_batch) in enumerate(tqdm(train_loader, desc=f"City {city_id} Epoch {epoch+1}"), 1):
                 # Батчи на GPU с асинхронной передачей
-                X_batch = X_batch.to(device, non_blocking=True)
-                y_batch = y_batch.to(device, non_blocking=True)
+                X_batch = _safe_to_device(X_batch, device)
+                y_batch = _safe_to_device(y_batch, device)
+
+                # Проверка (можно убрать потом)
+                if X_batch.device.type != 'cuda' and device.type == 'cuda':
+                     raise RuntimeError(f"X_batch failed to move to GPU! Device: {X_batch.device}")
 
                 optimizer.zero_grad()
-                pred = model(X_batch, adj)
+                
+                # Forward
+                try:
+                    pred = model(X_batch, adj)
+                except Exception as exception:
+                    logger.error(f"Forward pass failed at batch {i}. X_dev: {X_batch.device}, Adj_dev: {adj.device}")
+                    raise exception
                 
                 loss = masked_loss(pred, y_batch, camera_mask)
 
@@ -167,21 +198,55 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
 
             # Validate
             train_loss /= len(train_loader)
-            
             model.eval()
-            val_loss = 0
+
+            val_losses = []
+            val_metrics_list = [] # для агрегации метрик
+
             with torch.no_grad():
                 for X_batch, y_batch in val_loader:
+
+                    X_batch = _safe_to_device(X_batch, device)
+                    y_batch = _safe_to_device(y_batch, device)
+
                     pred = model(X_batch, adj)
-                    val_loss += masked_loss(pred, y_batch, camera_mask).item()
+
+                    # Loss
+                    val_losses.append(masked_loss(pred, y_batch, camera_mask).item())
+
+                    metrics = calculate_metrics(
+                        predictions=pred.cpu(), 
+                        targets=y_batch.cpu(), 
+                        scaler=scaler
+                    )
+                    val_metrics_list.append(metrics)
             
-            val_loss /= len(val_loader)
-            scheduler.step(val_loss)
+            # Агрегация
+            val_loss = np.mean(val_losses)
+
+            # Усредняем метрики по всем батчам
+            val_mae = np.mean([m['mae'] for m in val_metrics_list])
+            val_rmse = np.mean([m['rmse'] for m in val_metrics_list])
+            val_mape = np.mean([m['mape_percent'] for m in val_metrics_list])
+
+            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                scheduler.step(val_loss)  # Нужна метрика
+            else:
+                scheduler.step()
             
-            logger.info(f"[{city_id}] ep={epoch+1} train={train_loss:.4f} val={val_loss:.4f}")
-            # Save best + early stop
-            if val_loss < best_val_loss:
+            logger.info(f"[{city_id}] ep={epoch+1} "
+                f"train={train_loss:.4f} val_loss={val_loss:.4f} "
+                f"val_mae={val_mae:.3f} val_rmse={val_rmse:.3f} val_mape={val_mape:.2f}%"
+            )
+
+            # ===== EARLY STOPPING ПО НЕСКОЛЬКИМ МЕТРИКАМ =====
+            # Пороги: игнорируем мелкий шум
+            loss_improved = val_loss < best_val_loss - 1e-4
+            mae_improved = val_mae < best_val_mae - 1e-2  # MAE в исходных единицах
+
+            if loss_improved or mae_improved:
                 best_val_loss = val_loss
+                best_val_mae = val_mae
                 patience_counter = 0
 
                 model_cpu = model.cpu()
@@ -189,6 +254,9 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
                     "city_id": city_id,
                     "epoch": epoch + 1,
                     "best_val_loss": float(best_val_loss),
+                    "best_val_mae": float(best_val_mae),
+                    "best_val_rmse": float(val_rmse),
+                    "best_val_mape": float(val_mape),
                     "nodes_order": nodes_order,
                     "camera_mask": camera_mask.cpu().tolist(),  # На CPU для сериализации
                     "scaler": scaler,
@@ -202,7 +270,8 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
             else:
                 patience_counter += 1
                 if patience_counter >= max_patience:
-                    logger.info("Early stopping")
+                    logger.info(f"Early stopping: no improvement in {max_patience} epochs")
+                    logger.info(f"   Best: loss={best_val_loss:.4f}, mae={best_val_mae:.3f}")
                     break
         
         return {
@@ -219,3 +288,10 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
     except Exception as exception:
         logger.exception(f"Training failed")
         return {'status': 'FAILED', 'message': str(exception), 'error_type': type(exception).__name__}
+    
+
+def _safe_to_device(tensor, device):
+    """Гарантированный перенос тензора на устройство"""
+    if tensor.device != device:
+        return tensor.to(device, non_blocking=False).contiguous()
+    return tensor.contiguous()
