@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -28,11 +29,16 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_DIR = BASE_DIR / "result" / "models"
+MODEL_DIR.mkdir(parents=True, exist_ok=True)  # Создаём папку, если нет
+
+
 def train(city_id: int, force_retrain: bool = False) -> Dict:
     """
     Обучение: граф по всем остановкам, обучение на тех, где есть данные.
     """
-    model_path = f"result/models/city_{city_id}.pt"
+    model_path = MODEL_DIR / f"city_{city_id}.pt"
     
     # Если модель уже есть и не форсим — можно пропустить
     if os.path.exists(model_path) and not force_retrain:
@@ -54,18 +60,19 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
         
         # ===== Все остановки города для графа =====
         all_stops = get_all_stops_in_city(city_id)
-        if all_stops.empty:
-            # Fallback берём адреса из истории
-            all_stops = df[['stop_id', 'address', 'lat', 'lng']].drop_duplicates(subset=["stop_id"], keep="first")
-        else:
-            # Нет stop_id — группируем по (address, lat, lng) как компромисс
-            all_stops = df[["address", "lat", "lng"]].drop_duplicates(subset=["address", "lat", "lng"], keep="first")
-            logger.warning("No stop_id in data, using (address, lat, lng) as fallback key")
-        
+        # если stops пуст ИЛИ нет колонки stop_id
+        if all_stops.empty or "stop_id" not in all_stops.columns:
+            if "stop_id" in df.columns and df["stop_id"].notna().any():
+                all_stops = df[["stop_id", "address", "lat", "lng"]].drop_duplicates(subset=["stop_id"], keep="first")
+            else:
+                all_stops = df[["address", "lat", "lng"]].drop_duplicates(subset=["address", "lat", "lng"], keep="first")
+                logger.warning("No stop_id available, using (address, lat, lng) as fallback")
+
+        # nodes_order по stop_id
         if "stop_id" in all_stops.columns and all_stops["stop_id"].notna().any():
             nodes_order = sorted(all_stops["stop_id"].dropna().unique().tolist())
         else:
-            # Fallback: создаём фейковые ID по индексу
+            # Крайний fallback: фейковые ID
             all_stops = all_stops.reset_index().rename(columns={"index": "stop_id"})
             nodes_order = sorted(all_stops["stop_id"].dropna().unique().tolist())
             logger.warning(f"Using fallback nodes_order with {len(nodes_order)} nodes")
@@ -288,6 +295,24 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
                     "time_steps": time_steps,
                     "sigma": sigma
                 })
+
+                # Гарантированно сохраняем модель, если файл ещё не создан
+                if not os.path.exists(model_path):
+                    logger.warning(f"Model not saved during training, saving final model to {model_path}")
+                    model_cpu = model.cpu()
+                    save_model_atomic(model_cpu, model_path, metadata={
+                        "city_id": city_id,
+                        "epoch": epoch + 1,
+                        "best_val_loss": float(best_val_loss),
+                        "best_val_mae": float(best_val_mae),
+                        "best_val_rmse": float(val_rmse),
+                        "best_val_mape": float(val_mape),
+                        "nodes_order": nodes_order,
+                        "camera_mask": camera_mask.cpu().tolist(),
+                        "scaler": scaler,
+                        "time_steps": time_steps,
+                        "sigma": sigma
+                    })
 
                 # Возвращаем модель на GPU если нужно продолжать обучение
                 model = model.to(device)
