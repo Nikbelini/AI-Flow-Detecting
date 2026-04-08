@@ -7,6 +7,17 @@ import { getMarkers } from '../../api/markersApi';
 import { Clock, RefreshCw, MapPin, Minimize2, Maximize2, X, ChevronDown, ChevronUp, TrendingUp, Users, Bus, Activity, Layers, Edit2, Trash2, Info } from 'lucide-react';
 import type { Stop, Route as ApiRoute } from '../../api/types';
 
+// Интерфейс для кластеризованного маркера
+interface ClusterMarker {
+  type: 'cluster';
+  count: number;
+  avgLoad: number;
+  coordinates: [number, number];
+  point_count: number;
+  point_count_abbreviated: number;
+  cluster_id: number;
+}
+
 interface MapComponentProps {
   markers?: Stop[];
   routes?: ApiRoute[];
@@ -44,6 +55,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const onMarkerClickRef = useRef(onMarkerClick);
   const onMapClickRef = useRef(onMapClick);
   const onRouteClickRef = useRef(onRouteClick);
+  const superclusterRef = useRef<any>(null);
 
   const [localMarkers, setLocalMarkers] = useState<Stop[]>([]);
   const [loading, setLoading] = useState(!externalMarkers);
@@ -55,6 +67,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<'stats' | 'routes'>('stats');
   const [hoveredRouteId, setHoveredRouteId] = useState<number | null>(null);
+  const [currentZoom, setCurrentZoom] = useState(10);
 
   const markers = externalMarkers || localMarkers;
 
@@ -134,6 +147,13 @@ const MapComponent: React.FC<MapComponentProps> = ({
     map.current.on('load', () => {
       console.log('Map loaded');
       setMapLoaded(true);
+    });
+
+    // Отслеживаем изменение зума
+    map.current.on('zoomend', () => {
+      if (map.current) {
+        setCurrentZoom(map.current.getZoom());
+      }
     });
 
     return () => {
@@ -351,7 +371,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       map.current!.getCanvas().style.cursor = 'pointer';
     });
 
-    map.current.on('mouseenter', 'routes-line-selected', (e) => {
+    map.current.on('mouseenter', 'routes-line-selected', () => {
       map.current!.getCanvas().style.cursor = 'pointer';
     });
 
@@ -409,55 +429,54 @@ const MapComponent: React.FC<MapComponentProps> = ({
     })
       .setLngLat(lngLat)
       .setHTML(`
-    <div class="route-popup-content">
-      <div class="route-popup-header">
-        <div class="route-popup-icon">${transportIcon}</div>
-        <div class="route-popup-info">
-          <div class="route-popup-number">${route.number}</div>
+        <div class="route-popup-content">
+          <div class="route-popup-header">
+            <div class="route-popup-icon">${transportIcon}</div>
+            <div class="route-popup-info">
+              <div class="route-popup-number">${route.number}</div>
+            </div>
+            <div class="route-popup-status ${route.isActive ? 'active' : 'inactive'}">${statusText}</div>
+          </div>
+          ${route.name ? `<div class="route-popup-name-row">
+            <div class="route-popup-name-icon">📋</div>
+            <div class="route-popup-name">${route.name}</div>
+          </div>` : ''}
+          <div class="route-popup-details">
+            <div class="detail-item">
+              <span class="detail-icon">⏱️</span>
+              <span class="detail-label">Интервал</span>
+              <span class="detail-value">${route.intervalMinutes} мин</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-icon">🚏</span>
+              <span class="detail-label">Остановок</span>
+              <span class="detail-value">${route.stops.length}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-icon">🕐</span>
+              <span class="detail-label">Время работы</span>
+              <span class="detail-value">${route.operatingHours || '06:00-23:00'}</span>
+            </div>
+          </div>
+          <div class="route-popup-actions">
+            <button class="popup-edit-btn" data-route-id="${route.id}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 3l4 4-7 7H10v-4l7-7z"/>
+                <path d="M4 20h16"/>
+              </svg>
+              <span>Редактировать</span>
+            </button>
+            <button class="popup-delete-btn" data-route-id="${route.id}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 7h16M10 11v6M14 11v6M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13"/>
+                <path d="M9 4h6"/>
+              </svg>
+              <span>Удалить</span>
+            </button>
+          </div>
         </div>
-        <div class="route-popup-status ${route.isActive ? 'active' : 'inactive'}">${statusText}</div>
-      </div>
-      ${route.name ? `<div class="route-popup-name-row">
-        <div class="route-popup-name-icon">📋</div>
-        <div class="route-popup-name">${route.name}</div>
-      </div>` : ''}
-      <div class="route-popup-details">
-        <div class="detail-item">
-          <span class="detail-icon">⏱️</span>
-          <span class="detail-label">Интервал</span>
-          <span class="detail-value">${route.intervalMinutes} мин</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-icon">🚏</span>
-          <span class="detail-label">Остановок</span>
-          <span class="detail-value">${route.stops.length}</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-icon">🕐</span>
-          <span class="detail-label">Время работы</span>
-          <span class="detail-value">${route.operatingHours || '06:00-23:00'}</span>
-        </div>
-      </div>
-      <div class="route-popup-actions">
-        <button class="popup-edit-btn" data-route-id="${route.id}">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M17 3l4 4-7 7H10v-4l7-7z"/>
-            <path d="M4 20h16"/>
-          </svg>
-          <span>Редактировать</span>
-        </button>
-        <button class="popup-delete-btn" data-route-id="${route.id}">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 7h16M10 11v6M14 11v6M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13"/>
-            <path d="M9 4h6"/>
-          </svg>
-          <span>Удалить</span>
-        </button>
-      </div>
-    </div>
-  `)
+      `)
       .addTo(map.current);
-
 
     // Добавляем обработчики для кнопок в попапе
     const popupElement = popup.getElement();
@@ -495,58 +514,217 @@ const MapComponent: React.FC<MapComponentProps> = ({
     }
   };
 
-  // Отрисовка маркеров
-  useEffect(() => {
-    if (!map.current || loading) return;
+  // Функция для получения цвета кластера на основе средней загрузки
+  const getClusterColor = (avgLoad: number): string => {
+    if (avgLoad <= 3) return "#10b981";
+    if (avgLoad <= 7) return "#f59e0b";
+    return "#ef4444";
+  };
 
-    markersRef.current.forEach((markerInstance) => {
-      const markerElement = markerInstance.getElement() as HTMLDivElement;
-      if (markerElement && (markerElement as any)._clickHandler) {
-        markerElement.removeEventListener('click', (markerElement as any)._clickHandler);
+  // Функция для получения размера кластера
+  const getClusterSize = (count: number): number => {
+    if (count <= 5) return 40;
+    if (count <= 15) return 50;
+    if (count <= 30) return 60;
+    return 70;
+  };
+
+  // Отрисовка маркеров с кластеризацией
+  useEffect(() => {
+    if (!map.current || !mapLoaded || loading || markers.length === 0) return;
+
+    // Удаляем старые маркеры
+    markersRef.current.forEach(marker => {
+      const el = marker.getElement();
+      if (el && (el as any)._clickHandler) {
+        el.removeEventListener('click', (el as any)._clickHandler);
       }
-      markerInstance.remove();
+      marker.remove();
     });
     markersRef.current = [];
 
-    const markersInstances = markers.map(marker => {
-      const markerElement = createCustomMarker(marker);
+    // Порог для кластеризации (при зуме меньше 12 - показываем кластеры)
+    const zoom = map.current.getZoom();
+    const shouldCluster = zoom < 12;
 
-      const clickHandler = (e: MouseEvent) => {
-        e.stopPropagation();
-        e.preventDefault();
+    if (shouldCluster) {
+      // === РЕЖИМ КЛАСТЕРИЗАЦИИ ===
+      // Группируем остановки по близости (упрощённая кластеризация на основе сетки)
+      const clusterMap = new Map<string, { stops: Stop[]; avgLoad: number; count: number; centerLng: number; centerLat: number }>();
 
-        console.log('Marker clicked:', marker);
+      markers.forEach(marker => {
+        // Сетка 0.02 градуса (~2 км на широте 54°)
+        const gridX = Math.floor(marker.lng / 0.02);
+        const gridY = Math.floor(marker.lat / 0.02);
+        const key = `${gridX}:${gridY}`;
 
-        if (isCreatingRoute && onMarkerClickRef.current) {
-          onMarkerClickRef.current(marker);
-          return;
-        }
-
-        if (!isCreatingRoute && !isCreatingStop) {
-          setSelectedModalMarker(marker);
-          map.current?.flyTo({
-            center: [marker.lng, marker.lat],
-            zoom: 15,
-            essential: true,
-            duration: 800
+        if (!clusterMap.has(key)) {
+          clusterMap.set(key, {
+            stops: [],
+            avgLoad: 0,
+            count: 0,
+            centerLng: 0,
+            centerLat: 0
           });
         }
-      };
 
-      markerElement.addEventListener('click', clickHandler);
-      (markerElement as any)._clickHandler = clickHandler;
+        const cluster = clusterMap.get(key)!;
+        cluster.stops.push(marker);
+        cluster.count++;
+        cluster.centerLng = (cluster.centerLng * (cluster.count - 1) + marker.lng) / cluster.count;
+        cluster.centerLat = (cluster.centerLat * (cluster.count - 1) + marker.lat) / cluster.count;
+        cluster.avgLoad = (cluster.avgLoad * (cluster.count - 1) + (marker.load || 0)) / cluster.count;
+      });
 
-      const markerInstance = new maplibregl.Marker({
-        element: markerElement,
-        anchor: 'center'
-      })
-        .setLngLat([marker.lng, marker.lat])
-        .addTo(map.current!);
-      return markerInstance;
-    });
+      // Создаём маркеры для кластеров
+      clusterMap.forEach((cluster) => {
+        if (cluster.count === 0) return;
 
-    markersRef.current = markersInstances;
-  }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops]);
+        const size = getClusterSize(cluster.count);
+        const color = getClusterColor(cluster.avgLoad);
+        const isSelected = isCreatingRoute && selectedStops.some(id => cluster.stops.some(s => s.id === id));
+
+        const el = document.createElement('div');
+        el.className = 'custom-marker cluster-marker';
+        el.style.width = `${size}px`;
+        el.style.height = `${size}px`;
+        el.style.backgroundColor = isSelected ? '#3B82F6' : color;
+        el.style.borderRadius = '50%';
+        el.style.border = isSelected ? '3px solid #2563EB' : '3px solid white';
+        el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+        el.style.display = 'flex';
+        el.style.flexDirection = 'column';
+        el.style.alignItems = 'center';
+        el.style.justifyContent = 'center';
+        el.style.cursor = 'pointer';
+        el.style.transition = 'all 0.2s ease';
+        el.style.color = 'white';
+        el.style.fontWeight = 'bold';
+        el.style.textShadow = '0 1px 2px rgba(0,0,0,0.3)';
+
+        const countSpan = document.createElement('div');
+        countSpan.textContent = cluster.count.toString();
+        countSpan.style.fontSize = `${size * 0.35}px`;
+        countSpan.style.fontWeight = 'bold';
+
+        const loadSpan = document.createElement('div');
+        loadSpan.textContent = `${Math.round(cluster.avgLoad)}/10`;
+        loadSpan.style.fontSize = `${size * 0.25}px`;
+        loadSpan.style.opacity = '0.8';
+
+        el.appendChild(countSpan);
+        el.appendChild(loadSpan);
+
+        // Обработчик клика на кластер
+        const clickHandler = (e: MouseEvent) => {
+          e.stopPropagation();
+          e.preventDefault();
+
+          if (isCreatingRoute) {
+            // При создании маршрута - выбираем все остановки в кластере
+            cluster.stops.forEach(stop => {
+              if (onMarkerClickRef.current && !selectedStops.includes(stop.id)) {
+                onMarkerClickRef.current(stop);
+              }
+            });
+          } else {
+            // Приближаемся к кластеру
+            if (map.current) {
+              const currentZoom = map.current.getZoom();
+              map.current.flyTo({
+                center: [cluster.centerLng, cluster.centerLat],
+                zoom: Math.min(currentZoom + 2, 16),
+                duration: 500
+              });
+            }
+          }
+        };
+
+        el.addEventListener('click', clickHandler);
+        (el as any)._clickHandler = clickHandler;
+
+        const markerInstance = new maplibregl.Marker({
+          element: el,
+          anchor: 'center'
+        })
+          .setLngLat([cluster.centerLng, cluster.centerLat])
+          .addTo(map.current!);
+
+        markersRef.current.push(markerInstance);
+      });
+    } else {
+      // === РЕЖИМ ОТДЕЛЬНЫХ МАРКЕРОВ (при большом зуме) ===
+      markers.forEach(marker => {
+        const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
+        const color = loadToColor(marker.load);
+        const size = getMarkerSize(marker.load);
+        const selectedIndex = isSelected ? selectedStops.indexOf(marker.id) + 1 : 0;
+
+        const el = document.createElement('div');
+        el.className = 'custom-marker';
+        el.style.width = `${size}px`;
+        el.style.height = `${size}px`;
+        el.style.backgroundColor = isSelected ? '#3B82F6' : color;
+        el.style.cursor = 'pointer';
+        el.style.border = isSelected ? '3px solid #2563EB' : '3px solid white';
+        el.style.borderRadius = '50%';
+        el.style.boxShadow = isSelected
+          ? '0 4px 12px rgba(37, 99, 235, 0.5)'
+          : '0 4px 12px rgba(0,0,0,0.3)';
+        el.style.display = 'flex';
+        el.style.alignItems = 'center';
+        el.style.justifyContent = 'center';
+        el.style.transition = 'all 0.3s ease';
+
+        const text = document.createElement('div');
+        text.className = 'marker-text';
+        if (isSelected && selectedIndex > 0) {
+          text.textContent = selectedIndex.toString();
+        } else {
+          text.textContent = marker.load?.toString() || '0';
+        }
+        text.style.color = 'white';
+        text.style.fontWeight = 'bold';
+        text.style.fontSize = size > 40 ? '14px' : '12px';
+        text.style.textShadow = '0 1px 2px rgba(0,0,0,0.3)';
+        el.appendChild(text);
+
+        const clickHandler = (e: MouseEvent) => {
+          e.stopPropagation();
+          e.preventDefault();
+
+          console.log('Marker clicked:', marker);
+
+          if (isCreatingRoute && onMarkerClickRef.current) {
+            onMarkerClickRef.current(marker);
+            return;
+          }
+
+          if (!isCreatingRoute && !isCreatingStop) {
+            setSelectedModalMarker(marker);
+            map.current?.flyTo({
+              center: [marker.lng, marker.lat],
+              zoom: 15,
+              essential: true,
+              duration: 800
+            });
+          }
+        };
+
+        el.addEventListener('click', clickHandler);
+        (el as any)._clickHandler = clickHandler;
+
+        const markerInstance = new maplibregl.Marker({
+          element: el,
+          anchor: 'center'
+        })
+          .setLngLat([marker.lng, marker.lat])
+          .addTo(map.current!);
+
+        markersRef.current.push(markerInstance);
+      });
+    }
+  }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops, mapLoaded, currentZoom]);
 
   const loadToColor = (load: number): string => {
     if (load <= 3) return "#10b981";
@@ -558,49 +736,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
     if (load <= 3) return 32;
     if (load <= 7) return 40;
     return 48;
-  };
-
-  const createCustomMarker = (marker: Stop): HTMLDivElement => {
-    const el = document.createElement('div');
-    el.className = 'custom-marker';
-
-    const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
-    const color = loadToColor(marker.load);
-    const size = getMarkerSize(marker.load);
-    const selectedIndex = isSelected ? selectedStops.indexOf(marker.id) + 1 : 0;
-
-    el.style.width = `${size}px`;
-    el.style.height = `${size}px`;
-    el.style.backgroundColor = isSelected ? '#3B82F6' : color;
-    el.style.cursor = 'pointer';
-    el.style.border = isSelected ? '3px solid #2563EB' : '3px solid white';
-    el.style.borderRadius = '50%';
-    el.style.boxShadow = isSelected
-      ? '0 4px 12px rgba(37, 99, 235, 0.5)'
-      : '0 4px 12px rgba(0,0,0,0.3)';
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.justifyContent = 'center';
-    el.style.transition = 'all 0.3s ease';
-
-    const text = document.createElement('div');
-    text.className = 'marker-text';
-    if (isSelected && selectedIndex > 0) {
-      text.textContent = selectedIndex.toString();
-    } else {
-      text.textContent = marker.load?.toString() || '0';
-    }
-    text.style.color = 'white';
-    text.style.fontWeight = 'bold';
-    text.style.fontSize = size > 40 ? '14px' : '12px';
-    text.style.textShadow = '0 1px 2px rgba(0,0,0,0.3)';
-    el.appendChild(text);
-
-    el.setAttribute('data-address', marker.address || '');
-    el.setAttribute('data-load', marker.load?.toString() || '0');
-    el.setAttribute('data-id', marker.id?.toString() || '');
-
-    return el;
   };
 
   const formatTime = (date: Date) => {
