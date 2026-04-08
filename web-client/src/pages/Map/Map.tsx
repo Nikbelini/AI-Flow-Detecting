@@ -335,7 +335,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const setupRouteEventHandlers = () => {
     if (!map.current) return;
 
-    // Обработчик клика по маршруту
+    // ===== КЛИКИ (показывают попап) =====
     map.current.on('click', 'routes-line', (e) => {
       if (!e.features || e.features.length === 0) return;
       const feature = e.features[0];
@@ -343,7 +343,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
       const route = routes.find(r => r.id === routeId);
 
       if (route && onRouteClickRef.current) {
-        console.log('Route clicked:', route);
         onRouteClickRef.current(route);
         showRouteTooltip(route, e.lngLat);
       }
@@ -356,13 +355,12 @@ const MapComponent: React.FC<MapComponentProps> = ({
       const route = routes.find(r => r.id === routeId);
 
       if (route && onRouteClickRef.current) {
-        console.log('Selected route clicked:', route);
         onRouteClickRef.current(route);
         showRouteTooltip(route, e.lngLat);
       }
     });
 
-    // Обработчик наведения для подсветки
+    // ===== НАВЕДЕНИЕ (только подсветка, без попапа) =====
     map.current.on('mouseenter', 'routes-line', (e) => {
       if (!e.features || e.features.length === 0) return;
       const feature = e.features[0];
@@ -382,29 +380,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
     map.current.on('mouseleave', 'routes-line-selected', () => {
       map.current!.getCanvas().style.cursor = '';
-    });
-
-    // Всплывающая подсказка при наведении
-    map.current.on('mousemove', 'routes-line', (e) => {
-      if (!e.features || e.features.length === 0) return;
-      const feature = e.features[0];
-      const routeId = feature.properties?.id;
-      const route = routes.find(r => r.id === routeId);
-
-      if (route && e.lngLat) {
-        showRouteTooltip(route, e.lngLat);
-      }
-    });
-
-    map.current.on('mousemove', 'routes-line-selected', (e) => {
-      if (!e.features || e.features.length === 0) return;
-      const feature = e.features[0];
-      const routeId = feature.properties?.id;
-      const route = routes.find(r => r.id === routeId);
-
-      if (route && e.lngLat) {
-        showRouteTooltip(route, e.lngLat);
-      }
     });
   };
 
