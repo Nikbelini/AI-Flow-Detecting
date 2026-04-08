@@ -26,7 +26,7 @@ def build_sequences(
     df["datetime"] = pd.to_datetime(df["datetime"])
     df.sort_values("datetime", inplace=True)
     
-    node_index = {node: i for i, node in enumerate(nodes_order)}
+    node_index = {int(node): i for i, node in enumerate(nodes_order)}
 
     times = sorted(df["datetime"].unique())
     T = len(times)
@@ -39,17 +39,17 @@ def build_sequences(
     C = 5   # Каналы
     X_full = np.zeros((T, C, N), dtype=np.float32)
     
-    grouped = df.groupby(["datetime", "address"])[feature].mean().reset_index()
+    grouped = df.groupby(["datetime", "stop_id"])[feature].mean().reset_index()
 
     time_index = {t: i for i, t in enumerate(times)}
 
     for _, row in grouped.iterrows():
-        addr = row["address"]
-        if addr not in node_index:
+        stop_id = int(row["stop_id"])
+        if stop_id not in node_index:
             continue
 
         t = time_index[row["datetime"]]
-        i = node_index[addr]
+        i = node_index[stop_id]
         X_full[t, 0, i] = float(row[feature]) if pd.notna(row[feature]) else 0.0
 
     # Time features (одинаковые для всех узлов в момент времени)

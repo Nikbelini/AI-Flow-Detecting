@@ -56,17 +56,28 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
         all_stops = get_all_stops_in_city(city_id)
         if all_stops.empty:
             # Fallback берём адреса из истории
-            all_stops = df[['address', 'lat', 'lng']].drop_duplicates(subset=['address'])
+            all_stops = df[['stop_id', 'address', 'lat', 'lng']].drop_duplicates(subset=["stop_id"], keep="first")
+        else:
+            # Нет stop_id — группируем по (address, lat, lng) как компромисс
+            all_stops = df[["address", "lat", "lng"]].drop_duplicates(subset=["address", "lat", "lng"], keep="first")
+            logger.warning("No stop_id in data, using (address, lat, lng) as fallback key")
         
-        nodes_order = sorted(all_stops['address'].dropna().unique().tolist())
+        if "stop_id" in all_stops.columns and all_stops["stop_id"].notna().any():
+            nodes_order = sorted(all_stops["stop_id"].dropna().unique().tolist())
+        else:
+            # Fallback: создаём фейковые ID по индексу
+            all_stops = all_stops.reset_index().rename(columns={"index": "stop_id"})
+            nodes_order = sorted(all_stops["stop_id"].dropna().unique().tolist())
+            logger.warning(f"Using fallback nodes_order with {len(nodes_order)} nodes")
+
         num_nodes = len(nodes_order)
 
         if num_nodes < 2:
             return {"status": "FAILED", "message": "Not enough stops for graph"}
 
         coords = (
-            all_stops.drop_duplicates(subset=["address"])  # убираем дубликаты
-                .set_index("address")
+            all_stops.drop_duplicates(subset=["stop_id"])  # убираем дубликаты
+                .set_index("stop_id")
                 .reindex(nodes_order)[["lat", "lng"]]
                 .fillna(0.0)
                 .values
@@ -79,20 +90,34 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
         adj = GraphBuilder(sigma=sigma).build_from_coordinates(coords, device=device)
 
         # камеры = есть реальные записи count > 0
-        camera_addresses = set(df[df["count"] > 0]["address"].unique().tolist())
+        camera_mask_raw = df[(df["count"] > 0) & (df["stop_id"].notna())]
 
-        if len(camera_addresses) == 0:
-            return {"status": "FAILED", "message": "No camera stops found"}
+        if not camera_mask_raw.empty:
+            # Приводим к int для надёжного сравнения
+            camera_stop_ids = set(camera_mask_raw["stop_id"].astype(int).unique().tolist())
+        else:
+            #  Фоллбэк: если нет данных с count>0, используем все узлы
+            logger.warning("No camera data found (count>0), using all stops for scaler fit")
+            camera_stop_ids = set(nodes_order)
 
          # camera mask по nodes_order
         camera_mask = torch.tensor(
-            [1.0 if addr in camera_addresses else 0.0 for addr in nodes_order],
+            [1.0 if int(sid) in camera_stop_ids else 0.0 for sid in nodes_order],
             dtype=torch.float32,
             device=device
         )
 
         # scaler fit только на камерах
-        df_fit = df[df["address"].isin(camera_addresses)].copy()
+        df_fit = df[
+            df["stop_id"].astype("Int64").isin(
+                pd.Series(list(camera_stop_ids), dtype="Int64")
+            )
+        ].copy()
+
+        if df_fit.empty:
+            logger.warning("df_fit is empty after filtering, using full df for scaler fit")
+            df_fit = df.copy()
+
         df_fit_norm, scaler = DataPreprocessor.normalize(df_fit, fit=True)
 
         # transform на всем df

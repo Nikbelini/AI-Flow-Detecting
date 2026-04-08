@@ -77,6 +77,7 @@ def forecast_city_blind_stops(city_id: int, horizon: int) -> Dict:
         full_forecast = [int(round(v)) for v in forecast]
         
         predictions_list.append({
+            "stop_id": stop["stop_id"],
             "address": stop["address"],
             "lat": stop["lat"],
             "lng": stop["lng"],
@@ -128,16 +129,22 @@ def _forecast_internal(city_id: int, horizon: int, blind_only: bool = True) -> D
     # === ВСЕ остановки города (для координат) ===
     all_stops = get_all_stops_in_city(city_id)
     if all_stops.empty:
-        all_stops = df[["address", "lat", "lng"]].drop_duplicates("address")
+        # Fallback: берём из истории, но с stop_id если есть
+        cols = ["stop_id", "address", "lat", "lng"] if "stop_id" in df.columns else ["address", "lat", "lng"]
+        all_stops = df[cols].drop_duplicates(subset=["stop_id"] if "stop_id" in df.columns else ["address"])
 
-    coords = (
+    stops_lookup = (
         all_stops
-        .drop_duplicates(subset=["address"], keep="first")  # Убираем дубли адресов
-        .set_index("address")                                # Теперь индекс уникальный
-        .reindex(nodes_order)[["lat", "lng"]]                # reindex работает
-        .fillna(0.0)
-        .values
+        .drop_duplicates(subset=["stop_id"], keep="first")
+        .set_index("stop_id")[["address", "lat", "lng"]]
+        .to_dict("index")
     )
+
+    coords = []
+    for stop_id in nodes_order:
+        info = stops_lookup.get(int(stop_id), {"lat": 0.0, "lng": 0.0})
+        coords.append([info["lat"], info["lng"]])
+    coords = np.array(coords, dtype=np.float32)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     logger.info(f"Inference device: {device}")
@@ -184,19 +191,27 @@ def _forecast_internal(city_id: int, horizon: int, blind_only: bool = True) -> D
     preds_steps = np.stack(preds_steps, axis=0)  # [H, N]
 
     # === определяем камеры по данным (правильнее чем has_camera) ===
-    camera_set = set(df[df["count"] > 0]["address"].unique().tolist())
+    camera_set = set(df[df["count"] > 0]["stop_id"].dropna().unique().tolist())
 
     stops_result = []
     blind_nodes = 0
 
-    for idx, addr in enumerate(nodes_order):
-        has_cam = addr in camera_set
+    for idx, stop_id in enumerate(nodes_order):
+        stop_id_int = int(stop_id)
+        has_cam = stop_id_int in camera_set
 
         if not has_cam:
             blind_nodes += 1
 
         if blind_only and has_cam:
             continue
+
+        # Получаем инфо об остановке
+        stop_info = stops_lookup.get(stop_id_int, {
+            "address": f"Unknown_{stop_id_int}",
+            "lat": coords[idx][0],
+            "lng": coords[idx][1]
+        })
 
         forecast_norm = preds_steps[:, idx]
         forecast = DataPreprocessor.denormalize_count(forecast_norm, scaler)
@@ -205,7 +220,8 @@ def _forecast_internal(city_id: int, horizon: int, blind_only: bool = True) -> D
         forecast = [int(round(max(0, v))) for v in forecast]
 
         stops_result.append({
-            "address": addr,
+            "stop_id": stop_id_int,
+            "address": stop_info["address"],
             "lat": float(coords[idx][0]),
             "lng": float(coords[idx][1]),
             "has_camera": has_cam,
