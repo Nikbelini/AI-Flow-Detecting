@@ -1,4 +1,5 @@
 import os
+import traceback
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from typing import Dict
 from datetime import datetime
@@ -24,23 +25,21 @@ router = APIRouter(prefix="/ml", tags=["ML Prediction"])
 training_jobs: Dict[str, Dict] = {}
 
 
-@router.get("/status")
-def ml_status(city_id: int = 1):
-    """Проверка: есть ли данные и обученная модель"""
-    df = load_stop_history(city_id)
 
-    camera_count = df[df['has_camera'] == True]['address'].nunique()
-    blind_count = df[df['has_camera'] == False]['address'].nunique()
+@router.post("/forecast")
+def forecast(req: ForecastRequest):
+    """
+    Возвращает прогноз для ВСЕХ остановок, 
+    чтобы проверить работу модели.
+    """
+    result = forecast_city_blind_stops(req.city_id, req.horizon)
     
-    return {
-        "city_id": city_id,
-        "data_points": df['datetime'].nunique() if not df.empty else 0,
-        "stops_with_cameras": int(camera_count),
-        "stops_without_cameras": int(blind_count),
-        "has_enough_data": has_enough_data(df),
-        "model_trained": os.path.exists(f"result/models/city_{city_id}.pt"),
-        "model_path": f"result/models/city_{city_id}.pt"
-    }
+    if result.get("status") in ["NOT_READY", "NOT_TRAINED", "ERROR"]:
+        status_code = 409 if result["status"] == "NOT_READY" else 503
+        raise HTTPException(status_code=status_code, detail=result.get("message"))
+    
+    return result.get("predictions", [])
+
 
 @router.post("/train", status_code=202)
 def train_manual(req: TrainingRequest, background_tasks: BackgroundTasks):
@@ -83,16 +82,40 @@ def _run_training_task(city_id: int, job_id: str, force_retrain: bool):
         
         training_jobs[job_id].update({
             "status": "success" if result["status"] == "SUCCESS" else "failed",
+            "progress": 1.0,
             "result": result,
             "updated_at": datetime.now().isoformat()
         })
 
+        print(f"!!! [TASK DONE] job={job_id} status=success !!!", flush=True, file=sys.stderr)
+
     except Exception as exception:
         training_jobs[job_id].update({
             "status": "failed",
+            "progress": 0.0,
             "error": str(exception),
+            "error_trace": traceback.format_exc(),
             "updated_at": datetime.now().isoformat()
         })
+
+
+@router.get("/status")
+def ml_status(city_id: int = 1):
+    """Проверка: есть ли данные и обученная модель"""
+    df = load_stop_history(city_id)
+
+    camera_count = df[df['has_camera'] == True]['address'].nunique()
+    blind_count = df[df['has_camera'] == False]['address'].nunique()
+    
+    return {
+        "city_id": city_id,
+        "data_points": df['datetime'].nunique() if not df.empty else 0,
+        "stops_with_cameras": int(camera_count),
+        "stops_without_cameras": int(blind_count),
+        "has_enough_data": has_enough_data(df),
+        "model_trained": os.path.exists(f"result/models/city_{city_id}.pt"),
+        "model_path": f"result/models/city_{city_id}.pt"
+    }
 
 
 @router.post("/debug/train")
@@ -165,19 +188,25 @@ def get_training_status(job_id: str):
         raise HTTPException(404, "Job not found")
     return job
 
-@router.post("/forecast")
-def forecast(req: ForecastRequest):
-    """
-    Возвращает прогноз для ВСЕХ остановок, 
-    чтобы проверить работу модели.
-    """
-    result = forecast_city_blind_stops(req.city_id, req.horizon)
+
+@router.get("/train/status/{job_id}")
+def get_training_status(job_id: str):
+    """Получить статус задачи обучения"""
+    job = training_jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, detail="Job not found or expired")
     
-    if result.get("status") in ["NOT_READY", "NOT_TRAINED", "ERROR"]:
-        status_code = 409 if result["status"] == "NOT_READY" else 503
-        raise HTTPException(status_code=status_code, detail=result.get("message"))
-    
-    return result.get("predictions", [])
+    return {
+        "jobId": job["job_id"],
+        "cityId": job["city_id"],
+        "status": job["status"],  # queued | running | success | failed
+        "progress": job.get("progress", 0),  # 0.0..1.0 (опционально)
+        "createdAt": job["created_at"],
+        "updatedAt": job.get("updated_at"),
+        "result": job.get("result"),   # только если success/failed
+        "error": job.get("error")      # только если failed
+    }
+
 
 @router.post("/test")
 def test_model(city_id: int = 1, batch_size: int = 16):

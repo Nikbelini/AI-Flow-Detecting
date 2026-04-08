@@ -69,8 +69,12 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
                 .values
              )
 
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logger.info(f"Using device: {device}")
+
         sigma = 0.5
-        adj = GraphBuilder(sigma=sigma).build_from_coordinates(coords)
+        adj_np = GraphBuilder(sigma=sigma).build_from_coordinates(coords)
+        adj = adj_np.to(device)
 
         # камеры = есть реальные записи count > 0
         camera_addresses = set(df[df["count"] > 0]["address"].unique().tolist())
@@ -110,8 +114,20 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
             generator=torch.Generator().manual_seed(42)
         )
 
-        train_loader = DataLoader(train_ds, batch_size=32, shuffle=True)
-        val_loader = DataLoader(val_ds, batch_size=32)
+        train_loader = DataLoader(
+            train_ds, 
+            batch_size=32, 
+            shuffle=True, 
+            num_workers=2,  # Параллельная загрузка
+            pin_memory=torch.cuda.is_available() 
+        )
+
+        val_loader = DataLoader(
+            val_ds, 
+            batch_size=32,
+            num_workers=2,
+            pin_memory=torch.cuda.is_available()
+        )
 
         # Модель
         model = build_model(num_nodes)
@@ -123,7 +139,7 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
         best_val_loss = float('inf')
         patience_counter = 0
         max_patience = 10
-        epochs = 1
+        epochs = 100
         
         for epoch in range(epochs):
             # Train
@@ -131,6 +147,10 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
             train_loss = 0.0
 
             for i, (X_batch, y_batch) in enumerate(tqdm(train_loader, desc=f"City {city_id} Epoch {epoch+1}"), 1):
+                # Батчи на GPU с асинхронной передачей
+                X_batch = X_batch.to(device, non_blocking=True)
+                y_batch = y_batch.to(device, non_blocking=True)
+
                 optimizer.zero_grad()
                 pred = model(X_batch, adj)
                 
@@ -164,16 +184,20 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
                 best_val_loss = val_loss
                 patience_counter = 0
 
-                save_model_atomic(model, model_path, metadata={
+                model_cpu = model.cpu()
+                save_model_atomic(model_cpu, model_path, metadata={
                     "city_id": city_id,
                     "epoch": epoch + 1,
                     "best_val_loss": float(best_val_loss),
                     "nodes_order": nodes_order,
-                    "camera_mask": camera_mask.tolist(),
+                    "camera_mask": camera_mask.cpu().tolist(),  # На CPU для сериализации
                     "scaler": scaler,
                     "time_steps": time_steps,
                     "sigma": sigma
                 })
+
+                # Возвращаем модель на GPU если нужно продолжать обучение
+                model = model.to(device)
 
             else:
                 patience_counter += 1

@@ -1,4 +1,6 @@
 from fastapi import APIRouter, HTTPException
+from datetime import datetime, timezone, timedelta
+
 from database.repository import PostgresRepository
 from algorithm.transport_graph_builder import TransportGrapthBuilder
 from algorithm.passenger_flow_predictor import PassengerFlowGraphPredictor
@@ -7,16 +9,27 @@ from algorithm.passenger_flow_predictor import PassengerFlowGraphPredictor
 router = APIRouter(prefix="/passenger-flow", tags=["Passenger Flow Algorithm"])
 
 
+# Смещение Самары: UTC+4
+SAMARA_TZ = timezone(timedelta(hours=4))
+
+def get_samara_now() -> str:
+    return datetime.now(SAMARA_TZ).strftime("%Y-%m-%dT%H:%M:%S")
+
 def normalize_dt(dt: str) -> str:
     if "T" not in dt:
         return dt + "T23:59:59"
     return dt
 
 @router.get("/predict/all")
-def predict_all(city_id: int, dt: str, neighbors_limit: int = 15):
+def predict_all(city_id: int, dt: str = None, neighbors_limit: int = 15):
 
     try:
-        dt = normalize_dt(dt)
+        # Авто-подстановка даты по Самаре, если не передана
+        if dt is None:
+            dt = get_samara_now()
+            print(dt)
+        else:
+            dt = normalize_dt(dt)
         
         repository = PostgresRepository()
 

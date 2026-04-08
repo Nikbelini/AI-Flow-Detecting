@@ -20,10 +20,9 @@ CSV_FALLBACK_PATH = BASE_DIR / "data" / "fallback_{city_id}.csv"
 engine = create_engine(DB_URL, pool_pre_ping=True)
 
 
-def load_stop_history(city_id: int, min_rows: int = 1, max_rows: int = 2, use_csv_fallback: bool = True) -> pd.DataFrame:
-    """Загружает историю остановок с колонкой has_camera"""
+def load_stop_history(city_id: int, min_rows: int = 1, max_rows: int = 4, use_csv_fallback: bool = True) -> pd.DataFrame:
+    """Загружает историю остановок с колонкой has_camera, сэмплируя по 1-4 записи на остановку"""
     
-    # Используем text() + %(param)s для надёжной работы с psycopg2
     query = text("""
         SELECT 
             sh.address, sh.count, sh.velocity, sh.load, sh.datetime,
@@ -38,25 +37,31 @@ def load_stop_history(city_id: int, min_rows: int = 1, max_rows: int = 2, use_cs
     try:
         df = pd.read_sql(query, engine, params={"city_id": city_id})
         if not df.empty:
-            logger.info(f"DB: loaded {len(df)} rows for city {city_id}")
-            return _ensure_schema(df)
-        # Для каждой остановки случайно оставляем min_rows..max_rows записей
-        sampled_dfs = []
-        for address, group in df.groupby("address"):
-            n_samples = random.randint(min_rows, max_rows)
-            sampled_dfs.append(group.head(n_samples))
-
-        df_sampled = pd.concat(sampled_dfs, ignore_index=True)
-        logger.info(f"DB: loaded {len(df_sampled)} rows (sampled) for city {city_id}")
-        return _ensure_schema(df_sampled)
+            # Сэмплируем ДО возврата: по min_rows..max_rows записей на адрес
+            sampled_dfs = []
+            for address, group in df.groupby("address"):
+                n_samples = random.randint(min_rows, max_rows)
+                # Берём последние (свежие) записи
+                sampled_dfs.append(group.head(n_samples))
+            
+            df_sampled = pd.concat(sampled_dfs, ignore_index=True)
+            logger.info(f"DB: loaded {len(df_sampled)} rows (sampled {min_rows}-{max_rows}/stop) for city {city_id}")
+            return _ensure_schema(df_sampled)
+            
     except Exception as exception:
         logger.warning(f"DB connection failed: {exception}")
     
-    # Фоллбэк на CSV
+    # Фоллбэк на CSV (с тем же сэмплированием)
     if use_csv_fallback:
         df = _load_csv_fallback(city_id)
         if not df.empty:
-            return df
+            sampled_dfs = []
+            for address, group in df.groupby("address"):
+                n_samples = random.randint(min_rows, max_rows)
+                sampled_dfs.append(group.head(n_samples))
+            df_sampled = pd.concat(sampled_dfs, ignore_index=True)
+            logger.info(f"CSV: loaded {len(df_sampled)} rows (sampled) for city {city_id}")
+            return _ensure_schema(df_sampled)
     
     logger.warning(f"No data for city {city_id}")
     return _empty_df()
