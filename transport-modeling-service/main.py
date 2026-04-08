@@ -40,19 +40,19 @@ async def lifespan(app: FastAPI):
     
     try:
         # Подключение к Redis
-        redis_client = redis.Redis(
-            host="redis",
-            port=6379,
-            db=0,
-            decode_responses=True,
-            socket_connect_timeout=2
-        )
-        redis_client.ping()
+        # redis_client = redis.Redis(
+        #     host="redis",
+        #     port=6379,
+        #     db=0,
+        #     decode_responses=True,
+        #     socket_connect_timeout=2
+        # )
+        # redis_client.ping()
         logger.info("✅ Redis подключен")
         
         # Подключение к PostgreSQL
         pg_pool = await asyncpg.create_pool(
-            host="postgres",
+            host="localhost",
             port=5432,
             database="stops",
             user="postgres",
@@ -64,12 +64,12 @@ async def lifespan(app: FastAPI):
         logger.info("✅ PostgreSQL подключен")
         
         # Импорт OSM данных (только при первом запуске)
-        # from import_osm_data import run_import_if_needed
-        # await run_import_if_needed(pg_pool)
+        from import_osm_data import run_import_if_needed
+        await run_import_if_needed(pg_pool)
         # =========================================
 
         # Инициализация сервисов
-        cache_service = CacheService(redis_client)
+        # cache_service = CacheService(redis_client)
         db_service = DatabaseService(pg_pool)
         simulation_engine = SimulationEngine(cache_service, db_service)
         

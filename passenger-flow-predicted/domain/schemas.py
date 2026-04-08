@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 from enum import Enum
 
+"""Модели для машинного обучения"""
 class ForecastRequest(BaseModel):
     city_id: int = Field(..., ge=1, alias="cityId", description="ID города")
     horizon: int = Field(..., ge=1, le=24, alias="horizon", description="Горизонт прогноза (1-24 шага)")
@@ -65,3 +66,23 @@ class ForecastResponse(BaseModel):
     model_version: str
     stops: List[ForecastStop]
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+# ===== ===== ===== ===== ===== ===== ===== ===== ===== =====  
+"""Модели для алгоритмического решения прогнозирования"""
+class Stop(BaseModel):
+    id: int
+    name: str
+    lat: float
+    lng: float
+
+class RouteInfo(BaseModel):
+    route_id: int
+    frequency: float
+
+class PassengerFlowRequest(BaseModel):
+    stop_id: int
+    predicted_flow: float
+    method: str
+    neighbors_used: int
+    debug: Optional[dict] = None

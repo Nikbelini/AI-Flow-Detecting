@@ -56,11 +56,12 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
             return {"status": "FAILED", "message": "Not enough stops for graph"}
 
         coords = (
-            all_stops.set_index("address")
-            .reindex(nodes_order)[["lat", "lng"]]
-            .fillna(0.0)
-            .values
-        )
+            all_stops.drop_duplicates(subset=["address"])  # убираем дубликаты
+                .set_index("address")
+                .reindex(nodes_order)[["lat", "lng"]]
+                .fillna(0.0)
+                .values
+             )
 
         sigma = 0.5
         adj = GraphBuilder(sigma=sigma).build_from_coordinates(coords)
@@ -116,7 +117,7 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
         best_val_loss = float('inf')
         patience_counter = 0
         max_patience = 10
-        epochs = 100
+        epochs = 1
         
         for epoch in range(epochs):
             # Train

@@ -1,12 +1,9 @@
-// src/pages/AdminPanel.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { 
-  Card, Table, Button, Input, Select, Modal, Form, 
-  message, Popconfirm, Tag, Space, Tooltip, 
-  Typography, Drawer, Alert 
-} from 'antd';
+import { Card, Table, Button, Input, Select, Modal, 
+  Form, message, Popconfirm, Tag, Space, Tooltip, 
+  Typography, Drawer, Alert } from 'antd';
 import { 
   UserAddOutlined, SearchOutlined, ReloadOutlined,
   LockOutlined, UnlockOutlined, DeleteOutlined,
@@ -19,8 +16,7 @@ import {
 } from '../api/endpoints/admin';
 import type { 
   UserGetResponse, PolicyUpdate, UserCreateRequest,
-  UserListResponse 
-} from '../api/types/user';
+  UserListResponse } from '../api/types/user';
 import './AdminPanel.css';
 
 const { Title, Text } = Typography;
@@ -158,7 +154,7 @@ const AdminPanel: React.FC = () => {
   const handleChangeRole = async (id: number, role: string) => {
     setLoading(true);
     try {
-      // 🔥 Приводим роль к верхнему регистру для бэкенда
+      // Приводим роль к верхнему регистру для бэкенда
       await adminChangeRole(id, role.toUpperCase());
       message.success('Роль изменена');
       loadUsers();

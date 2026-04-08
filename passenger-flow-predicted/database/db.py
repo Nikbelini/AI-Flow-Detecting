@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine, text
 import pandas as pd
+import random
 import os
 import logging
 from pathlib import Path
@@ -19,7 +20,7 @@ CSV_FALLBACK_PATH = BASE_DIR / "data" / "fallback_{city_id}.csv"
 engine = create_engine(DB_URL, pool_pre_ping=True)
 
 
-def load_stop_history(city_id: int, use_csv_fallback: bool = True) -> pd.DataFrame:
+def load_stop_history(city_id: int, min_rows: int = 1, max_rows: int = 2, use_csv_fallback: bool = True) -> pd.DataFrame:
     """Загружает историю остановок с колонкой has_camera"""
     
     # Используем text() + %(param)s для надёжной работы с psycopg2
@@ -30,7 +31,7 @@ def load_stop_history(city_id: int, use_csv_fallback: bool = True) -> pd.DataFra
         FROM stops_history sh
         LEFT JOIN stops s ON s.address = sh.address AND s.city_id = sh.city_id
         WHERE sh.city_id = :city_id
-        ORDER BY sh.datetime
+        ORDER BY sh.address, sh.datetime DESC
     """)
     
     # Пробуем БД
@@ -39,6 +40,15 @@ def load_stop_history(city_id: int, use_csv_fallback: bool = True) -> pd.DataFra
         if not df.empty:
             logger.info(f"DB: loaded {len(df)} rows for city {city_id}")
             return _ensure_schema(df)
+        # Для каждой остановки случайно оставляем min_rows..max_rows записей
+        sampled_dfs = []
+        for address, group in df.groupby("address"):
+            n_samples = random.randint(min_rows, max_rows)
+            sampled_dfs.append(group.head(n_samples))
+
+        df_sampled = pd.concat(sampled_dfs, ignore_index=True)
+        logger.info(f"DB: loaded {len(df_sampled)} rows (sampled) for city {city_id}")
+        return _ensure_schema(df_sampled)
     except Exception as exception:
         logger.warning(f"DB connection failed: {exception}")
     
