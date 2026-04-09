@@ -17,6 +17,7 @@ import ru.slivkiai.flowdetect.repository.CityRepository;
 import ru.slivkiai.flowdetect.repository.StopHistoryRepository;
 import ru.slivkiai.flowdetect.repository.StopRepository;
 
+import java.util.concurrent.CompletableFuture;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -77,9 +78,16 @@ public class StopServiceImpl implements StopService {
 
         StopEntity savedStop = stopRepository.save(stop);
 
-        // Используем сервис истории вместо приватного метода
-        createHistoryRecordViaService(savedStop, request.getCount(), request.getVelocity(), request.getLoad());
-        createHistoryRecordViaService(savedStop, request.getCount(), request.getVelocity(), request.getLoad());
+        CompletableFuture.runAsync(() -> {
+                try {
+                    log.info("📝 Async history creation started");
+                    createHistoryRecordViaService(savedStop, request.getCount(), request.getVelocity(), request.getLoad());
+                    createHistoryRecordViaService(savedStop, request.getCount(), request.getVelocity(), request.getLoad());
+                    log.info("✅ Async history creation completed");
+                } catch (Exception e) {
+                    log.error("Failed to create history record", e);
+                }
+            });
 
         return mapToResponse(savedStop);
     }
