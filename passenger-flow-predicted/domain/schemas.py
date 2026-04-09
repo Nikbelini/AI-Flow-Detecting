@@ -14,6 +14,7 @@ class ForecastRequest(BaseModel):
 class TrainingRequest(BaseModel):
     city_id: int = Field(..., ge=1, description="ID города для обучения")
     horizon: Optional[int] = Field(None, ge=1, le=24, description="Опционально: горизонт для валидации")
+    augment: bool = Field(True, description="Включить аугментацию данных")
     force_retrain: bool = Field(False, description="Принудительное переобучение, даже если модель есть")
 
 class NodeDTO(BaseModel):

@@ -7,9 +7,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.slivkiai.flowdetect.domain.StopHistoryRequest;
 import ru.slivkiai.flowdetect.domain.StopHistoryResponse;
+import ru.slivkiai.flowdetect.domain.entity.StopEntity;
 import ru.slivkiai.flowdetect.domain.entity.StopHistoryEntity;
 import ru.slivkiai.flowdetect.repository.CityRepository;
 import ru.slivkiai.flowdetect.repository.StopHistoryRepository;
+import ru.slivkiai.flowdetect.repository.StopRepository;
 
 import java.time.LocalDateTime;
 
@@ -20,6 +22,7 @@ public class StopHistoryServiceImpl implements StopHistoryService {
 
     private final StopHistoryRepository stopHistoryRepository;
     private final CityRepository cityRepository;
+    private final StopRepository stopRepository;
     private final WeatherService weatherService;
 
     @Override
@@ -31,16 +34,22 @@ public class StopHistoryServiceImpl implements StopHistoryService {
         var city = cityRepository.findById(request.getCityId())
                 .orElseThrow(EntityNotFoundException::new);
 
+        StopEntity stop = stopRepository.findById(request.getStopId())
+            .orElseThrow(() -> new EntityNotFoundException("Stop not found with id: " + request.getStopId()));
+
         log.info("🏙️ Found city: {} (ID: {})", city.getName(), city.getId());
 
         // Сохраняем историческую запись
         StopHistoryEntity history = StopHistoryEntity.builder()
                 .datetime(LocalDateTime.now())
+                .lat(request.getLat())
+                .lng(request.getLng())
                 .count(request.getCount())
                 .velocity(request.getVelocity())
                 .load(request.getLoad())
                 .address(request.getAddress())
                 .city(city)
+                .stop(stop)
                 .build();
 
         StopHistoryEntity savedHistory = stopHistoryRepository.save(history);

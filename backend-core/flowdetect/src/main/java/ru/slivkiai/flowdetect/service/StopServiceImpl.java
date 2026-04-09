@@ -252,6 +252,9 @@ public class StopServiceImpl implements StopService {
         private void createHistoryRecordViaService(StopEntity stop, double count, double velocity, double load) {
                 StopHistoryRequest historyRequest = StopHistoryRequest.builder()
                                 .cityId(stop.getCity().getId())
+                                .stopId(stop.getId())           // OSM node ID
+                                .lat(stop.getLat())             // Широта из StopEntity
+                                .lng(stop.getLng())
                                 .address(stop.getAddress())
                                 .count((int) count)
                                 .velocity((int) velocity)

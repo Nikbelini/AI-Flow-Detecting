@@ -9,7 +9,7 @@ from torch.utils.data import TensorDataset, DataLoader, random_split
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from typing import Dict
+from typing import Dict, Optional
 
 from database.db import load_stop_history, get_all_stops_in_city
 from database.dataset_builder import build_sequences
@@ -20,6 +20,7 @@ from services.data_guard import has_enough_data
 from services.data_preprocessor import DataPreprocessor
 from services.masked_loss import masked_loss
 from services.metrics import calculate_metrics
+from services.augment import augment_batch, augment_graph
 
 
 logging.basicConfig(
@@ -34,7 +35,9 @@ MODEL_DIR = BASE_DIR / "result" / "models"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)  # Создаём папку, если нет
 
 
-def train(city_id: int, force_retrain: bool = False) -> Dict:
+def train(city_id: int, force_retrain: bool = False,
+        augment: bool = True,  # ← флаг аугментации
+        augment_config: Optional[Dict] = None) -> Dict:
     """
     Обучение: граф по всем остановкам, обучение на тех, где есть данные.
     """
@@ -94,7 +97,7 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
         logger.info(f"Using device: {device}")
 
         sigma = 0.5
-        adj = GraphBuilder(sigma=sigma).build_from_coordinates(coords, device=device)
+        adj = GraphBuilder(sigma=None, k_neighbors=7).build_from_coordinates(coords, device=device)
 
         # камеры = есть реальные записи count > 0
         camera_mask_raw = df[(df["count"] > 0) & (df["stop_id"].notna())]
@@ -114,6 +117,9 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
             device=device
         )
 
+        logger.info(f"camera_mask: total={len(camera_mask)}, cameras={camera_mask.sum().item()}, "
+                   f"blind={(1-camera_mask).sum().item()}, %cam={camera_mask.sum()/len(camera_mask)*100:.1f}%")
+
         # scaler fit только на камерах
         df_fit = df[
             df["stop_id"].astype("Int64").isin(
@@ -130,8 +136,29 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
         # transform на всем df
         df_norm, _ = DataPreprocessor.normalize(df, scaler=scaler, fit=False)
 
+        if 'count' in df_fit_norm.columns:
+            logger.info(f"DEBUG: Normalized count stats:")
+            logger.info(f"   fit data: min={df_fit_norm['count'].min():.4f}, max={df_fit_norm['count'].max():.4f}, std={df_fit_norm['count'].std():.4f}")
+
+        if 'count' in df_norm.columns:
+            logger.info(f"full data: min={df_norm['count'].min():.4f}, max={df_norm['count'].max():.4f}, std={df_norm['count'].std():.4f}")
+
         time_steps = 12
         X_seq, y_seq = build_sequences(df_norm, nodes_order, time_steps=time_steps)
+
+        logger.info(f"DEBUG: Sequences stats:")
+        logger.info(f"   X_seq: shape={X_seq.shape}, count_channel: min={X_seq[..., 0, :].min():.4f}, max={X_seq[..., 0, :].max():.4f}, std={X_seq[..., 0, :].std():.4f}")
+        logger.info(f"   y_seq: shape={y_seq.shape}, min={y_seq.min():.4f}, max={y_seq.max():.4f}, std={y_seq.std():.4f}")
+
+        if 'stop_id' in df.columns and df['stop_id'].notna().any():
+            # Грубая эвристика: взять первые 100 последовательностей и посчитать std только по ненулевым
+            nonzero_mask = y_seq != 0
+            if nonzero_mask.any():
+                nonzero_std = y_seq[nonzero_mask].std().item()
+                nonzero_count = nonzero_mask.sum().item()
+                logger.info(f"DEBUG: y_seq nonzero stats: std={nonzero_std:.4f}, count={nonzero_count}/{y_seq.numel()}")
+            else:
+                logger.warning("DEBUG: y_seq is ALL zeros!")
 
         dataset = TensorDataset(X_seq, y_seq)
         total = len(dataset)
@@ -173,8 +200,8 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
         best_val_loss = float('inf')
         best_val_mae = float('inf') 
         patience_counter = 0
-        max_patience = 20
-        epochs = 200
+        max_patience = 15
+        epochs = 100
 
         # Принудительная синхронизация весов
         for p in model.parameters():
@@ -189,6 +216,16 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
         # Реактивная (для маленьких датасетов, быстрой сходимости, резкие падения и ждёт ухудшения)
         # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5, factor=0.5)
     
+        # ===== Аугментация: конфиг =====
+        aug_cfg = augment_config or {
+            "noise_std": 0.02,
+            "mixup_prob": 0.3,
+            "mixup_alpha": 0.2,
+            "time_shift_prob": 0.2,
+            "max_shift": 2,
+            "graph_drop_prob": 0.03,
+            "graph_apply_prob": 0.3
+        }
 
         test_X, test_y = next(iter(train_loader))
         test_X = test_X.to(device, non_blocking=False)
@@ -208,11 +245,47 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
                 if X_batch.device.type != 'cuda' and device.type == 'cuda':
                      raise RuntimeError(f"X_batch failed to move to GPU! Device: {X_batch.device}")
 
+                # === АУГМЕНТАЦИЯ (только тренировка) ===
+                if augment and model.training:
+                    # Определяем формат автоматически по размерам
+                    # [B, F, N, T] — если F <= 10 и T >= 10
+                    # [B, T, N, F] — иначе
+                    if X_batch.dim() == 4:
+                        if X_batch.shape[1] <= 10 and X_batch.shape[3] >= 10:
+                            fmt = "BFNT"  # ST-GCN формат
+                        elif X_batch.shape[1] >= 10 and X_batch.shape[3] <= 10:
+                            fmt = "BTNF"  # Альтернативный формат
+                        else:
+                            fmt = "auto"  # Пусть функция сама разберётся
+                    else:
+                        fmt = "auto"
+                    
+                    # Применяем аугментацию
+                    X_batch, y_batch = augment_batch(
+                        X_batch, y_batch,
+                        input_format=fmt,
+                        **{k: v for k, v in aug_cfg.items() 
+                        if k in ["noise_std", "mixup_prob", "mixup_alpha", "time_shift_prob", "max_shift"]}
+                    )
+                    
+                    # Опционально: аугментация графа
+                    if torch.rand(1).item() < aug_cfg.get("graph_apply_prob", 0.3):
+                        adj_aug = augment_graph(
+                            adj, 
+                            drop_prob=aug_cfg.get("graph_drop_prob", 0.03),
+                            apply_prob=1.0  # уже проверили выше
+                        )
+                    else:
+                        adj_aug = adj
+                else:
+                    # Без аугментации — используем оригинальный граф
+                    adj_aug = adj
+
                 optimizer.zero_grad()
                 
                 # Forward
                 try:
-                    pred = model(X_batch, adj)
+                    pred = model(X_batch, adj_aug)
                 except Exception as exception:
                     logger.error(f"Forward pass failed at batch {i}. X_dev: {X_batch.device}, Adj_dev: {adj.device}")
                     raise exception
@@ -220,6 +293,17 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
                 loss = masked_loss(pred, y_batch, camera_mask)
 
                 loss.backward()
+
+                if i % 20 == 0:
+                    max_grad = 0.0
+                    min_grad = float('inf')
+                    for p in model.parameters():
+                        if p.grad is not None:
+                            g = p.grad.abs().max().item()
+                            max_grad = max(max_grad, g)
+                            min_grad = min(min_grad, g)
+                    logger.info(f"[{city_id}] Grad range: min={min_grad:.2e}, max={max_grad:.2e}")
+
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
                 train_loss += loss.item()
@@ -293,26 +377,10 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
                     "camera_mask": camera_mask.cpu().tolist(),  # На CPU для сериализации
                     "scaler": scaler,
                     "time_steps": time_steps,
-                    "sigma": sigma
+                    "augment_used": augment,
+                    "augment_config": aug_cfg if augment else None
                 })
-
-                # Гарантированно сохраняем модель, если файл ещё не создан
-                if not os.path.exists(model_path):
-                    logger.warning(f"Model not saved during training, saving final model to {model_path}")
-                    model_cpu = model.cpu()
-                    save_model_atomic(model_cpu, model_path, metadata={
-                        "city_id": city_id,
-                        "epoch": epoch + 1,
-                        "best_val_loss": float(best_val_loss),
-                        "best_val_mae": float(best_val_mae),
-                        "best_val_rmse": float(val_rmse),
-                        "best_val_mape": float(val_mape),
-                        "nodes_order": nodes_order,
-                        "camera_mask": camera_mask.cpu().tolist(),
-                        "scaler": scaler,
-                        "time_steps": time_steps,
-                        "sigma": sigma
-                    })
+                logger.info(f"New best model saved at epoch {epoch+1}")
 
                 # Возвращаем модель на GPU если нужно продолжать обучение
                 model = model.to(device)
@@ -324,14 +392,32 @@ def train(city_id: int, force_retrain: bool = False) -> Dict:
                     logger.info(f"   Best: loss={best_val_loss:.4f}, mae={best_val_mae:.3f}")
                     break
         
+         # ===== ГАРАНТИРОВАННОЕ СОХРАНЕНИЕ В КОНЦЕ =====
+        # Если early stopping сработал до первого сохранения или модель не сохранилась
+        if not os.path.exists(str(model_path)):
+            logger.warning("Model file not found after training. Saving final state...")
+            model_cpu = model.cpu()
+            save_model_atomic(model_cpu, model_path, metadata={
+                "city_id": city_id,
+                "epoch": epoch + 1,
+                "best_val_loss": float(best_val_loss),
+                "best_val_mae": float(best_val_mae),
+                "nodes_order": nodes_order,
+                "camera_mask": camera_mask.cpu().tolist(),
+                "scaler": scaler,
+                "time_steps": time_steps,
+                "sigma": sigma,
+                "augment_used": augment, "augment_config": aug_cfg if augment else None
+            })
+
         return {
             "status": 'SUCCESS',
             "best_val_loss": float(best_val_loss),
+            "best_val_mae": float(best_val_mae),
             "epochs_trained": epoch + 1,
-            "epochs_trained": epoch + 1,
-            "best_val_loss": float(best_val_loss),
             "num_nodes": num_nodes,
             "model_path": model_path,
+            "augment_used": augment,
             "message": f'Training completed for city {city_id}'
         }
         

@@ -1,8 +1,10 @@
 import os
 import traceback
+import logging
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from typing import Dict
-from datetime import datetime
+from typing import Dict, Optional
+from datetime import datetime, timedelta
+import asyncio
 
 import torch
 import numpy as np
@@ -19,10 +21,35 @@ from services.metrics import calculate_metrics
 from services.data_preprocessor import DataPreprocessor
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ml", tags=["ML Prediction"])
 
 # In-memory хранилище задач (простое, без singleton)
 training_jobs: Dict[str, Dict] = {}
+_training_stop_flags: Dict[str, bool] = {}
+
+
+# ===== Авто-очистка старых задач (запускается при старте) =====
+@router.on_event("startup")
+async def _startup_cleanup():
+    """Фоновая задача очистки завершённых джобов старше 24 часов"""
+    asyncio.create_task(_cleanup_old_jobs())
+
+
+async def _cleanup_old_jobs(max_age_hours: int = 24, check_interval: int = 1800):
+    while True:
+        await asyncio.sleep(check_interval)
+        cutoff = datetime.now() - timedelta(hours=max_age_hours)
+        to_delete = [
+            jid for jid, job in training_jobs.items()
+            if job["status"] in ("success", "failed", "cancelled")
+            and datetime.fromisoformat(job["updated_at"]) < cutoff
+        ]
+        for jid in to_delete:
+            del training_jobs[jid]
+            _training_stop_flags.pop(jid, None)
+        if to_delete:
+            logger.info(f"🧹 Cleaned up {len(to_delete)} old training jobs")
 
 
 
@@ -55,11 +82,13 @@ def train_manual(req: TrainingRequest, background_tasks: BackgroundTasks):
         "job_id": job_id,
         "city_id": req.city_id,
         "status": "queued",
+        "progress": 0.0,
         "created_at": datetime.now().isoformat()
     }
     
     # Запускаем обучение в фоне (не блокируем ответ)
-    background_tasks.add_task(_run_training_task, req.city_id, job_id, req.force_retrain)
+    background_tasks.add_task(_run_training_task, req.city_id, job_id, 
+        req.force_retrain, req.augment)
     
     return {
         "job_id": job_id,
@@ -69,7 +98,8 @@ def train_manual(req: TrainingRequest, background_tasks: BackgroundTasks):
     }
 
 
-def _run_training_task(city_id: int, job_id: str, force_retrain: bool):
+def _run_training_task(city_id: int, job_id: str, force_retrain: bool,
+    augment: bool = True, augment_config: Optional[Dict] = None):
     """Внутренняя задача обучения"""
     import sys
     print(f"!!! [TASK START] job={job_id}, city={city_id} !!!", flush=True, file=sys.stderr)
@@ -78,7 +108,8 @@ def _run_training_task(city_id: int, job_id: str, force_retrain: bool):
         training_jobs[job_id]["status"] = "running"
         training_jobs[job_id]["updated_at"] = datetime.now().isoformat()
         
-        result = train(city_id, force_retrain=force_retrain)
+        result = train(city_id, force_retrain=force_retrain, 
+            augment=augment)
         
         training_jobs[job_id].update({
             "status": "success" if result["status"] == "SUCCESS" else "failed",

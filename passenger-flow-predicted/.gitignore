@@ -11,6 +11,8 @@ __pycache__/
 .env.production 
 .env.development
 
+/result/models
+
 # Distribution / packaging
 .Python
 build/

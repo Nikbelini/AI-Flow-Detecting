@@ -21,57 +21,60 @@ engine = create_engine(DB_URL, pool_pre_ping=True)
 
 
 def load_stop_history(city_id: int, min_rows: int = 40, max_rows: int = 50, use_csv_fallback: bool = True) -> pd.DataFrame:
-    """Загружает историю остановок с колонкой has_camera, сэмплируя по 1-4 записи на остановку"""
+    """Загружает историю остановок, сэмплируя по stop_id"""
     
     query = text("""
         SELECT 
             sh.address, 
             sh.count, sh.velocity, sh.load, sh.datetime,
-            s.id as stop_id,
-            s.lat, s.lng
+            sh.stop_id,
+            COALESCE(sh.lat, s.lat) as lat,
+            COALESCE(sh.lng, s.lng) as lng
         FROM stops_history sh
-        LEFT JOIN stops s 
-            ON s.address = sh.address 
-            AND s.city_id = sh.city_id
+        LEFT JOIN stops s ON s.id = sh.stop_id
         WHERE sh.city_id = :city_id
-        ORDER BY sh.id, sh.datetime DESC
+        ORDER BY sh.stop_id NULLS LAST, sh.datetime DESC
     """)
     
-    # Пробуем БД
     try:
         df = pd.read_sql(query, engine, params={"city_id": city_id})
         if not df.empty:
-            # Логирование: сколько записей "размножилось" из-за дублей адресов
             original_count = df['address'].nunique()
             expanded_count = len(df)
             if expanded_count > original_count:
-                logger.info(f"Expanded {original_count} addresses → {expanded_count} rows (ambiguous addresses resolved by duplication)")
+                logger.info(f"Expanded {original_count} addresses → {expanded_count} rows")
             
-            # Сэмплируем по stop_id (физическая остановка), а не по address!
             sampled_dfs = []
-            for stop_id, group in df.groupby("stop_id"):
-                n_samples = random.randint(min_rows, max_rows)
-                # Берём последние (свежие) записи для этой остановки
-                sampled_dfs.append(group.head(n_samples))
+            
+            # Записи С stop_id — группируем по stop_id
+            if df["stop_id"].notna().any():
+                for stop_id, group in df[df["stop_id"].notna()].groupby("stop_id"):
+                    n_samples = random.randint(min_rows, max_rows)
+                    sampled_dfs.append(group.head(n_samples))
+            
+            # ⚡ Записи БЕЗ stop_id — fallback на (address, lat, lng)
+            if df["stop_id"].isna().any():
+                fallback_cols = ["address", "lat", "lng"]
+                for key, group in df[df["stop_id"].isna()].groupby(fallback_cols, dropna=False):
+                    n_samples = random.randint(min_rows, max_rows)
+                    sampled_dfs.append(group.head(n_samples))
             
             df_sampled = pd.concat(sampled_dfs, ignore_index=True)
             logger.info(f"DB: loaded {len(df_sampled)} rows (sampled {min_rows}-{max_rows}/stop_id) for city {city_id}")
             logger.info(f"   - Unique addresses: {df_sampled['address'].nunique()}")
             logger.info(f"   - Unique stop_id: {df_sampled['stop_id'].nunique()}")
-            logger.info(f"   - stop_id range: {df_sampled['stop_id'].min()} – {df_sampled['stop_id'].max()}")
             return _ensure_schema(df_sampled)
             
     except Exception as exception:
         logger.warning(f"DB connection failed: {exception}")
     
-    # Фоллбэк на CSV (с тем же сэмплированием)
+    # Фоллбэк на CSV
     if use_csv_fallback:
         df = _load_csv_fallback(city_id)
         if not df.empty:
-            # Для CSV та же логика: если есть stop_id — группируем по нему
-            group_col = "stop_id" if "stop_id" in df.columns else "address"
+            group_col = "stop_id" if "stop_id" in df.columns and df["stop_id"].notna().any() else ["address", "lat", "lng"]
             sampled_dfs = []
-            for group_key, group in df.groupby(group_col):
+            for key, group in df.groupby(group_col if isinstance(group_col, list) else group_col, dropna=False):
                 n_samples = random.randint(min_rows, max_rows)
                 sampled_dfs.append(group.head(n_samples))
             df_sampled = pd.concat(sampled_dfs, ignore_index=True)

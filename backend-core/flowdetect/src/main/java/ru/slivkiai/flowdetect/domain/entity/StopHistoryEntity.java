@@ -3,7 +3,7 @@ package ru.slivkiai.flowdetect.domain.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.sql.Timestamp;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -21,6 +21,10 @@ public class StopHistoryEntity {
     @JoinColumn(name = "city_id", nullable = false)
     private CityEntity city;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "stop_id", nullable = true)
+    private StopEntity stop;
+
     @Column(nullable = false, length = 32)
     private String address;
 
@@ -32,6 +36,12 @@ public class StopHistoryEntity {
 
     @Column(nullable = false)
     private Integer load;
+
+    @Column(precision = 9, scale = 6)
+    private BigDecimal lat;
+
+    @Column(precision = 9, scale = 6)
+    private BigDecimal lng;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime datetime;

@@ -5,7 +5,7 @@ import numpy as np
 
 def build_sequences(
     df: pd.DataFrame,
-    nodes_order: List[str],
+    nodes_order: List[int],
     time_steps: int = 12,
     feature: str = 'count'
 ) -> Tuple[torch.Tensor, torch.Tensor]:
