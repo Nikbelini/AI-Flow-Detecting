@@ -1,29 +1,83 @@
 from fastapi import APIRouter, Query
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from database.repository import PostgresRepository
 from services.route_planner.route_service import RoutePlannerService
+from domain.schemas import RoutePlanRequestDto, RoutePlanResponseDto, RouteSegmentDto
 
 router = APIRouter(prefix="/routes", tags=["Routes"])
 
 repository = PostgresRepository()
 
 
-@router.get("/build")
-def build_route(
-    city_id: int = Query(...),
-    start_stop_id: int = Query(...),
-    goal_stop_id: int = Query(...),
-    dt_str: str = Query(default_factory=lambda: datetime.now().isoformat()),
-    mode: str = Query("FASTEST", description="FASTEST | LESS_CROWDED | MIN_TRANSFERS")
-):
-    
-    service = RoutePlannerService(repository)
+# Смещение Самары: UTC+4
+SAMARA_TZ = timezone(timedelta(hours=4))
 
-    return service.build_route(
-        city_id=city_id,
-        start_stop_id=start_stop_id,
-        goal_stop_id=goal_stop_id,
-        dt_str=dt_str,
-        mode=mode
-    )
+def get_samara_now() -> str:
+    return datetime.now(SAMARA_TZ).strftime("%Y-%m-%dT%H:%M:%S")
+
+def normalize_dt(dt: str) -> str:
+    if "T" not in dt:
+        return dt + "T23:59:59"
+    return dt
+
+@router.post("/build", response_model=RoutePlanResponseDto)
+async def build_route(request: RoutePlanRequestDto): 
+    """
+    Построение оптимального маршрута между двумя остановками.
+    Принимает JSON body с camelCase или snake_case полями.
+    """
+    try:
+        # Валидация
+        if request.startStopId == request.goalStopId:
+            raise ValueError("Стартовая и конечная остановки не могут совпадать")
+        
+        # Нормализация даты
+        dt_str = normalize_dt(request.datetime)
+        
+        # Вызов сервиса маршрутизации
+        service = RoutePlannerService(repository)
+        
+        result = service.build_route(
+            city_id=request.cityId,
+            start_stop_id=request.startStopId,
+            goal_stop_id=request.goalStopId,
+            dt_str=dt_str,
+            mode=request.mode.value   
+        )
+        
+        # Формируем ответ
+        return RoutePlanResponseDto(
+            status="SUCCESS",
+            mode=request.mode.value,
+            total_cost_minutes=result.get("total_cost_minutes", 0),
+            stops=[request.startStopId, request.goalStopId],
+            routes=result.get("routes", [None, None]),
+            segments=[
+                RouteSegmentDto(**seg) if isinstance(seg, dict) else seg
+                for seg in result.get("segments", [])
+            ],
+            error=None
+        )
+        
+    except ValueError as exception:
+        return RoutePlanResponseDto(
+            status="ERROR",
+            mode=request.mode.value,
+            total_cost_minutes=0,
+            stops=[],
+            routes=[],
+            segments=[],
+            error=str(exception)
+        )
+    except Exception as exception:
+        print(f"Critical error in build_route: {exception}", exc_info=True)
+        return RoutePlanResponseDto(
+            status="ERROR",
+            mode=request.mode.value if request else "UNKNOWN",
+            total_cost_minutes=0,
+            stops=[],
+            routes=[],
+            segments=[],
+            error=f"Internal server error: {str(exception)}"
+        )

@@ -59,3 +59,6 @@ class TimeCorfficientService:
         khour = self.hour_coeff.get(dt.hour, 1.0)
         kday = self.day_coeff.get(dt.weekday(), 1.0)
         kseason = self.season_coeff.get(dt.month, 1.0)
+
+        Tt = khour * kday * kseason
+        return Tt

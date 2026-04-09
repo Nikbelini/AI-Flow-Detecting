@@ -29,6 +29,7 @@ const NavigationHeader: React.FC = () => {
   const getActiveKey = () => {
     if (location.pathname === '/map') return 'map';
     if (location.pathname === '/analytics') return 'analytics';
+    if (location.pathname === '/route-build') return 'route-build';
     if (location.pathname === '/admin') return 'admin';
     return 'map';
   };
@@ -39,6 +40,7 @@ const NavigationHeader: React.FC = () => {
   const navItems = [
     { key: 'map', label: 'Карта', color: 'primary', path: '/map' },
     { key: 'analytics', label: 'Аналитика', color: 'info', path: '/analytics' },
+    { key: 'route-build', label: 'Построение маршрута', color: 'info', path: '/route-build' },
     ...(user?.role === 'ADMIN' ? [
       { key: 'admin', label: 'Админ-панель', color: 'warning', path: '/admin' }
     ] : [])

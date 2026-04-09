@@ -14,6 +14,7 @@ import LogoutCallback from "./pages/LogoutCallback";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import RegistrationPage from "./pages/RegistrationPage";
 import AdminPanel from "./pages/AdminPanel";
+import OptimalRoutePage from "./pages/Map/OptimalRoutePage";
 
 const App = () => {
     return (
@@ -56,6 +57,14 @@ const App = () => {
                       <AdminPanel />
                     </ProtectedRoute>
                   } />
+
+                <Route path="/route-build" element={
+                    <ProtectedRoute allowedRoles={['ADMIN', 'USER']}>
+                        <MainLayout>
+                            <OptimalRoutePage />
+                        </MainLayout>
+                    </ProtectedRoute>
+                } />
 
                 <Route path="/profile" element={
                     <ProtectedRoute>

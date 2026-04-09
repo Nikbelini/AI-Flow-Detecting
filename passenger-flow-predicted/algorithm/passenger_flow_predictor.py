@@ -62,7 +62,7 @@ class PassengerFlowGraphPredictor:
         city_center = self.repository.get_city_center(city_id)
 
         Ci = self.calc_Ci(target, city_center)
-        Ri = self. calc_Ri(stop_id)
+        Ri = self.calc_Ri(stop_id)
         Hi = self.calc_transfer_Hi(stop_id)
         Tt = self.time_service.get_T(dt_str)
 

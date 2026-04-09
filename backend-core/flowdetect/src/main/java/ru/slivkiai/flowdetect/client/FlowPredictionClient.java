@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import ru.slivkiai.flowdetect.dto.PredictionRequestDto;
 import ru.slivkiai.flowdetect.dto.PredictionResponseDto;
+import ru.slivkiai.flowdetect.dto.RoutePlanRequestDto;
+import ru.slivkiai.flowdetect.dto.RoutePlanResponseDto;
 import ru.slivkiai.flowdetect.dto.TrainingJobStatus;
 import ru.slivkiai.flowdetect.dto.TrainingRequest;
 import ru.slivkiai.flowdetect.dto.TrainingResponse;
@@ -32,4 +34,8 @@ public interface FlowPredictionClient {
         @RequestParam(value = "dt", required = false) String dt,
         @RequestParam(value = "neighbors_limit", defaultValue = "15") Integer neighborsLimit
     );
+
+    @PostMapping(value = "/routes/build", consumes = "application/json", produces = "application/json")
+    RoutePlanResponseDto buildOptimalRoute(@RequestBody RoutePlanRequestDto request);
+
 }

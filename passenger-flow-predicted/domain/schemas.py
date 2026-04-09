@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from datetime import datetime
 from enum import Enum
 
@@ -87,3 +87,44 @@ class PassengerFlowRequest(BaseModel):
     method: str
     neighbors_used: int
     debug: Optional[dict] = None
+
+
+
+# ===== Построение маршрута
+# ===== ENUM для режима =====
+class RouteMode(str, Enum):
+    FASTEST = "FASTEST"
+    LESS_CROWDED = "LESS_CROWDED"
+    MIN_TRANSFERS = "MIN_TRANSFERS"
+
+# ===== DTO ЗАПРОСА (Pydantic модель для JSON body) =====
+class RoutePlanRequestDto(BaseModel):
+    cityId: int = Field(..., gt=0, alias="city_id")       
+    datetime: str = Field(..., description="ISO 8601 datetime")
+    startStopId: int = Field(..., alias="start_stop_id")   
+    goalStopId: int = Field(..., alias="goal_stop_id") 
+    mode: RouteMode = Field(default=RouteMode.FASTEST)
+
+    class Config:
+        populate_by_name = True  
+        allow_population_by_field_name = True
+
+# ===== DTO СЕГМЕНТА =====
+class RouteSegmentDto(BaseModel):
+    from_stop: int
+    to_stop: int
+    route_id: Optional[int] = None
+    dist_km: float
+    travel_time_min: float
+    load_from: int
+    load_to: int
+
+# ===== DTO ОТВЕТА =====
+class RoutePlanResponseDto(BaseModel):
+    status: Literal["SUCCESS", "ERROR"] = "SUCCESS"
+    mode: str
+    total_cost_minutes: float
+    stops: List[int]
+    routes: List[Optional[int]]
+    segments: List[RouteSegmentDto]
+    error: Optional[str] = None
