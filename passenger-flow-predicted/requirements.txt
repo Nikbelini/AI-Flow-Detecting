@@ -54,9 +54,9 @@ SQLAlchemy==2.0.44
 starlette==0.50.0
 sympy==1.14.0
 threadpoolctl==3.6.0
-torch==2.11.0
-torchaudio==2.11.0
-torchvision==0.26.0
+torch==2.11.0+cu128
+torchaudio==2.11.0+cu128
+torchvision==0.26.0+cu128
 tqdm==4.67.3
 typing-inspection==0.4.2
 typing_extensions==4.15.0
