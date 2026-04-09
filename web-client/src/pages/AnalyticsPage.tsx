@@ -783,7 +783,7 @@ const AnalyticsPage: React.FC = () => {
                           disabled={index === 0}
                           title="Переместить выше"
                         >
-                          <ChevronUp size={14} />
+                          ⬆️
                         </button>
                         <button
                           className="action-btn"
@@ -791,14 +791,14 @@ const AnalyticsPage: React.FC = () => {
                           disabled={index === selectedStopsForRoute.length - 1}
                           title="Переместить ниже"
                         >
-                          <ChevronDown size={14} />
+                          ⬇️
                         </button>
                         <button
                           className="action-btn remove"
                           onClick={() => removeStopFromRoute(item.id)}
                           title="Удалить из маршрута"
                         >
-                          <X size={14} />
+                          ❌
                         </button>
                       </div>
                     </div>
