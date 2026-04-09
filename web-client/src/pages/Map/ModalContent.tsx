@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 import './ModalContent.css';
 import ForecastPanel from './ForecastPanel';
 import HlsPlayer from './HlsPlayer';
+import { useStops } from '../../hooks/api/useStops';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, LineChart, Line, Area, ComposedChart
+} from 'recharts';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface Marker {
   id: number;
@@ -26,12 +32,14 @@ interface ModalContentProps {
   marker: Marker;
   isOpen: boolean;
   onClose: () => void;
+  onStopDeleted?: (stopId: number) => void;
 }
 
-const ModalContent: React.FC<ModalContentProps> = ({ 
-  marker, 
-  isOpen, 
-  onClose 
+const ModalContent: React.FC<ModalContentProps> = ({
+  marker,
+  isOpen,
+  onClose,
+  onStopDeleted
 }) => {
   const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'stream' | 'forecast'>('info');
   const [lastUpdated, setLastUpdated] = useState(new Date());
@@ -42,6 +50,10 @@ const ModalContent: React.FC<ModalContentProps> = ({
     autoRefresh: true,
     showMiniChart: true
   });
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const { deleteStop } = useStops();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (isOpen) {
@@ -82,11 +94,43 @@ const ModalContent: React.FC<ModalContentProps> = ({
   };
 
   const handleOpenForecast = () => {
-    handleForecastStateChange({ 
-      showForecast: true, 
-      isForecastOpen: true 
+    handleForecastStateChange({
+      showForecast: true,
+      isForecastOpen: true
     });
     setActiveTab('forecast');
+  };
+
+  // Удаление остановки
+  const handleDeleteStop = async () => {
+    if (!marker.id) {
+      console.error('No stop ID');
+      return;
+    }
+
+    if (!window.confirm(`Удалить остановку "${marker.address}"? Это действие нельзя отменить.`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await deleteStop(marker.id);
+      
+      // Принудительно инвалидируем кэш остановок
+      queryClient.invalidateQueries({ queryKey: ['stops'] });
+      queryClient.invalidateQueries({ queryKey: ['stops', 'city', marker.cityId] });
+      
+      // Уведомляем родителя
+      onStopDeleted?.(marker.id);
+      
+      // Закрываем модалку
+      onClose();
+    } catch (error) {
+      console.error('Stop delete error:', error);
+      alert('Ошибка при удалении остановки');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -95,7 +139,7 @@ const ModalContent: React.FC<ModalContentProps> = ({
     <>
       {/* Overlay */}
       <div className="modal-overlay" onClick={onClose} />
-      
+
       {/* Modal Container */}
       <div className="modal-container">
         {/* Modal Header */}
@@ -121,17 +165,17 @@ const ModalContent: React.FC<ModalContentProps> = ({
               </div>
             </div>
           </div>
-          
+
           <div className="header-right">
-            <button 
-              className="icon-btn" 
+            <button
+              className="icon-btn"
               title="Обновить данные"
               onClick={() => setLastUpdated(new Date())}
             >
               <span className="btn-icon">🔄</span>
             </button>
-            <button 
-              className="icon-btn" 
+            <button
+              className="icon-btn"
               title="Развернуть на весь экран"
               onClick={() => {
                 if (document.fullscreenElement) {
@@ -143,9 +187,17 @@ const ModalContent: React.FC<ModalContentProps> = ({
             >
               <span className="btn-icon">📺</span>
             </button>
-            <button 
-              className="icon-btn close-btn" 
-              onClick={onClose} 
+            <button
+              className="icon-btn delete-stop-btn"
+              title="Удалить остановку"
+              onClick={handleDeleteStop}
+              disabled={isDeleting}
+            >
+              <span className="btn-icon">{isDeleting ? '⏳' : '🗑️'}</span>
+            </button>
+            <button
+              className="icon-btn close-btn"
+              onClick={onClose}
               title="Закрыть"
             >
               <span className="btn-icon">✕</span>
@@ -155,21 +207,21 @@ const ModalContent: React.FC<ModalContentProps> = ({
 
         {/* Tabs */}
         <div className="modal-tabs">
-          <button 
+          <button
             className={`tab-btn ${activeTab === 'info' ? 'active' : ''}`}
             onClick={() => setActiveTab('info')}
           >
             <span className="tab-icon">📋</span>
             <span className="tab-text">Информация</span>
           </button>
-          <button 
+          <button
             className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`}
             onClick={() => setActiveTab('stats')}
           >
             <span className="tab-icon">📊</span>
             <span className="tab-text">Статистика</span>
           </button>
-          <button 
+          <button
             className={`tab-btn ${activeTab === 'forecast' ? 'active' : ''}`}
             onClick={handleOpenForecast}
           >
@@ -180,7 +232,7 @@ const ModalContent: React.FC<ModalContentProps> = ({
             )}
           </button>
           {marker.url && (
-            <button 
+            <button
               className={`tab-btn ${activeTab === 'stream' ? 'active' : ''}`}
               onClick={() => setActiveTab('stream')}
             >
@@ -210,7 +262,7 @@ const ModalContent: React.FC<ModalContentProps> = ({
                   <span className="description-icon">💡</span>
                   {getLoadDescription(marker.load)}
                 </p>
-                
+
                 <div className="load-meter">
                   <div className="meter-labels">
                     <span className="meter-label">🟢 Свободно</span>
@@ -218,9 +270,9 @@ const ModalContent: React.FC<ModalContentProps> = ({
                     <span className="meter-label">🔴 Перегружено</span>
                   </div>
                   <div className="meter-bar">
-                    <div 
-                      className="meter-fill" 
-                      style={{ 
+                    <div
+                      className="meter-fill"
+                      style={{
                         width: `${marker.load * 10}%`,
                         backgroundColor: loadToColor(marker.load)
                       }}
@@ -266,7 +318,7 @@ const ModalContent: React.FC<ModalContentProps> = ({
                     <span className="section-icon">🔮</span>
                     Быстрый прогноз
                   </h3>
-                  <button 
+                  <button
                     className="forecast-btn"
                     onClick={handleOpenForecast}
                   >
@@ -316,6 +368,7 @@ const ModalContent: React.FC<ModalContentProps> = ({
           {/* Статистика */}
           {activeTab === 'stats' && (
             <div className="tab-content stats-tab">
+              {/* Дополнительные графики */}
               <div className="charts-grid">
                 <div className="chart-card">
                   <h3>
@@ -335,7 +388,7 @@ const ModalContent: React.FC<ModalContentProps> = ({
                 <div className="chart-card">
                   <h3>
                     <span className="section-icon">🥧</span>
-                    Распределение по часам
+                    Распределение по дням
                   </h3>
                   <div className="chart-placeholder">
                     <div className="pie-chart">
@@ -425,23 +478,22 @@ const ModalContent: React.FC<ModalContentProps> = ({
             <div className="tab-content stream-tab">
               <div className="stream-header">
                 <div className="stream-header">
-                <h3>🎥 Прямая трансляция с остановки</h3>
-              </div>
+                  <h3>🎥 Прямая трансляция с остановки</h3>
+                </div>
 
                 <div className="stream-container" style={{ width: '100%', height: '480px' }}>
-                {/* Вставляем рабочий HLS-плеер */}
-                <HlsPlayer
-                  src={marker.url}
-                  autoPlay
-                  muted
-                  controls
-                  playsInline
-                  style={{ width: '100%', height: '100%', backgroundColor: 'black' }}
-                  onError={(e) => console.error('HLS error:', e)}
-                />
+                  <HlsPlayer
+                    src={marker.url}
+                    autoPlay
+                    muted
+                    controls
+                    playsInline
+                    style={{ width: '100%', height: '100%', backgroundColor: 'black' }}
+                    onError={(e) => console.error('HLS error:', e)}
+                  />
+                </div>
               </div>
-              </div>
-              
+
               <div className="stream-container">
                 <div className="video-placeholder">
                   <div className="video-overlay">
@@ -490,35 +542,6 @@ const ModalContent: React.FC<ModalContentProps> = ({
             </div>
           )}
         </div>
-
-        {/* Modal Footer
-        <div className="modal-footer">
-          <div className="footer-actions">
-            <button 
-              className={`action-btn ${activeTab === 'forecast' ? 'secondary' : 'primary'}`}
-              onClick={handleOpenForecast}
-            >
-              <span className="btn-icon">📊</span>
-              <span className="btn-text">
-                {activeTab === 'forecast' ? 'Скрыть прогноз' : 'Полный прогноз'}
-              </span>
-            </button>
-            <button className="action-btn secondary">
-              <span className="btn-icon">📈</span>
-              <span className="btn-text">Сравнить с другими</span>
-            </button>
-            <button className="action-btn secondary">
-              <span className="btn-icon">🚌</span>
-              <span className="btn-text">Маршруты через остановку</span>
-            </button>
-          </div>
-          <div className="footer-info">
-            <span className="coords">
-              <span className="coord-icon">📍</span>
-              Координаты: {marker.lat.toFixed(4)}, {marker.lng.toFixed(4)}
-            </span>
-          </div>
-        </div> */}
       </div>
     </>
   );
