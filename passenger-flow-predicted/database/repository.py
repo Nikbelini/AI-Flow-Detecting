@@ -180,3 +180,47 @@ class PostgresRepository:
             edges.append((int(row["from_stop"]), int(row["to_stop"])))
 
         return edges
+    
+
+    def get_transport_edges(self, city_id: int) -> list[dict]:
+        """
+        Возвращает рёбра графа для построения маршрута.
+        Каждый элемент словаря:
+        {
+            "from_stop_id": int,
+            "to_stop_id": int,
+            "route_id": int,
+            "dist_km": float,           # расстояние между остановками, пример 1.0
+            "travel_time_min": float     # примерное время движения
+        }
+        """
+        query = text("""
+            SELECT rs1.stop_id AS from_stop_id,
+                   rs2.stop_id AS to_stop_id,
+                   r.id AS route_id
+            FROM route_stops rs1
+            JOIN route_stops rs2
+              ON rs1.route_id = rs2.route_id
+             AND rs1.direction = rs2.direction
+             AND rs2.order_in_route = rs1.order_in_route + 1
+            JOIN routes r ON r.id = rs1.route_id
+            JOIN stops s ON s.id = rs1.stop_id
+            WHERE r.is_active = true
+              AND rs1.is_active = true
+              AND rs2.is_active = true
+              AND s.city_id = :city_id
+        """)
+
+        df = pd.read_sql(query, self.engine, params={"city_id": city_id})
+
+        edges: list[dict] = []
+        for _, row in df.iterrows():
+            edges.append({
+                "from_stop_id": int(row["from_stop_id"]),
+                "to_stop_id": int(row["to_stop_id"]),
+                "route_id": int(row["route_id"]),
+                "dist_km": 1.0,          # можно позже заменить реальным расстоянием
+                "travel_time_min": 1.0   # можно заменить на реальное время по маршруту
+            })
+
+        return edges

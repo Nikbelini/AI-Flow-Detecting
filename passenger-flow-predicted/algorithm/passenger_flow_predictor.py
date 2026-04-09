@@ -74,9 +74,13 @@ class PassengerFlowGraphPredictor:
             neighbor_stop = stops_map.get(nid)
             if neighbor_stop is None:
                 continue
-        
+
             Wij = self.calc_Wij(target, neighbor_stop)
-            neighbor_data.append(nid, neighbor_stop, Wij)
+            neighbor_data.append((nid, neighbor_stop, Wij))  # ← Исправлено: кортеж из 3 элементов
+
+        # берём топ K по Wij
+        neighbor_data.sort(key=lambda x: x[2], reverse=True)
+        neighbor_data = neighbor_data[:neighbors_limit]
         
         # берём топ K по Wij
         neighbor_data.sort(key=lambda x: x[2], reverse=True)

@@ -1,9 +1,11 @@
 from datetime import datetime
-
+from zoneinfo import ZoneInfo
 
 class TimeCorfficientService:
 
     def __init__(self):
+        self.tz = ZoneInfo("Europe/Samara")
+        
         self.hour_coeff = {
             # ночь
             0: 0.3, 1: 0.3, 2: 0.3, 3: 0.3, 4: 0.4, 5: 0.5,
@@ -34,11 +36,26 @@ class TimeCorfficientService:
             9: 1.1, 10: 1.05, 11: 1.0   # autumn
         }
 
-        def get_T(self, dt_str: str) -> float:
+    def parse_dt(self, dt_str: str | None) -> datetime:
+        """
+        Парсит строку в datetime с учётом точки/дефиса.
+        Если не удалось — возвращает текущий момент с tz.
+        """
+        if not dt_str:
+            return datetime.now(self.tz)
+
+        try:
+            # меняем точки на дефисы
+            dt_str = dt_str.replace('.', '-')
             dt = datetime.fromisoformat(dt_str)
+            # привязываем к нужному часовому поясу
+            return dt.replace(tzinfo=self.tz)
+        except Exception:
+            return datetime.now(self.tz)
 
-            khour = self.hour_coeff.get(dt.hour, 1.0)
-            kday = self.day_coeff.get(dt.weekday(), 1.0)
-            kseason = self.season_coeff.get(dt.month, 1.0)
+    def get_T(self, dt_str: str | None = None) -> float:
+        dt = self.parse_dt(dt_str)
 
-            return khour * kday * kseason
+        khour = self.hour_coeff.get(dt.hour, 1.0)
+        kday = self.day_coeff.get(dt.weekday(), 1.0)
+        kseason = self.season_coeff.get(dt.month, 1.0)

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from api.ml import router as ml_router
 from api.passenger_flow import router as passenger_flow_router
+from api.routes import router as build_route
 
 
 app = FastAPI(
@@ -12,6 +13,7 @@ app = FastAPI(
 
 app.include_router(ml_router)
 app.include_router(passenger_flow_router)
+app.include_router(build_route)
 
 
 # ===== ENDPOINTS =====
