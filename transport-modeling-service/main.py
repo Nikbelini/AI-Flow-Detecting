@@ -68,10 +68,10 @@ async def lifespan(app: FastAPI):
         # await run_import_if_needed(pg_pool)
         from import_osm_data_ul import run_import_if_needed_ul
         await run_import_if_needed_ul(pg_pool)
-        # from import_osm_data_cop import run_import_if_needed_cop
-        # await run_import_if_needed_cop(pg_pool)
-        # from import_osm_data_ekb import run_import_if_needed_e
-        # await run_import_if_needed_ekb(pg_pool)
+        from import_osm_data_kop import run_import_if_needed_kop
+        await run_import_if_needed_kop(pg_pool)
+        from import_osm_data_ekb import run_import_if_needed_ekb
+        await run_import_if_needed_ekb(pg_pool)
         # =========================================
 
         # Инициализация сервисов

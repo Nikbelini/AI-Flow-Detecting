@@ -53,8 +53,8 @@ async def clear_tables_except_city(conn, city_id: int):
     await conn.execute("DELETE FROM routes WHERE city_id = $1", city_id)
     logger.info("   ✅ Очищена routes")
     
-    await conn.execute("DELETE FROM stops WHERE city_id = $1", city_id)
-    logger.info("   ✅ Очищена stops")
+    # await conn.execute("DELETE FROM stops WHERE city_id = $1", city_id)
+    # logger.info("   ✅ Очищена stops")
     
     try:
         import redis
@@ -153,7 +153,7 @@ def parse_osm_xml(xml_path: str) -> Tuple[Dict, Dict]:
     return nodes, relations
 
 
-async def import_osm_data(pool: asyncpg.Pool, xml_path: str = "ul.xml", force_reload: bool = False):
+async def import_osm_data(pool: asyncpg.Pool, xml_path: str = "kop.xml", force_reload: bool = False):
     """Импорт данных из OSM XML файла"""
     
     logger.info("=" * 60)
@@ -209,7 +209,7 @@ async def import_osm_data(pool: asyncpg.Pool, xml_path: str = "ul.xml", force_re
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     RETURNING id
                 """, node['name'], node['lat'], node['lon'],
-                    None, None, None, city_id, "")
+                    1, 1, 1, city_id, "")
                 stop_id_map[node_id] = stop_id
             except Exception as e:
                 logger.warning(f"   ⚠️ Ошибка вставки {node['name']}: {e}")
@@ -272,8 +272,20 @@ async def import_osm_data(pool: asyncpg.Pool, xml_path: str = "ul.xml", force_re
             if node_id not in stop_id_map:
                 continue
             
+            stop_db_id = stop_id_map[node_id]
             address = node['name']
             base_count = random.randint(5, 20)
+
+            # Берём координаты ПРЯМО из XML-узла (гарантия точности)
+            node_lat = node['lat']
+            node_lon = node['lon']
+
+            is_camera_stop = (int(node_id) % 3 == 0)
+
+            if not is_camera_stop:
+                # ПРОПУСКАЕМ генерацию истории для слепых остановок
+                # Они просто не попадут в stops_history → в тензоре будут нули (отсутствие данных)
+                continue
             
             for day in range(HISTORY_DAYS):
                 is_weekend = (day % 7) >= 5
@@ -302,14 +314,26 @@ async def import_osm_data(pool: asyncpg.Pool, xml_path: str = "ul.xml", force_re
                     
                     try:
                         await conn.execute("""
-                            INSERT INTO stops_history (city_id, address, count, velocity, load, datetime)
-                            VALUES ($1, $2, $3, $4, $5, $6)
-                        """, city_id, address, count, velocity, load, dt)
+                            INSERT INTO stops_history 
+                                (city_id, stop_id, address, lat, lng, count, velocity, load, datetime)
+                            VALUES 
+                                ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                        """, 
+                            city_id,
+                            stop_db_id,                            
+                            address,
+                            node_lat,
+                            node_lon,
+                            count,
+                            velocity,
+                            load,
+                            dt
+                        )
                         history_count += 1
                     except Exception as e:
                         pass
                     
-                    if history_count % 10000 == 0 and history_count > 0:
+                    if history_count % 2000 == 0 and history_count > 0:
                         logger.info(f"      Сгенерировано {history_count} записей...")
         
         logger.info(f"   ✅ Сгенерировано {history_count} записей истории")
@@ -331,7 +355,7 @@ async def import_osm_data(pool: asyncpg.Pool, xml_path: str = "ul.xml", force_re
         logger.info("✅ ИМПОРТ ЗАВЕРШЁН УСПЕШНО!")
 
 
-async def run_import_if_needed_cop(pool: asyncpg.Pool):
+async def run_import_if_needed_kop(pool: asyncpg.Pool):
     """
     Проверяет, нужно ли выполнять импорт, и запускает его
     """

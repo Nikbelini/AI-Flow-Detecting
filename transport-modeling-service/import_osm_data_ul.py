@@ -335,7 +335,7 @@ async def import_osm_data(pool: asyncpg.Pool, xml_path: str = "ul.xml", force_re
                     except Exception as e:
                         pass
                     
-                    if history_count % 7000 == 0 and history_count > 0:
+                    if history_count % 2000 == 0 and history_count > 0:
                         logger.info(f"      Сгенерировано {history_count} записей...")
         
         logger.info(f"   ✅ Сгенерировано {history_count} записей истории")

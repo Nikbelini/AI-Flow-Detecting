@@ -20,7 +20,7 @@ CSV_FALLBACK_PATH = BASE_DIR / "data" / "fallback_{city_id}.csv"
 engine = create_engine(DB_URL, pool_pre_ping=True)
 
 
-def load_stop_history(city_id: int, min_rows: int = 40, max_rows: int = 50, use_csv_fallback: bool = True) -> pd.DataFrame:
+def load_stop_history(city_id: int, min_rows: int = 20, max_rows: int = 30, use_csv_fallback: bool = True) -> pd.DataFrame:
     """Загружает историю остановок, сэмплируя по stop_id"""
     
     query = text("""
