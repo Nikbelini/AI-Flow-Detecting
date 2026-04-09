@@ -844,6 +844,8 @@ class SimulationEngine:
                 self._apply_add_stop(modified, mod)
             elif mod.type == ModificationType.ADD_ROUTE:
                 self._apply_add_route(modified, mod)
+            elif mod.type == ModificationType.DELETE_ROUTE:
+                self._apply_delete_route(modified, mod)
             elif mod.type == ModificationType.CHANGE_INTERVAL:
                 self._apply_change_interval(modified, mod)
             elif mod.type == ModificationType.CHANGE_CAPACITY:
@@ -880,6 +882,63 @@ class SimulationEngine:
         if stop_id in network["stops"]:
             network["stops"][stop_id]["capacity"] = new_capacity
             logger.info(f"📦 Остановка {stop_id}: вместимость → {new_capacity}")
+
+    def _apply_delete_route(self, network: Dict, mod: Modification):
+        """
+        Удаление маршрута из сети
+        """
+        route_id = mod.targetId
+        
+        if route_id not in network["routes"]:
+            logger.warning(f"⚠️ Маршрут {route_id} не найден для удаления")
+            return
+        
+        # Сохраняем информацию о маршруте для логирования
+        route_info = network["routes"][route_id]
+        route_number = route_info.get("number", str(route_id))
+        affected_stops = route_info.get("stops", [])
+        
+        # 1. Удаляем маршрут из каждой остановки, которую он обслуживал
+        for stop_id in affected_stops:
+            if stop_id in network["stops"]:
+                # Удаляем маршрут из списка routes у остановки
+                if "routes" in network["stops"][stop_id]:
+                    network["stops"][stop_id]["routes"] = [
+                        r for r in network["stops"][stop_id]["routes"] 
+                        if r.get("route_id") != route_id
+                    ]
+                
+                # Удаляем из stop_routes индекса
+                if stop_id in network["stop_routes"]:
+                    if route_id in network["stop_routes"][stop_id]:
+                        network["stop_routes"][stop_id].remove(route_id)
+                
+                # Пересчитываем теоретическую пропускную способность остановки
+                route_ids = network["stop_routes"].get(stop_id, [])
+                theoretical_capacity = 0
+                for rid in route_ids:
+                    if rid in network["routes"] and rid != route_id:
+                        theoretical_capacity += network["routes"][rid]["capacity_per_hour"]
+                network["stops"][stop_id]["theoretical_capacity"] = theoretical_capacity
+        
+        # 2. Удаляем связи, связанные с этим маршрутом
+        connections_to_remove = []
+        for key, connections in network["stop_connections"].items():
+            # Фильтруем связи, оставляя только от других маршрутов
+            filtered = [c for c in connections if c.get("route_id") != route_id]
+            if filtered:
+                network["stop_connections"][key] = filtered
+            else:
+                connections_to_remove.append(key)
+        
+        for key in connections_to_remove:
+            del network["stop_connections"][key]
+        
+        # 3. Удаляем сам маршрут
+        del network["routes"][route_id]
+        
+        logger.info(f"🗑️ Удалён маршрут {route_id}: {route_number}, затронуто остановок: {len(affected_stops)}")
+
     
     def _calculate_metrics_from_hourly(self, hourly_data: List[Dict], network: Dict) -> Metrics:
         """

@@ -8,6 +8,7 @@ class ModificationType(str, Enum):
     CLOSE_STOP = "close_stop"
     ADD_STOP = "add_stop"
     ADD_ROUTE = "add_route"
+    DELETE_ROUTE = "delete_route"
     CHANGE_INTERVAL = "change_interval"
     CHANGE_CAPACITY = "change_capacity"
 

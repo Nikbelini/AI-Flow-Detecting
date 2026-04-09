@@ -120,7 +120,7 @@ interface SimulationResults {
   modifiedStopMetrics?: Record<number, StopMetricsDetail>;
 }
 
-type ModificationType = 'close_stop' | 'add_stop' | 'change_interval' | 'change_capacity' | 'add_route';
+type ModificationType = 'close_stop' | 'add_stop' | 'change_interval' | 'change_capacity' | 'add_route' | 'delete_route';
 
 interface Modification {
   id: string;
@@ -196,7 +196,7 @@ const SimulationPage: React.FC = () => {
   const [searchRouteQuery, setSearchRouteQuery] = useState('');
   const [filteredRouteIds, setFilteredRouteIds] = useState<Set<number>>(new Set());
 
-  // ✅ ИСПРАВЛЕНО: используем реактивные данные из хуков
+  // Используем реактивные данные из хуков
   const { 
     getStops, 
     stops: stopsFromQuery,
@@ -209,10 +209,10 @@ const SimulationPage: React.FC = () => {
     isLoading: routesLoading 
   } = useRoutes();
 
-  // ✅ Флаг для предотвращения двойной загрузки
+  // Флаг для предотвращения двойной загрузки
   const initialLoadDone = useRef(false);
 
-  // ✅ Реактивное обновление остановок из React Query
+  // Реактивное обновление остановок из React Query
   useEffect(() => {
     if (stopsFromQuery && stopsFromQuery.length > 0) {
       const stopsWithCoords: ExtendedStop[] = stopsFromQuery.map((stop: any) => ({
@@ -239,7 +239,7 @@ const SimulationPage: React.FC = () => {
     }
   }, [stopsFromQuery, CITY_ID]);
 
-  // ✅ Реактивное обновление маршрутов из React Query
+  // Реактивное обновление маршрутов из React Query
   useEffect(() => {
     if (routesFromQuery && routesFromQuery.length > 0) {
       const routesForMap: MapRoute[] = routesFromQuery.map((route: any) => {
@@ -262,7 +262,7 @@ const SimulationPage: React.FC = () => {
     }
   }, [routesFromQuery, cityStops]);
 
-  // ✅ Проверка здоровья сервиса при монтировании
+  // Проверка здоровья сервиса при монтировании
   useEffect(() => {
     const checkServiceHealth = async () => {
       try {
@@ -277,17 +277,16 @@ const SimulationPage: React.FC = () => {
     checkServiceHealth();
   }, []);
 
-  // ✅ Триггер загрузки данных (один раз при монтировании)
+  // Триггер загрузки данных (один раз при монтировании)
   useEffect(() => {
     if (!initialLoadDone.current) {
       initialLoadDone.current = true;
-      // Вызываем getStops и getAllRoutes - они заполнят кэш React Query
       getStops().catch(console.error);
       getAllRoutes().catch(console.error);
     }
   }, [getStops, getAllRoutes]);
 
-  // ✅ Загрузка маршрутов из modeling-service (дополнительно)
+  // Загрузка маршрутов из modeling-service (дополнительно)
   useEffect(() => {
     const loadRoutesFromModelingService = async () => {
       if (!serviceAvailable) return;
@@ -320,7 +319,6 @@ const SimulationPage: React.FC = () => {
     loadRoutesFromModelingService();
   }, [serviceAvailable]);
 
-  // ✅ Показываем индикатор загрузки только при первой загрузке
   const isLoading = (stopsLoading || routesLoading) && cityStops.length === 0 && cityRoutes.length === 0;
 
   const generateRoutePath = (stops: any[], allStops: ExtendedStop[]): [number, number][] => {
@@ -479,7 +477,47 @@ const SimulationPage: React.FC = () => {
     setModifications(prev => [...prev, newMod]);
   };
 
-  // ========== Новые функции создания ==========
+  // ========== НОВАЯ ФУНКЦИЯ: Удаление маршрута ==========
+  const addDeleteRouteModification = async () => {
+    if (!selectedRoute) {
+      alert('⚠️ Сначала выберите маршрут на карте');
+      return;
+    }
+    if (!selectedRoute.id) {
+      console.error('❌ У выбранного маршрута нет ID:', selectedRoute);
+      alert('❌ Ошибка: не удалось получить ID маршрута');
+      return;
+    }
+
+    // Подтверждение удаления
+    const confirmed = confirm(
+      `⚠️ Вы уверены, что хотите удалить маршрут ${selectedRoute.number}?\n\n` +
+      `Это повлияет на ${selectedRoute.stops?.length || 0} остановок и может значительно ухудшить транспортную доступность.`
+    );
+    
+    if (!confirmed) return;
+
+    const newMod: Modification = {
+      id: Date.now().toString(),
+      type: 'delete_route',
+      targetType: 'route',
+      targetId: selectedRoute.id,
+      parameters: {},
+      enabled: true,
+      label: `🗑️ Удаление маршрута ${selectedRoute.number}`
+    };
+
+    console.log('🗑️ Добавление модификации удаления маршрута:', newMod);
+    const validation = await validateModifications([newMod]);
+    if (!validation.valid) {
+      console.error('❌ Валидация не пройдена:', validation.errors);
+      alert('❌ Изменение не прошло валидацию: ' + (validation.errors?.[0]?.error || 'Неизвестная ошибка'));
+      return;
+    }
+    setModifications(prev => [...prev, newMod]);
+  };
+
+  // ========== Функции создания ==========
 
   const createNewStop = async () => {
     if (!newStopPosition) return;
@@ -955,8 +993,6 @@ const SimulationPage: React.FC = () => {
               )}
               <div className="quick-actions">
                 <button className="quick-action-btn" onClick={() => addStopModification('close_stop')}>🚫 Закрыть</button>
-                {/* <button className="quick-action-btn" onClick={() => addStopModification('change_interval')}>⏱️ Интервал</button>
-                <button className="quick-action-btn" onClick={() => addStopModification('change_capacity')}>📦 Вместимость</button> */}
               </div>
               {simState.results?.baseStopMetrics?.[selectedStop.id] && (
                 <button className="quick-action-btn details" onClick={() => setSelectedStopForMetrics(selectedStop.id)}>
@@ -966,7 +1002,7 @@ const SimulationPage: React.FC = () => {
             </div>
           )}
 
-          {/* Выбранный маршрут */}
+          {/* Выбранный маршрут - ДОБАВЛЕНА КНОПКА УДАЛЕНИЯ */}
           {selectedRoute && (
             <div className="panel-section selected-route">
               <h3 className="panel-title"><RouteIcon size={18} /> Выбранный маршрут</h3>
@@ -984,7 +1020,12 @@ const SimulationPage: React.FC = () => {
                 </div>
               </div>
               <div className="quick-actions">
-                <button className="quick-action-btn primary" onClick={addRouteModification}>⏱️ Изменить интервал</button>
+                <button className="quick-action-btn primary" onClick={addRouteModification}>
+                  ⏱️ Изменить интервал
+                </button>
+                <button className="quick-action-btn delete" onClick={addDeleteRouteModification}>
+                  🗑️ Удалить маршрут
+                </button>
               </div>
             </div>
           )}
@@ -1021,6 +1062,9 @@ const SimulationPage: React.FC = () => {
                       )}
                       {mod.type === 'change_interval' && mod.parameters.interval && (
                         <span className="mod-params">Новый интервал: {mod.parameters.interval} мин</span>
+                      )}
+                      {mod.type === 'delete_route' && (
+                        <span className="mod-params delete-route">⚠️ Маршрут будет удалён</span>
                       )}
                     </div>
                   </div>

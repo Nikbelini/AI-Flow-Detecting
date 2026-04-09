@@ -136,6 +136,32 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
     });
   };
 
+  // Получение иконки для типа модификации
+  const getModificationIcon = (type: string): string => {
+    switch (type) {
+      case 'close_stop': return '🚫';
+      case 'add_stop': return '➕';
+      case 'add_route': return '🛤️';
+      case 'delete_route': return '🗑️';
+      case 'change_interval': return '⏱️';
+      case 'change_capacity': return '📦';
+      default: return '📌';
+    }
+  };
+
+  // Получение цвета для типа модификации
+  const getModificationColor = (type: string): string => {
+    switch (type) {
+      case 'close_stop': return '#ef4444';
+      case 'add_stop': return '#10b981';
+      case 'add_route': return '#3b82f6';
+      case 'delete_route': return '#dc2626';
+      case 'change_interval': return '#f59e0b';
+      case 'change_capacity': return '#8b5cf6';
+      default: return '#64748b';
+    }
+  };
+
   // Фильтрация сценариев
   const filteredScenarios = scenarios.filter(scenario =>
     scenario.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -206,11 +232,18 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
               </div>
 
               <div className="scenario-preview">
-                <div className="preview-title">Изменения ({currentModifications.filter(m => m.enabled).length})</div>
+                <div className="preview-title">
+                  Изменения ({currentModifications.filter(m => m.enabled).length})
+                </div>
                 <div className="preview-list">
                   {currentModifications.filter(m => m.enabled).slice(0, 5).map(mod => (
-                    <div key={mod.id} className="preview-item">
-                      {mod.label || `${mod.type} #${mod.targetId}`}
+                    <div 
+                      key={mod.id} 
+                      className="preview-item"
+                      style={{ borderLeftColor: getModificationColor(mod.type) }}
+                    >
+                      <span className="preview-icon">{getModificationIcon(mod.type)}</span>
+                      <span className="preview-text">{mod.label || `${mod.type} #${mod.targetId}`}</span>
                     </div>
                   ))}
                   {currentModifications.filter(m => m.enabled).length > 5 && (
@@ -288,7 +321,21 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
                             <div className="scenario-meta">
                               <span><Clock size={12} /> {formatDate(scenario.created_at)}</span>
                               {scenario.version && <span>v{scenario.version}</span>}
+                              <span>Изменений: {scenario.modifications?.length || 0}</span>
                             </div>
+                            {/* Превью изменений в сценарии */}
+                            {scenario.modifications && scenario.modifications.length > 0 && (
+                              <div className="scenario-modifications-preview">
+                                {scenario.modifications.slice(0, 3).map(mod => (
+                                  <span key={mod.id} className="mod-preview-badge">
+                                    {getModificationIcon(mod.type)} {mod.type === 'delete_route' ? 'Удалить маршрут' : mod.label?.slice(0, 20)}
+                                  </span>
+                                ))}
+                                {scenario.modifications.length > 3 && (
+                                  <span className="mod-preview-more">+{scenario.modifications.length - 3}</span>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <div className="scenario-actions">
                             <button
@@ -339,23 +386,43 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
                             <div className="scenario-meta">
                               <span><Clock size={12} /> {formatDate(scenario.created_at)}</span>
                               {scenario.version && <span>v{scenario.version}</span>}
+                              <span>Изменений: {scenario.modifications?.length || 0}</span>
                             </div>
+                            {/* Превью изменений в сценарии */}
+                            {scenario.modifications && scenario.modifications.length > 0 && (
+                              <div className="scenario-modifications-preview">
+                                {scenario.modifications.slice(0, 3).map(mod => (
+                                  <span key={mod.id} className="mod-preview-badge">
+                                    {getModificationIcon(mod.type)} {mod.type === 'delete_route' ? '🗑️ Удалить' : mod.label?.slice(0, 15)}
+                                  </span>
+                                ))}
+                                {scenario.modifications.length > 3 && (
+                                  <span className="mod-preview-more">+{scenario.modifications.length - 3}</span>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          {/* Кнопки в списке сценариев */}
                           <div className="scenario-actions">
+                            <button
+                              className="icon-btn favorite"
+                              onClick={(e) => toggleFavorite(scenario, e)}
+                              title="Добавить в избранное"
+                            >
+                              <StarOff size={16} />
+                            </button>
                             <button
                               className="icon-btn copy"
                               onClick={(e) => duplicateScenario(scenario.id, e)}
                               title="Копировать"
                             >
-                              📋
+                              <Copy size={16} />
                             </button>
                             <button
                               className="icon-btn delete"
                               onClick={(e) => deleteScenario(scenario.id, e)}
                               title="Удалить"
                             >
-                              🗑️
+                              <Trash2 size={16} />
                             </button>
                           </div>
                         </div>

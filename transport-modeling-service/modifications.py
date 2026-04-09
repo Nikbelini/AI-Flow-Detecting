@@ -15,6 +15,9 @@ class ModificationApplier:
         
         elif mod.type == ModificationType.ADD_ROUTE:
             return self._validate_add_route(mod)
+
+        elif mod.type == ModificationType.DELETE_ROUTE:
+            return self._validate_delete_route(mod)
         
         elif mod.type == ModificationType.CHANGE_INTERVAL:
             return self._validate_change_interval(mod)
@@ -169,6 +172,22 @@ class ModificationApplier:
                         return False, "Некорректные координаты в пути"
                 except (ValueError, TypeError):
                     return False, "Некорректный формат координат в пути"
+        
+        return True, None
+
+    def _validate_delete_route(self, mod: Modification) -> Tuple[bool, Optional[str]]:
+        """
+        Валидация удаления маршрута
+        """
+        if mod.targetType != ModificationTarget.ROUTE:
+            return False, "Удаление маршрута должно применяться к маршруту"
+        
+        if not mod.targetId:
+            return False, "Не указан ID маршрута для удаления"
+        
+        # ID должен быть положительным числом
+        if not isinstance(mod.targetId, int) or mod.targetId <= 0:
+            return False, "Некорректный ID маршрута"
         
         return True, None
     

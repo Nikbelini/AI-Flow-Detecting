@@ -1964,3 +1964,14 @@ input:checked + .slider:before {
 .modal-body::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+.quick-action-btn.delete {
+  background-color: #fee2e2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.quick-action-btn.delete:hover {
+  background-color: #fecaca;
+  border-color: #fca5a5;
+}
