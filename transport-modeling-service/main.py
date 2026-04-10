@@ -20,6 +20,7 @@ from simulation_engine import SimulationEngine
 from modifications import ModificationApplier
 from cache import CacheService
 from db import DatabaseService
+from generate_fake_history import ensure_recent_history_data, force_generate_fresh_history
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -63,6 +64,17 @@ async def lifespan(app: FastAPI):
             command_timeout=5
         )
         logger.info("✅ PostgreSQL подключен")
+
+        # Генерация фейк данных TODO удалить
+        async with pg_pool.acquire() as conn:
+            # Получаем город
+            city = await conn.fetchrow("SELECT id FROM cities LIMIT 1")
+            if city:
+                city_id = city["id"]
+                # Проверяем и генерируем свежие данные
+                await ensure_recent_history_data(pg_pool, city_id, hours=24)
+            else:
+                logger.warning("⚠️ Нет городов в БД, пропускаем генерацию истории")
 
         # Инициализация сервисов
         cache_service = CacheService(redis_client)

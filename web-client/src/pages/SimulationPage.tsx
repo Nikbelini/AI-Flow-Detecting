@@ -197,16 +197,16 @@ const SimulationPage: React.FC = () => {
   const [filteredRouteIds, setFilteredRouteIds] = useState<Set<number>>(new Set());
 
   // Используем реактивные данные из хуков
-  const { 
-    getStops, 
+  const {
+    getStops,
     stops: stopsFromQuery,
-    isLoading: stopsLoading 
+    isLoading: stopsLoading
   } = useStops();
-  
-  const { 
-    getAllRoutes, 
+
+  const {
+    getAllRoutes,
     routes: routesFromQuery,
-    isLoading: routesLoading 
+    isLoading: routesLoading
   } = useRoutes();
 
   // Флаг для предотвращения двойной загрузки
@@ -290,7 +290,7 @@ const SimulationPage: React.FC = () => {
   useEffect(() => {
     const loadRoutesFromModelingService = async () => {
       if (!serviceAvailable) return;
-      
+
       try {
         const response = await fetch('http://localhost:8084/routes/1');
         if (response.ok) {
@@ -494,7 +494,7 @@ const SimulationPage: React.FC = () => {
       `⚠️ Вы уверены, что хотите удалить маршрут ${selectedRoute.number}?\n\n` +
       `Это повлияет на ${selectedRoute.stops?.length || 0} остановок и может значительно ухудшить транспортную доступность.`
     );
-    
+
     if (!confirmed) return;
 
     const newMod: Modification = {
@@ -1166,78 +1166,164 @@ const SimulationPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Модальное окно создания остановки */}
-      {showNewStopModal && newStopPosition && (
-        <div className="modal-overlay">
-          <div className="modal-content create-stop-modal">
-            <h3>➕ Добавление новой остановки</h3>
-            <div className="form-group">
-              <label>Название остановки:</label>
-              <input type="text" placeholder="например: ул. Новая, 10" value={newStopAddress} onChange={(e) => setNewStopAddress(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Координаты:</label>
-              <div className="coordinates-display">
-                <span>lat: {newStopPosition[1].toFixed(6)}</span>
-                <span>lng: {newStopPosition[0].toFixed(6)}</span>
+      {/* Модальное окно создания маршрута с прокруткой */}
+      {showNewRouteModal && (
+        <div className="modal-overlay" onClick={() => {
+          setShowNewRouteModal(false);
+          setNewRouteStops([]);
+          setCreationMode(null);
+        }}>
+          <div className="modal-content create-route-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>🛤️ Создание нового маршрута</h3>
+
+            {/* Прокручиваемая область */}
+            <div className="modal-body-scroll">
+              <div className="form-group">
+                <label>Номер маршрута:</label>
+                <input
+                  type="text"
+                  placeholder="например: 15А"
+                  value={newRouteNumber}
+                  onChange={(e) => setNewRouteNumber(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Название (необязательно):</label>
+                <input
+                  type="text"
+                  placeholder="например: Центр - Северный"
+                  value={newRouteName}
+                  onChange={(e) => setNewRouteName(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Тип транспорта:</label>
+                <select value={newRouteType} onChange={(e) => setNewRouteType(e.target.value as any)}>
+                  <option value="BUS">🚌 Автобус</option>
+                  <option value="TROLLEYBUS">🚎 Троллейбус</option>
+                  <option value="TRAM">🚊 Трамвай</option>
+                  <option value="MINIBUS">🚐 Маршрутка</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Интервал (минуты):</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={newRouteInterval}
+                  onChange={(e) => setNewRouteInterval(parseInt(e.target.value))}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Выбранные остановки ({newRouteStops.length}):</label>
+                <div className="selected-stops-preview">
+                  {newRouteStops.length === 0 ? (
+                    <div className="empty-stops-message">
+                      <span>👆 Кликните на остановки на карте</span>
+                    </div>
+                  ) : (
+                    newRouteStops.map((stopId, idx) => {
+                      const stop = cityStops.find(s => s.id === stopId);
+                      return (
+                        <div key={idx} className="preview-stop">
+                          <span className="stop-order">{idx + 1}</span>
+                          <span className="stop-address">{stop?.address || `Остановка ${stopId}`}</span>
+                          <button
+                            className="remove-stop"
+                            onClick={() => setNewRouteStops(prev => prev.filter((_, i) => i !== idx))}
+                            title="Удалить из маршрута"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
-            <div className="form-group">
-              <label>Вместимость (пасс/час):</label>
-              <input type="number" min="10" max="200" value={newStopCapacity} onChange={(e) => setNewStopCapacity(parseInt(e.target.value))} />
-            </div>
+
             <div className="form-actions">
-              <button className="action-btn primary" onClick={createNewStop}>✅ Добавить</button>
-              <button className="action-btn secondary" onClick={() => { setShowNewStopModal(false); setCreationMode(null); }}>❌ Отмена</button>
+              <button
+                className="action-btn secondary"
+                onClick={() => {
+                  setShowNewRouteModal(false);
+                  setNewRouteStops([]);
+                  setCreationMode(null);
+                }}
+              >
+                ❌ Отмена
+              </button>
+              <button
+                className="action-btn primary"
+                onClick={createNewRoute}
+                disabled={!newRouteNumber || newRouteStops.length < 2}
+              >
+                ✅ Создать маршрут
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Модальное окно создания маршрута */}
-      {showNewRouteModal && (
-        <div className="modal-overlay">
-          <div className="modal-content create-route-modal">
-            <h3>🛤️ Создание нового маршрута</h3>
+      {/* Модальное окно создания остановки */}
+      {showNewStopModal && newStopPosition && (
+        <div className="modal-overlay" onClick={() => {
+          setShowNewStopModal(false);
+          setCreationMode(null);
+        }}>
+          <div className="modal-content create-stop-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>➕ Добавление новой остановки</h3>
+
             <div className="form-group">
-              <label>Номер маршрута:</label>
-              <input type="text" placeholder="например: 15А" value={newRouteNumber} onChange={(e) => setNewRouteNumber(e.target.value)} />
+              <label>Название остановки:</label>
+              <input
+                type="text"
+                placeholder="например: ул. Новая, 10"
+                value={newStopAddress}
+                onChange={(e) => setNewStopAddress(e.target.value)}
+                autoFocus
+              />
             </div>
+
             <div className="form-group">
-              <label>Название (необязательно):</label>
-              <input type="text" placeholder="например: Центр - Северный" value={newRouteName} onChange={(e) => setNewRouteName(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Тип транспорта:</label>
-              <select value={newRouteType} onChange={(e) => setNewRouteType(e.target.value as any)}>
-                <option value="BUS">🚌 Автобус</option>
-                <option value="TROLLEYBUS">🚎 Троллейбус</option>
-                <option value="TRAM">🚊 Трамвай</option>
-                <option value="MINIBUS">🚐 Маршрутка</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Интервал (минуты):</label>
-              <input type="number" min="1" max="60" value={newRouteInterval} onChange={(e) => setNewRouteInterval(parseInt(e.target.value))} />
-            </div>
-            <div className="form-group">
-              <label>Выбранные остановки ({newRouteStops.length}):</label>
-              <div className="selected-stops-preview">
-                {newRouteStops.map((stopId, idx) => {
-                  const stop = cityStops.find(s => s.id === stopId);
-                  return (
-                    <div key={idx} className="preview-stop">
-                      <span className="stop-order">{idx + 1}</span>
-                      <span className="stop-address">{stop?.address || `Остановка ${stopId}`}</span>
-                      <button className="remove-stop" onClick={() => setNewRouteStops(prev => prev.filter((_, i) => i !== idx))}>✕</button>
-                    </div>
-                  );
-                })}
+              <label>Координаты:</label>
+              <div className="coordinates-display">
+                <span>широта: {newStopPosition[1].toFixed(6)}</span>
+                <span>долгота: {newStopPosition[0].toFixed(6)}</span>
               </div>
             </div>
+
+            <div className="form-group">
+              <label>Вместимость (пасс/час):</label>
+              <input
+                type="number"
+                min="10"
+                max="200"
+                value={newStopCapacity}
+                onChange={(e) => setNewStopCapacity(parseInt(e.target.value))}
+              />
+            </div>
+
             <div className="form-actions">
-              <button className="action-btn primary" onClick={createNewRoute} disabled={!newRouteNumber || newRouteStops.length < 2}>✅ Создать маршрут</button>
-              <button className="action-btn secondary" onClick={() => { setShowNewRouteModal(false); setNewRouteStops([]); setCreationMode(null); }}>❌ Отмена</button>
+              <button
+                className="action-btn secondary"
+                onClick={() => {
+                  setShowNewStopModal(false);
+                  setCreationMode(null);
+                }}
+              >
+                ❌ Отмена
+              </button>
+              <button className="action-btn primary" onClick={createNewStop}>
+                ✅ Добавить остановку
+              </button>
             </div>
           </div>
         </div>

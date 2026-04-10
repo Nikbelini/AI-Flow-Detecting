@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {baseUrl} from './env'
+import { baseUrl } from './env'
 
 // Интерфейс для данных с сервера (snake_case)
 interface ForecastDataFromServer {
@@ -44,10 +44,10 @@ interface ForecastPanelProps {
     onForecastDataUpdate: (data: any) => void;
 }
 
-const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({ 
-    address, 
-    stopData, 
-    onClose, 
+const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
+    address,
+    stopData,
+    onClose,
     isOpen,
     onToggle,
     forecastState,
@@ -55,7 +55,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
 }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    
+
     const { forecastData, autoRefresh, showMiniChart } = forecastState;
     const fetchCountRef = useRef(0);
     const isMountedRef = useRef(true);
@@ -69,9 +69,9 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
             generatedAt: data.generated_at,
             forecasts: data.forecasts.map((item: any) => ({
                 timestamp: item.timestamp,
-                predictedPassengerCount: item.predicted_passenger_count,
-                predictedLoad: item.predicted_load,
-                forecastHour: item.forecast_hour
+                predictedPassengerCount: item.predictedPassengerCount,
+                predictedLoad: item.predictedLoad,
+                forecastHour: item.forecastHour
             })),
             metrics: data.metrics,
             plotHtml: data.plotHtml
@@ -80,13 +80,13 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
 
     const fetchForecast = useCallback(async () => {
         if (!address || !isMountedRef.current) return;
-        
+
         fetchCountRef.current++;
         console.log('🔄 Fetching forecast for address:', address, 'fetch #:', fetchCountRef.current);
-        
+
         setLoading(true);
         setError(null);
-        
+
         try {
             const response = await fetch(`${baseUrl}/forecast`, {
                 method: 'POST',
@@ -109,9 +109,9 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
 
             const rawData = await response.json();
             console.log('✅ Raw forecast data received for:', address);
-            
+
             if (!isMountedRef.current) return;
-            
+
             // Преобразуем данные с сервера в нужный формат
             const forecastData = transformForecastData(rawData);
             onForecastDataUpdate(forecastData);
@@ -142,11 +142,11 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
     // Первоначальная загрузка
     useEffect(() => {
         isMountedRef.current = true;
-        
+
         // Загружаем прогноз только если его еще нет или данные устарели
-        const shouldFetch = !forecastData || 
-                           Date.now() - new Date(forecastData.generatedAt).getTime() > 2 * 60 * 1000; // 2 минуты
-        
+        const shouldFetch = !forecastData ||
+            Date.now() - new Date(forecastData.generatedAt).getTime() > 2 * 60 * 1000; // 2 минуты
+
         if (shouldFetch) {
             console.log('🎯 Initial forecast load for address:', address);
             fetchForecast();
@@ -210,7 +210,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
                         📊 Мини-график
                     </span>
                 </div>
-                
+
                 <div className="chart-container" style={{
                     height: '40px',
                     display: 'flex',
@@ -221,7 +221,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
                     {forecasts.map((item, index) => {
                         const height = ((item.predictedPassengerCount - minPassengers) / range) * 30 + 10;
                         return (
-                            <div 
+                            <div
                                 key={index}
                                 className="chart-bar"
                                 style={{
@@ -255,10 +255,10 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
 
     if (!isOpen) {
         return (
-            <div className="forecast-panel-collapsed" style={{ 
-                background: 'white', 
-                borderRadius: '8px', 
-                padding: '12px', 
+            <div className="forecast-panel-collapsed" style={{
+                background: 'white',
+                borderRadius: '8px',
+                padding: '12px',
                 margin: '8px 0',
                 boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
                 border: '1px solid #e0e0e0',
@@ -275,10 +275,10 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
     }
 
     return (
-        <div className="forecast-panel" style={{ 
-            background: 'white', 
-            borderRadius: '12px', 
-            padding: '16px', 
+        <div className="forecast-panel" style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '16px',
             margin: '10px 0',
             boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
             border: '1px solid #e0e0e0'
@@ -290,9 +290,9 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
                 marginBottom: '16px'
             }}>
                 <div className="forecast-title">
-                    <h3 style={{ 
-                        margin: '0 0 4px 0', 
-                        fontSize: '18px', 
+                    <h3 style={{
+                        margin: '0 0 4px 0',
+                        fontSize: '18px',
                         color: '#333',
                         fontWeight: '600'
                     }}>
@@ -310,7 +310,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
                     display: 'flex',
                     gap: '8px'
                 }}>
-                    <button 
+                    <button
                         className={`forecast-btn refresh-btn ${loading ? 'loading' : ''}`}
                         onClick={fetchForecast}
                         disabled={loading}
@@ -328,7 +328,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
                     >
                         {loading ? '🔄' : '🔄'}
                     </button>
-                    <button 
+                    <button
                         className="forecast-btn close-btn"
                         onClick={() => onToggle(false)}
                         title="Свернуть панель прогноза"
@@ -344,7 +344,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
                     >
                         ▲
                     </button>
-                    <button 
+                    <button
                         className="forecast-btn close-btn"
                         onClick={onClose}
                         title="Закрыть панель прогноза"
@@ -376,7 +376,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
                 }}>
                     <div className="error-icon">⚠️</div>
                     <div className="error-message" style={{ flex: 1 }}>{error}</div>
-                    <button 
+                    <button
                         className="error-retry"
                         onClick={fetchForecast}
                         style={{
@@ -447,9 +447,9 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
                                 }}>
                                     {stopData.count} чел.
                                 </span>
-                                <div 
+                                <div
                                     className="load-indicator-small"
-                                    style={{ 
+                                    style={{
                                         width: '12px',
                                         height: '12px',
                                         borderRadius: '50%',
@@ -462,9 +462,9 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
 
                     {/* Прогноз на следующие часы */}
                     <div className="forecast-section" style={{ marginBottom: '20px' }}>
-                        <h4 style={{ 
-                            margin: '0 0 12px 0', 
-                            fontSize: '16px', 
+                        <h4 style={{
+                            margin: '0 0 12px 0',
+                            fontSize: '16px',
                             color: '#333',
                             fontWeight: '600'
                         }}>
@@ -543,7 +543,7 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
                                                 }}>
                                                     {Math.round(item.predictedLoad)}/10
                                                 </span>
-                                                <div 
+                                                <div
                                                     className="load-bar"
                                                     style={{
                                                         flex: 1,
@@ -565,9 +565,9 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
                     {/* Метрики качества */}
                     {forecastData.metrics && (
                         <div className="metrics-section" style={{ marginBottom: '20px' }}>
-                            <h4 style={{ 
-                                margin: '0 0 12px 0', 
-                                fontSize: '16px', 
+                            <h4 style={{
+                                margin: '0 0 12px 0',
+                                fontSize: '16px',
                                 color: '#333',
                                 fontWeight: '600'
                             }}>
@@ -627,17 +627,17 @@ const ForecastPanel: React.FC<ForecastPanelProps> = React.memo(({
                     {/* График */}
                     {forecastData.plotHtml && (
                         <div className="chart-section" style={{ marginBottom: '20px' }}>
-                            <h4 style={{ 
-                                margin: '0 0 12px 0', 
-                                fontSize: '16px', 
+                            <h4 style={{
+                                margin: '0 0 12px 0',
+                                fontSize: '16px',
                                 color: '#333',
                                 fontWeight: '600'
                             }}>
                                 📈 Визуализация прогноза
                             </h4>
-                            <div 
+                            <div
                                 className="forecast-chart"
-                                dangerouslySetInnerHTML={{ __html: forecastData.plotHtml }} 
+                                dangerouslySetInnerHTML={{ __html: forecastData.plotHtml }}
                             />
                         </div>
                     )}

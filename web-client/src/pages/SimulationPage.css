@@ -1975,3 +1975,281 @@ input:checked + .slider:before {
   background-color: #fecaca;
   border-color: #fca5a5;
 }
+
+/* ============================================
+   МОДАЛЬНЫЕ ОКНА СОЗДАНИЯ ОСТАНОВКИ И МАРШРУТА
+   ============================================ */
+
+/* Общие стили для модалок создания */
+.create-stop-modal,
+.create-route-modal {
+  width: 520px;
+  max-width: 90vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.create-stop-modal h3,
+.create-route-modal h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  flex-shrink: 0;
+}
+
+/* Прокручиваемая область для модалки маршрута */
+.create-route-modal .modal-body-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+/* Стили для формы */
+.create-stop-modal .form-group,
+.create-route-modal .form-group {
+  margin-bottom: 20px;
+}
+
+.create-stop-modal .form-group label,
+.create-route-modal .form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.create-stop-modal .form-group input,
+.create-route-modal .form-group input,
+.create-route-modal .form-group select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 14px;
+  transition: all 0.2s;
+  background: white;
+}
+
+.create-stop-modal .form-group input:focus,
+.create-route-modal .form-group input:focus,
+.create-route-modal .form-group select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Отображение координат */
+.coordinates-display {
+  display: flex;
+  gap: 16px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.coordinates-display span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.coordinates-display span::before {
+  content: '📍';
+  font-size: 12px;
+}
+
+/* Превью выбранных остановок */
+.selected-stops-preview {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.selected-stops-preview::-webkit-scrollbar {
+  width: 6px;
+}
+
+.selected-stops-preview::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 3px;
+}
+
+.selected-stops-preview::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 3px;
+}
+
+.empty-stops-message {
+  padding: 24px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+  background: white;
+  border-radius: 12px;
+}
+
+.empty-stops-message span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.preview-stop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: white;
+  transition: background 0.2s;
+}
+
+.preview-stop:last-child {
+  border-bottom: none;
+}
+
+.preview-stop:hover {
+  background: #f1f5f9;
+}
+
+.stop-order {
+  width: 28px;
+  height: 28px;
+  background: #3b82f6;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.stop-address {
+  flex: 1;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.remove-stop {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.remove-stop:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+/* Кнопки действий в модалках */
+.create-stop-modal .form-actions,
+.create-route-modal .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+
+.create-stop-modal .action-btn,
+.create-route-modal .action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.create-stop-modal .action-btn.primary,
+.create-route-modal .action-btn.primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.create-stop-modal .action-btn.primary:hover:not(:disabled),
+.create-route-modal .action-btn.primary:hover:not(:disabled) {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.create-stop-modal .action-btn.primary:disabled,
+.create-route-modal .action-btn.primary:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.create-stop-modal .action-btn.secondary,
+.create-route-modal .action-btn.secondary {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.create-stop-modal .action-btn.secondary:hover,
+.create-route-modal .action-btn.secondary:hover {
+  background: #e2e8f0;
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 640px) {
+  .create-stop-modal,
+  .create-route-modal {
+    width: 95vw;
+  }
+  
+  .create-stop-modal .form-actions,
+  .create-route-modal .form-actions {
+    flex-direction: column-reverse;
+  }
+  
+  .create-stop-modal .form-actions button,
+  .create-route-modal .form-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .preview-stop {
+    flex-wrap: wrap;
+  }
+  
+  .stop-address {
+    flex: 1;
+    min-width: 150px;
+  }
+}
