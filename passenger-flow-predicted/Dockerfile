@@ -20,4 +20,4 @@ RUN mkdir -p result/models
 
 EXPOSE 8083
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8083", "--reload"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8083"]
