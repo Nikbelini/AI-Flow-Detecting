@@ -99,7 +99,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./models:/app/result/models
+      - ./passenger-flow-predicted/result/models:/app/result/models
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
       interval: 30s
