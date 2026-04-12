@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MapComponent from './Map/Map';
-import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, CheckCircle, Bus, Link, Search, Clock, Navigation, Edit2 } from 'lucide-react';
+import { MapPin, Route, X, Save, Trash2, RefreshCw, Download, AlertCircle, CheckCircle, Bus, Link, Search, Clock, Navigation, Edit2 } from 'lucide-react';
 import { useStops } from '../hooks/api/useStops';
 import { useRoutes } from '../hooks/api/useRoutes';
 import type {

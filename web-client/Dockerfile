@@ -1,13 +1,14 @@
-FROM node:20-alpine
+FROM node:20-slim
 
 WORKDIR /app
 
-# Копируем зависимости отдельно для кеширования
 COPY package*.json ./
-RUN npm install
+# Копируем lock-файл отдельно
+COPY package-lock.json* ./
 
-# Копируем исходный код
+# npm ci быстрее и надёжнее
+RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
 COPY . .
 
-# Запускаем dev-сервер Vite
 CMD ["npm", "run", "dev"]

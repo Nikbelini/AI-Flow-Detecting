@@ -6,7 +6,7 @@ import { useStops } from '../hooks/api/useStops';
 import { useRoutes } from '../hooks/api/useRoutes';
 import {
   Play, RotateCcw, Download, Eye, EyeOff,
-  Clock, Users, Bus, AlertTriangle, TrendingUp,
+  Clock, Users, Bus, TrendingUp,
   Plus, Trash2, Settings, Route as RouteIcon,
   PieChart, Activity, Target, Save,
 } from 'lucide-react';
@@ -16,7 +16,7 @@ import ThroughputMetrics from '../components/ThroughputMetrics';
 import WaitTimeDistributionChart from '../components/WaitTimeDistributionChart';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, ComposedChart, Line
+  ResponsiveContainer, ComposedChart
 } from 'recharts';
 import KeyMetrics from '../components/KeyMetrics';
 import AffectedStopsList from '../components/AffectedStopsList';
@@ -166,7 +166,6 @@ const SimulationPage: React.FC = () => {
   const [selectedStop, setSelectedStop] = useState<ExtendedStop | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<MapRoute | null>(null);
   const [editMode, setEditMode] = useState<'view' | 'select_stop' | 'select_route'>('view');
-  const [selectedHour, setSelectedHour] = useState(8);
   const [cityStops, setCityStops] = useState<ExtendedStop[]>([]);
   const [cityRoutes, setCityRoutes] = useState<MapRoute[]>([]);
   const [serviceAvailable, setServiceAvailable] = useState(true);
@@ -1166,18 +1165,32 @@ const SimulationPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Модальное окно создания маршрута с прокруткой */}
+      {/* ИСПРАВЛЕННОЕ Модальное окно создания маршрута */}
       {showNewRouteModal && (
         <div className="modal-overlay" onClick={() => {
           setShowNewRouteModal(false);
           setNewRouteStops([]);
           setCreationMode(null);
         }}>
-          <div className="modal-content create-route-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>🛤️ Создание нового маршрута</h3>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
 
-            {/* Прокручиваемая область */}
-            <div className="modal-body-scroll">
+            {/* 1. ШАПКА (было просто h3) */}
+            <div className="modal-header">
+              <h3>🛤️ Создание нового маршрута</h3>
+              <button
+                className="modal-close"
+                onClick={() => {
+                  setShowNewRouteModal(false);
+                  setNewRouteStops([]);
+                  setCreationMode(null);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 2. ТЕЛО С ПРОКРУТКОЙ (было modal-body-scroll) */}
+            <div className="modal-body">
               <div className="form-group">
                 <label>Номер маршрута:</label>
                 <input
@@ -1249,9 +1262,10 @@ const SimulationPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="form-actions">
+            {/* 3. ФУТЕР (было form-actions) */}
+            <div className="modal-footer">
               <button
-                className="action-btn secondary"
+                className="btn-secondary"
                 onClick={() => {
                   setShowNewRouteModal(false);
                   setNewRouteStops([]);
@@ -1261,7 +1275,7 @@ const SimulationPage: React.FC = () => {
                 ❌ Отмена
               </button>
               <button
-                className="action-btn primary"
+                className="btn-primary"
                 onClick={createNewRoute}
                 disabled={!newRouteNumber || newRouteStops.length < 2}
               >
