@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
+import logging
 from datetime import datetime, timezone, timedelta
 
 from database.repository import PostgresRepository
@@ -6,6 +7,8 @@ from services.route_planner.route_service import RoutePlannerService
 from domain.schemas import RoutePlanRequestDto, RoutePlanResponseDto, RouteSegmentDto
 
 router = APIRouter(prefix="/routes", tags=["Routes"])
+
+logger = logging.getLogger(__name__)
 
 repository = PostgresRepository()
 
@@ -60,18 +63,23 @@ async def build_route(request: RoutePlanRequestDto):
             error=None
         )
         
-    except ValueError as exception:
-        return RoutePlanResponseDto(
-            status="ERROR",
-            mode=request.mode.value,
-            total_cost_minutes=0,
-            stops=[],
-            routes=[],
-            segments=[],
-            error=str(exception)
-        )
     except Exception as exception:
-        print(f"Critical error in build_route: {exception}", exc_info=True)
+        #  ЛОВИМ ИМЕННО ОШИБКУ NUMPY 
+        error_msg = str(exception)
+        if "zero-size array" in error_msg or "reduction operation" in error_msg:
+            logger.critical(f"NumPy zero-size error: {error_msg}", exc_info=True)
+            return RoutePlanResponseDto(
+                status="ERROR",
+                mode=request.mode.value if request else "UNKNOWN",
+                total_cost_minutes=0,
+                stops=[],
+                routes=[],
+                segments=[],
+                error="No valid route: insufficient data for prediction"
+            )
+        
+        # Остальные ошибки
+        logger.error(f"Critical error in build_route: {exception}", exc_info=True)
         return RoutePlanResponseDto(
             status="ERROR",
             mode=request.mode.value if request else "UNKNOWN",

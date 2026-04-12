@@ -33,10 +33,18 @@ class GraphBuilder:
         else:
             sigma = self.sigma
 
+        positive_dists = dist[dist > 0]
+        if positive_dists.size == 0:
+            min_dist = 0.0
+            median_dist = 0.0
+        else:
+            min_dist = positive_dists.min()
+            median_dist = np.median(positive_dists)
+
         logging.info(
             f"[GraphBuilder] sigma={sigma:.3f} km, "
-            f"dist: min={dist[dist>0].min():.2f}, "
-            f"median={np.median(dist[dist>0]):.2f}, "
+            f"dist: min={min_dist:.2f}, "
+            f"median={median_dist:.2f}, "
             f"max={dist.max():.2f}"
         )
 
