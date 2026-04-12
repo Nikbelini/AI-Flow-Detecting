@@ -10,6 +10,7 @@ import { Select, Spin, Badge, Tooltip } from 'antd';
 import type { SelectProps } from 'antd/es/select';
 import { formatCoordsHuman } from '../../utils/geo';
 import { useCities } from '../../hooks/api/useCities';
+import { stopsApi } from '../../api/endpoints/stopsApi';
 
 const { Option } = Select;
 
@@ -213,25 +214,30 @@ const MapComponent: React.FC<MapComponentProps> = ({
   }, [isPanelCollapsed, mapLoaded]);
 
   const fetchMarkers = async (cityId: number) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const fetchedMarkers = await getMarkers();
-      const normalized = fetchedMarkers.map((m: any) => ({ 
-        ...m, 
-        id: Number(m.id), 
-        cityId: m.cityId || cityId, 
-        lat: Number(m.lat), 
-        lng: Number(m.lng) 
-      }));
-      setLocalMarkers(normalized);
-    } catch (err) {
-      console.error('Failed to fetch markers:', err);
-      setError('Не удалось загрузить данные остановок');
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    setLoading(true);
+    setError(null);
+    
+    // Теперь cityId всегда передан, типы совпадают
+    const fetchedMarkers = await stopsApi.getStopsByCity(cityId);
+    
+    // Упрощаем нормализацию — cityId уже корректный из API
+    const normalized = fetchedMarkers.map(m => ({ 
+      ...m, 
+      id: Number(m.id), 
+      lat: Number(m.lat), 
+      lng: Number(m.lng),
+      coordinates: [m.lng, m.lat] as [number, number]
+    }));
+    
+    setLocalMarkers(normalized);
+  } catch (err) {
+    console.error('Failed to fetch markers:', err);
+    setError('Не удалось загрузить данные остановок');
+  } finally {
+    setLoading(false);
+  }
+};
 
   // 🛣️ Отрисовка маршрутов — УПРОЩЕНО (без GeoJSON типов)
   useEffect(() => {

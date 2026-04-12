@@ -100,6 +100,16 @@ services:
         condition: service_healthy
     volumes:
       - ./passenger-flow-predicted/result/models:/app/result/models
+    
+    # GPU ACCESS
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
       interval: 30s

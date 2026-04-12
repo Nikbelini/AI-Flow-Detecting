@@ -13,7 +13,7 @@ export interface ApiError {
 const createApiClient = (): AxiosInstance => {
   const client = axios.create({
     baseURL: baseUrl,
-    timeout: 30000, // Увеличиваем для моделирования
+    timeout: 3000000, // Увеличиваем для моделирования
     headers: {
       'Content-Type': 'application/json',
     },

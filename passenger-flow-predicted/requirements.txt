@@ -54,8 +54,6 @@ SQLAlchemy==2.0.44
 starlette==0.50.0
 sympy==1.14.0
 threadpoolctl==3.6.0
-torch==2.9.1
-torchvision==0.24.1
 tqdm==4.67.3
 typing-inspection==0.4.2
 typing_extensions==4.15.0

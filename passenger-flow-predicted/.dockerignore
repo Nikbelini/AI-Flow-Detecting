@@ -19,6 +19,9 @@ coverage.xml
 .pytest_cache
 .history
 .DS_Store
-
+.venv
 .mai
 .config
+*.log
+.vscode
+.idea

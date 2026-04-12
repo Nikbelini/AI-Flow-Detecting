@@ -41,108 +41,114 @@ public class StopServiceImpl implements StopService {
         private final FlowPredictionClient flowPredictionClient;
 
         @Override
-    public List<StopResponse> getAllStops() {
-        // 1. Получаем ВСЕ остановки из БД
-        List<StopEntity> allStops = stopRepository.findAll();
+        public List<StopResponse> getAllStops() {
+                // Получаем ВСЕ остановки из БД
+                List<StopEntity> allStops = stopRepository.findAll();
 
-        // 2. 🔥 Фильтруем слепые зоны: url == null ИЛИ пустая строка
-        List<StopEntity> blindStops = allStops.stream()
-                .filter(stop -> stop.getUrl() == null || stop.getUrl().isBlank())
-                .collect(Collectors.toList());
-        
-        // 3. Запрашиваем прогнозы
-        Map<String, PredictionResponseDto> predictionsMap = fetchPredictionsForAddresses(blindStops);
+                // Фильтруем слепые зоны: url == null ИЛИ пустая строка
+                List<StopEntity> blindStops = allStops.stream()
+                                .filter(stop -> stop.getUrl() == null || stop.getUrl().isBlank())
+                                .collect(Collectors.toList());
 
-        // 4. 🔥 Формируем ответ: реальные данные ИЛИ прогнозы
-        return allStops.stream()
-                .map(stop -> {
-                    boolean hasCamera = stop.getUrl() != null && !stop.getUrl().isBlank();
+                // Запрашиваем прогнозы
+                Map<String, PredictionResponseDto> predictionsMap = fetchPredictionsForAddresses(blindStops);
 
-                    // Значения по умолчанию (из БД)
-                    Integer count = stop.getCount();
-                    Integer velocity = stop.getVelocity();
-                    Integer load = stop.getLoad();
+                // Формируем ответ: реальные данные ИЛИ прогнозы
+                return allStops.stream()
+                                .map(stop -> {
+                                        boolean hasCamera = stop.getUrl() != null && !stop.getUrl().isBlank();
 
-                    // 🔥 Если нет камеры — подставляем прогноз
-                    if (!hasCamera) {
-                        // 🔥 КЛЮЧЕВОЙ ФИКС: .trim() для надёжного поиска
-                        String lookupKey = stop.getAddress() != null ? stop.getAddress().trim() : null;
-                        
-                        log.debug("🔍 Lookup: stop='{}' (hasCamera={}), key='{}'", 
-                                stop.getAddress(), hasCamera, lookupKey);
-                        
-                        PredictionResponseDto prediction = predictionsMap.get(lookupKey);
-                        
-                        if (prediction != null && prediction.getPredictedCount() != null) {
-                            log.debug("✅ Found prediction for '{}': count={}", lookupKey, prediction.getPredictedCount());
-                            count = prediction.getPredictedCount();
-                            velocity = prediction.getPredictedVelocity();
-                            load = prediction.getPredictedLoad();
-                        } else {
-                            log.debug("❌ Prediction NOT found for '{}'. Available keys: {}", 
-                                    lookupKey, predictionsMap.keySet());
-                            // 🔥 Не ставим null — оставляем значения из БД или 0
-                            if (count == null) count = 0;
-                            if (velocity == null) velocity = 0;
-                            if (load == null) load = 0;
+                                        // Значения по умолчанию (из БД)
+                                        Integer count = stop.getCount();
+                                        Integer velocity = stop.getVelocity();
+                                        Integer load = stop.getLoad();
+
+                                        // Если нет камеры — подставляем прогноз
+                                        if (!hasCamera) {
+                                                // КЛЮЧЕВОЙ ФИКС: .trim() для надёжного поиска
+                                                String lookupKey = stop.getAddress() != null ? stop.getAddress().trim()
+                                                                : null;
+
+                                                log.debug("Lookup: stop='{}' (hasCamera={}), key='{}'",
+                                                                stop.getAddress(), hasCamera, lookupKey);
+
+                                                PredictionResponseDto prediction = predictionsMap.get(lookupKey);
+
+                                                if (prediction != null && prediction.getPredictedCount() != null) {
+                                                        log.debug("Found prediction for '{}': count={}", lookupKey,
+                                                                        prediction.getPredictedCount());
+                                                        count = prediction.getPredictedCount();
+                                                        velocity = prediction.getPredictedVelocity();
+                                                        load = prediction.getPredictedLoad();
+                                                } else {
+                                                        log.debug("Prediction NOT found for '{}'. Available keys: {}",
+                                                                        lookupKey, predictionsMap.keySet());
+                                                        // Не ставим null — оставляем значения из БД или 0
+                                                        if (count == null)
+                                                                count = 0;
+                                                        if (velocity == null)
+                                                                velocity = 0;
+                                                        if (load == null)
+                                                                load = 0;
+                                                }
+                                        }
+
+                                        return new StopResponse(
+                                                        stop.getId(),
+                                                        stop.getUrl(),
+                                                        stop.getAddress(),
+                                                        count,
+                                                        velocity,
+                                                        load,
+                                                        stop.getLat().doubleValue(),
+                                                        stop.getLng().doubleValue(),
+                                                        hasCamera);
+                                })
+                                .collect(Collectors.toList());
+        }
+
+        // ОТДЕЛЬНЫЙ МЕТОД (не внутри getAllStops!)
+        private Map<String, PredictionResponseDto> fetchPredictionsForAddresses(List<StopEntity> blindStops) {
+                if (blindStops.isEmpty()) {
+                        return Map.of();
+                }
+
+                // Группируем по city_id
+                Map<Long, List<String>> cityToAddresses = blindStops.stream()
+                                .collect(Collectors.groupingBy(
+                                                stop -> stop.getCity().getId(),
+                                                Collectors.mapping(StopEntity::getAddress, Collectors.toList())));
+
+                Map<String, PredictionResponseDto> allPredictions = new HashMap<>();
+
+                for (Map.Entry<Long, List<String>> entry : cityToAddresses.entrySet()) {
+                        try {
+                                PredictionRequestDto request = PredictionRequestDto.builder()
+                                                .cityId(entry.getKey().intValue())
+                                                .horizon(1)
+                                                .build();
+
+                                List<PredictionResponseDto> predictions = flowPredictionClient.predict(request);
+
+                                log.debug("Received {} predictions for city {}", predictions.size(), entry.getKey());
+
+                                predictions.stream()
+                                                .filter(p -> p.getAddress() != null)
+                                                .forEach(p -> {
+                                                        String key = p.getAddress().trim();
+                                                        log.debug("Mapped: '{}' -> count={}", key,
+                                                                        p.getPredictedCount());
+                                                        allPredictions.put(key, p);
+                                                });
+
+                        } catch (Exception exception) {
+                                log.warn("Failed to fetch predictions for city {}: {}", entry.getKey(),
+                                                exception.getMessage());
                         }
-                    }
+                }
 
-                    return new StopResponse(
-                            stop.getId(),
-                            stop.getUrl(),
-                            stop.getAddress(),
-                            count,
-                            velocity,
-                            load,
-                            stop.getLat().doubleValue(),
-                            stop.getLng().doubleValue(),
-                            hasCamera
-                    );
-                })
-                .collect(Collectors.toList());
-    }
-
-    // 🔥 ОТДЕЛЬНЫЙ МЕТОД (не внутри getAllStops!)
-    private Map<String, PredictionResponseDto> fetchPredictionsForAddresses(List<StopEntity> blindStops) {
-        if (blindStops.isEmpty()) {
-            return Map.of();
+                return allPredictions;
         }
-        
-        // Группируем по city_id
-        Map<Long, List<String>> cityToAddresses = blindStops.stream()
-                .collect(Collectors.groupingBy(
-                        stop -> stop.getCity().getId(),
-                        Collectors.mapping(StopEntity::getAddress, Collectors.toList())));
-        
-        Map<String, PredictionResponseDto> allPredictions = new HashMap<>();
-        
-        for (Map.Entry<Long, List<String>> entry : cityToAddresses.entrySet()) {
-            try {
-                PredictionRequestDto request = PredictionRequestDto.builder()
-                        .cityId(entry.getKey().intValue())
-                        .horizon(1)
-                        .build();
-                
-                List<PredictionResponseDto> predictions = flowPredictionClient.predict(request);
-                
-                log.debug("📥 Received {} predictions for city {}", predictions.size(), entry.getKey());
-                
-                predictions.stream()
-                        .filter(p -> p.getAddress() != null)
-                        .forEach(p -> {
-                            String key = p.getAddress().trim();
-                            log.debug("Mapped: '{}' -> count={}", key, p.getPredictedCount());
-                            allPredictions.put(key, p);
-                        });
-                        
-            } catch (Exception e) {
-                log.warn("⚠️ Failed to fetch predictions for city {}: {}", entry.getKey(), e.getMessage());
-            }
-        }
-        
-        return allPredictions;
-    }
 
         public List<StopResponseUrl> getAllStopsUrl() {
                 return stopRepository.findAll().stream()
@@ -227,7 +233,7 @@ public class StopServiceImpl implements StopService {
                 // Добавляем новую запись в историю ЧЕРЕЗ СЕРВИС (чтобы сохранилась погода)
                 createHistoryRecordViaService(updatedStop, newCount, velocity, loadScore);
 
-                log.info("🔄 Updated stop stats - ID: {}, Count: {}, Velocity: {}, Load: {}",
+                log.info("Updated stop stats - ID: {}, Count: {}, Velocity: {}, Load: {}",
                                 id, newCount, velocity, loadScore);
 
                 return mapToResponse(updatedStop);
@@ -252,8 +258,8 @@ public class StopServiceImpl implements StopService {
         private void createHistoryRecordViaService(StopEntity stop, double count, double velocity, double load) {
                 StopHistoryRequest historyRequest = StopHistoryRequest.builder()
                                 .cityId(stop.getCity().getId())
-                                .stopId(stop.getId())           // OSM node ID
-                                .lat(stop.getLat())             // Широта из StopEntity
+                                .stopId(stop.getId()) // OSM node ID
+                                .lat(stop.getLat()) // Широта из StopEntity
                                 .lng(stop.getLng())
                                 .address(stop.getAddress())
                                 .count((int) count)
@@ -281,17 +287,67 @@ public class StopServiceImpl implements StopService {
 
         @Override
         public List<StopResponse> getAllStopsByCityId(Long cityId) {
-                return stopRepository.getByCityId(cityId).stream()
-                                .map(stop -> new StopResponse(
-                                                stop.getId(),
-                                                stop.getUrl(),
-                                                stop.getAddress(),
-                                                stop.getCount(),
-                                                stop.getVelocity(),
-                                                stop.getLoad(),
-                                                stop.getLat().doubleValue(),
-                                                stop.getLng().doubleValue(),
-                                                false))
+                // Получаем остановки ТОЛЬКО по городу
+                List<StopEntity> cityStops = stopRepository.getByCityId(cityId);
+
+                // Фильтруем слепые зоны: url == null ИЛИ пустая строка
+                List<StopEntity> blindStops = cityStops.stream()
+                                .filter(stop -> stop.getUrl() == null || stop.getUrl().isBlank())
+                                .collect(Collectors.toList());
+
+                // Запрашиваем прогнозы ТОЛЬКО для слепых остановок этого города
+                Map<String, PredictionResponseDto> predictionsMap = fetchPredictionsForAddresses(blindStops);
+
+                // Формируем ответ: реальные данные ИЛИ прогнозы
+                return cityStops.stream()
+                                .map(stop -> {
+                                        boolean hasCamera = stop.getUrl() != null && !stop.getUrl().isBlank();
+
+                                        // Значения по умолчанию (из БД)
+                                        Integer count = stop.getCount();
+                                        Integer velocity = stop.getVelocity();
+                                        Integer load = stop.getLoad();
+
+                                        // Если нет камеры — подставляем прогноз
+                                        if (!hasCamera) {
+                                                String lookupKey = stop.getAddress() != null ? stop.getAddress().trim()
+                                                                : null;
+
+                                                log.debug("[City={}] Lookup: stop='{}' (hasCamera={}), key='{}'",
+                                                                cityId, stop.getAddress(), hasCamera, lookupKey);
+
+                                                PredictionResponseDto prediction = predictionsMap.get(lookupKey);
+
+                                                if (prediction != null && prediction.getPredictedCount() != null) {
+                                                        log.debug("[City={}] Found prediction for '{}': count={}",
+                                                                        cityId, lookupKey,
+                                                                        prediction.getPredictedCount());
+                                                        count = prediction.getPredictedCount();
+                                                        velocity = prediction.getPredictedVelocity();
+                                                        load = prediction.getPredictedLoad();
+                                                } else {
+                                                        log.debug("[City={}] Prediction NOT found for '{}'. Available keys: {}",
+                                                                        cityId, lookupKey, predictionsMap.keySet());
+                                                        if (count == null)
+                                                                count = 0;
+                                                        if (velocity == null)
+                                                                velocity = 0;
+                                                        if (load == null)
+                                                                load = 0;
+                                                }
+                                        }
+
+                                        return new StopResponse(
+                                                        stop.getId(),
+                                                        stop.getUrl(),
+                                                        stop.getAddress(),
+                                                        count,
+                                                        velocity,
+                                                        load,
+                                                        stop.getLat().doubleValue(),
+                                                        stop.getLng().doubleValue(),
+                                                        hasCamera);
+                                })
                                 .collect(Collectors.toList());
         }
 }
