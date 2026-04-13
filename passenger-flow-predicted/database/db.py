@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 # БД: localhost, порт 5432
 DB_URL = os.getenv(
     "DB_URL", 
-    "postgresql://postgres:postgres@postgres:5432/stops"
+    "postgresql://postgres:postgres@localhost:5432/stops"
 )
 
 # CSV: путь относительно корня проекта

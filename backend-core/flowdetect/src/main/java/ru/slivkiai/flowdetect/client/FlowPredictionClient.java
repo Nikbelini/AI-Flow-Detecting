@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import ru.slivkiai.flowdetect.dto.AlgorithmicPredictionsResponseDto;
 import ru.slivkiai.flowdetect.dto.PredictionRequestDto;
 import ru.slivkiai.flowdetect.dto.PredictionResponseDto;
 import ru.slivkiai.flowdetect.dto.RoutePlanRequestDto;
@@ -17,7 +18,7 @@ import ru.slivkiai.flowdetect.dto.TrainingJobStatus;
 import ru.slivkiai.flowdetect.dto.TrainingRequest;
 import ru.slivkiai.flowdetect.dto.TrainingResponse;
 
-@FeignClient(name = "flow-prediction-ml", url = "${ml.passenger-flow.service.url:http://passenger-flow-predicted:8083}") // http://localhost:8083 
+@FeignClient(name = "flow-prediction-ml", url = "${ml.passenger-flow.service.url:http://localhost:8083}") // http://localhost:8083 
 public interface FlowPredictionClient {
     
     @PostMapping("/ml/forecast")
@@ -30,8 +31,7 @@ public interface FlowPredictionClient {
     TrainingJobStatus getTrainingStatus(@PathVariable("jobId") String jobId);
 
     @GetMapping("/passenger-flow/predict/all")
-    PredictionResponseDto predictAll(@RequestParam("city_id") Integer cityId,
-        @RequestParam(value = "dt", required = false) String dt,
+    AlgorithmicPredictionsResponseDto predictAll(@RequestParam("city_id") Integer cityId,
         @RequestParam(value = "neighbors_limit", defaultValue = "15") Integer neighborsLimit
     );
 

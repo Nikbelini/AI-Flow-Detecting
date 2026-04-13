@@ -15,6 +15,7 @@ import ru.slivkiai.flowdetect.domain.StopStatsUpdateRequest;
 import ru.slivkiai.flowdetect.domain.entity.CityEntity;
 import ru.slivkiai.flowdetect.domain.entity.StopEntity;
 import ru.slivkiai.flowdetect.domain.entity.StopHistoryEntity;
+import ru.slivkiai.flowdetect.dto.AlgorithmicPredictionsResponseDto;
 import ru.slivkiai.flowdetect.dto.PredictionRequestDto;
 import ru.slivkiai.flowdetect.dto.PredictionResponseDto;
 import ru.slivkiai.flowdetect.repository.CityRepository;
@@ -24,6 +25,7 @@ import ru.slivkiai.flowdetect.repository.StopRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +35,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class StopServiceImpl implements StopService {
+
         private final StopRepository stopRepository;
         private final CityRepository cityRepository;
         private final StopHistoryRepository stopHistoryRepository;
@@ -51,63 +54,17 @@ public class StopServiceImpl implements StopService {
                                 .collect(Collectors.toList());
 
                 // Запрашиваем прогнозы
-                Map<String, PredictionResponseDto> predictionsMap = fetchPredictionsForAddresses(blindStops);
+                Map<String, PredictionResponseDto> mlPredictionsMap = fetchPredictionsForAddresses(blindStops);
+
+                // Алгоритмический прогноз
+                Map<String, PredictionResponseDto> algoPredictionsMap = Collections.emptyMap();
 
                 // Формируем ответ: реальные данные ИЛИ прогнозы
-                return allStops.stream()
-                                .map(stop -> {
-                                        boolean hasCamera = stop.getUrl() != null && !stop.getUrl().isBlank();
-
-                                        // Значения по умолчанию (из БД)
-                                        Integer count = stop.getCount();
-                                        Integer velocity = stop.getVelocity();
-                                        Integer load = stop.getLoad();
-
-                                        // Если нет камеры — подставляем прогноз
-                                        if (!hasCamera) {
-                                                // КЛЮЧЕВОЙ ФИКС: .trim() для надёжного поиска
-                                                String lookupKey = stop.getAddress() != null ? stop.getAddress().trim()
-                                                                : null;
-
-                                                log.debug("Lookup: stop='{}' (hasCamera={}), key='{}'",
-                                                                stop.getAddress(), hasCamera, lookupKey);
-
-                                                PredictionResponseDto prediction = predictionsMap.get(lookupKey);
-
-                                                if (prediction != null && prediction.getPredictedCount() != null) {
-                                                        log.debug("Found prediction for '{}': count={}", lookupKey,
-                                                                        prediction.getPredictedCount());
-                                                        count = prediction.getPredictedCount();
-                                                        velocity = prediction.getPredictedVelocity();
-                                                        load = prediction.getPredictedLoad();
-                                                } else {
-                                                        log.debug("Prediction NOT found for '{}'. Available keys: {}",
-                                                                        lookupKey, predictionsMap.keySet());
-                                                        // Не ставим null — оставляем значения из БД или 0
-                                                        if (count == null)
-                                                                count = 0;
-                                                        if (velocity == null)
-                                                                velocity = 0;
-                                                        if (load == null)
-                                                                load = 0;
-                                                }
-                                        }
-
-                                        return new StopResponse(
-                                                        stop.getId(),
-                                                        stop.getUrl(),
-                                                        stop.getAddress(),
-                                                        count,
-                                                        velocity,
-                                                        load,
-                                                        stop.getLat().doubleValue(),
-                                                        stop.getLng().doubleValue(),
-                                                        hasCamera);
-                                })
+                return allStops.stream().map(stop -> mapToFullResponse(stop, mlPredictionsMap, algoPredictionsMap))
                                 .collect(Collectors.toList());
         }
 
-        // ОТДЕЛЬНЫЙ МЕТОД (не внутри getAllStops!)
+        // === ML-прогноз (только для слепых остановок) ===
         private Map<String, PredictionResponseDto> fetchPredictionsForAddresses(List<StopEntity> blindStops) {
                 if (blindStops.isEmpty()) {
                         return Map.of();
@@ -148,6 +105,31 @@ public class StopServiceImpl implements StopService {
                 }
 
                 return allPredictions;
+        }
+
+        // === Алгоритмический прогноз (для всех остановок города) ===
+        private Map<String, PredictionResponseDto> fetchAllPredictionsForCity(Long cityId) {
+                try {
+                        // Получаем обёртку и извлекаем список из .getResults()
+                        AlgorithmicPredictionsResponseDto wrapper = flowPredictionClient.predictAll(
+                                        cityId.intValue(),
+                                        15);
+
+                        if (wrapper == null || wrapper.getResults() == null) {
+                                return Collections.emptyMap();
+                        }
+
+                        return wrapper.getResults().stream()
+                                        .filter(p -> p != null && p.getAddress() != null)
+                                        .collect(Collectors.toMap(
+                                                        p -> p.getAddress().trim(),
+                                                        p -> p,
+                                                        (a, b) -> a // если дубли — берём первый
+                                        ));
+                } catch (Exception exception) {
+                        log.warn("Algorithmic forecast failed: {}", exception.getMessage());
+                        return Collections.emptyMap();
+                }
         }
 
         public List<StopResponseUrl> getAllStopsUrl() {
@@ -290,64 +272,96 @@ public class StopServiceImpl implements StopService {
                 // Получаем остановки ТОЛЬКО по городу
                 List<StopEntity> cityStops = stopRepository.getByCityId(cityId);
 
-                // Фильтруем слепые зоны: url == null ИЛИ пустая строка
+                if (cityStops.isEmpty()) {
+                        return Collections.emptyList();
+                }
+
+                // Фильтруем слепые зоны (url == null ИЛИ пустая строка) для ml-прогноз
                 List<StopEntity> blindStops = cityStops.stream()
                                 .filter(stop -> stop.getUrl() == null || stop.getUrl().isBlank())
                                 .collect(Collectors.toList());
 
                 // Запрашиваем прогнозы ТОЛЬКО для слепых остановок этого города
-                Map<String, PredictionResponseDto> predictionsMap = fetchPredictionsForAddresses(blindStops);
+                Map<String, PredictionResponseDto> mlPredictionsMap = fetchPredictionsForAddresses(blindStops);
+
+                // Алгоритмический прогноз для ВСЕХ остановок
+                Map<String, PredictionResponseDto> algorithmicPredictionsMap = fetchAllPredictionsForCity(cityId);
 
                 // Формируем ответ: реальные данные ИЛИ прогнозы
                 return cityStops.stream()
-                                .map(stop -> {
-                                        boolean hasCamera = stop.getUrl() != null && !stop.getUrl().isBlank();
-
-                                        // Значения по умолчанию (из БД)
-                                        Integer count = stop.getCount();
-                                        Integer velocity = stop.getVelocity();
-                                        Integer load = stop.getLoad();
-
-                                        // Если нет камеры — подставляем прогноз
-                                        if (!hasCamera) {
-                                                String lookupKey = stop.getAddress() != null ? stop.getAddress().trim()
-                                                                : null;
-
-                                                log.debug("[City={}] Lookup: stop='{}' (hasCamera={}), key='{}'",
-                                                                cityId, stop.getAddress(), hasCamera, lookupKey);
-
-                                                PredictionResponseDto prediction = predictionsMap.get(lookupKey);
-
-                                                if (prediction != null && prediction.getPredictedCount() != null) {
-                                                        log.debug("[City={}] Found prediction for '{}': count={}",
-                                                                        cityId, lookupKey,
-                                                                        prediction.getPredictedCount());
-                                                        count = prediction.getPredictedCount();
-                                                        velocity = prediction.getPredictedVelocity();
-                                                        load = prediction.getPredictedLoad();
-                                                } else {
-                                                        log.debug("[City={}] Prediction NOT found for '{}'. Available keys: {}",
-                                                                        cityId, lookupKey, predictionsMap.keySet());
-                                                        if (count == null)
-                                                                count = 0;
-                                                        if (velocity == null)
-                                                                velocity = 0;
-                                                        if (load == null)
-                                                                load = 0;
-                                                }
-                                        }
-
-                                        return new StopResponse(
-                                                        stop.getId(),
-                                                        stop.getUrl(),
-                                                        stop.getAddress(),
-                                                        count,
-                                                        velocity,
-                                                        load,
-                                                        stop.getLat().doubleValue(),
-                                                        stop.getLng().doubleValue(),
-                                                        hasCamera);
-                                })
+                                .map(stop -> mapToFullResponse(stop, mlPredictionsMap, algorithmicPredictionsMap))
                                 .collect(Collectors.toList());
+        }
+
+        // Вспомогательный метод (универсальный маппер Entity -> Dto с поддержкой ml и
+        // algorithm)
+        private StopResponse mapToFullResponse(StopEntity stop, Map<String, PredictionResponseDto> mlPredictionMap,
+                        Map<String, PredictionResponseDto> algorithmicPredictionMap) {
+                boolean hasCamera = stop.getUrl() != null && !stop.getUrl().isBlank();
+                String lookupKey = stop.getAddress() != null ? stop.getAddress().trim() : null;
+
+                // Значения по умолчанию (из БД)
+                Integer count = stop.getCount();
+                Integer velocity = stop.getVelocity();
+                Integer load = stop.getLoad();
+
+                boolean isMlFallback = false;
+                if (!hasCamera && lookupKey != null) {
+                        log.debug("[ML Lookup] address='{}', key='{}', mapSize={}",
+                                        stop.getAddress(), lookupKey, mlPredictionMap.size());
+                        PredictionResponseDto mlPred = mlPredictionMap.get(lookupKey);
+
+                        if (mlPred != null) {
+                                log.debug("[ML Lookup] Found prediction for '{}': count={}",
+                                                lookupKey, mlPred.getPredictedCount());
+                        } else {
+                                log.debug("[ML Lookup] NOT found for '{}'. Available keys: {}",
+                                                lookupKey, mlPredictionMap.keySet());
+                        }
+
+                        if (mlPred != null && mlPred.getPredictedCount() != null) {
+                                count = mlPred.getPredictedCount();
+                                velocity = mlPred.getPredictedVelocity();
+                                load = mlPred.getPredictedLoad();
+                                isMlFallback = true;
+                        } else {
+                                // Если прогноз не найден — оставляем значения из БД или 0
+                                if (count == null)
+                                        count = 0;
+                                if (velocity == null)
+                                        velocity = 0;
+                                if (load == null)
+                                        load = 0;
+                                // isMlFallback остаётся false, т.к. данные не от ML
+                        }
+                }
+
+                // === Алгоритмические данные ===
+                Integer algoCount = null;
+                Integer algoVelocity = null;
+                Integer algoLoad = null;
+
+                boolean hasAlgorithmicData = false;
+                if (lookupKey != null) {
+                        PredictionResponseDto algoPred = algorithmicPredictionMap.get(lookupKey);
+                        if (algoPred != null && algoPred.getPredictedCount() != null) {
+                                algoCount = algoPred.getPredictedCount();
+                                algoVelocity = algoPred.getPredictedVelocity();
+                                algoLoad = algoPred.getPredictedLoad();
+                                hasAlgorithmicData = true;
+                        }
+                }
+
+                // Возвращаем с ВСЕМИ полями
+                return new StopResponse(
+                                stop.getId(),
+                                stop.getUrl(),
+                                stop.getAddress(),
+                                count, velocity, load, // ← Камера ИЛИ ML
+                                stop.getLat().doubleValue(),
+                                stop.getLng().doubleValue(),
+                                hasCamera,
+                                algoCount, algoVelocity, algoLoad,
+                                isMlFallback, hasAlgorithmicData);
         }
 }

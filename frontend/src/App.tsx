@@ -29,7 +29,7 @@ const App = () => {
                 {/* 🗺️ КАРТА — публичная, но с хедером */}
                 <Route path="/map" element={
                     <MainLayout>
-                        <MapComponent />
+                        <MapComponent/>
                     </MainLayout>
                 } />
 
@@ -82,7 +82,7 @@ const App = () => {
                     </ProtectedRoute>
                 } />
 
-                {/* 🔄 Catch-all */}
+                {/* Catch-all */}
                 <Route path="*" element={<Navigate to="/map" replace />} />
             </Routes>
         </AuthProvider>

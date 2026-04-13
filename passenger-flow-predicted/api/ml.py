@@ -49,7 +49,7 @@ async def _cleanup_old_jobs(max_age_hours: int = 24, check_interval: int = 1800)
             del training_jobs[jid]
             _training_stop_flags.pop(jid, None)
         if to_delete:
-            logger.info(f"🧹 Cleaned up {len(to_delete)} old training jobs")
+            logger.info(f"Cleaned up {len(to_delete)} old training jobs")
 
 
 

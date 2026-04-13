@@ -1,6 +1,7 @@
 import os
 import torch
 import numpy as np
+import pandas as pd
 import logging
 from typing import Dict
 from datetime import datetime
@@ -17,7 +18,7 @@ from services.locks import MODEL_LOCK
 
 logger = logging.getLogger(__name__)
 
-# ⚡ Абсолютный путь к моделям
+# Абсолютный путь к моделям
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODEL_DIR = BASE_DIR / "result" / "models"
 
@@ -158,7 +159,6 @@ def _forecast_internal(city_id: int, horizon: int, blind_only: bool = True) -> D
     logger.info(f"nodes_order: {len(nodes_order)} nodes, sample={nodes_order[:5] if len(nodes_order) >= 5 else nodes_order}, type={type(nodes_order[0]) if nodes_order else 'N/A'}")
     
     # === ВСЕ остановки города (для координат) ===
-    # ⚡ Важно: запрашиваем url для определения камер!
     all_stops = get_all_stops_in_city(city_id)
     
     if all_stops.empty or "stop_id" not in all_stops.columns:
@@ -170,18 +170,28 @@ def _forecast_internal(city_id: int, horizon: int, blind_only: bool = True) -> D
             all_stops = df[cols].drop_duplicates(subset=["address", "lat", "lng"], keep="first")
             logger.warning("No stop_id available, using (address, lat, lng) as fallback")
 
-    # ⚡ Создаём lookup с url
-    stops_lookup = (
-        all_stops
-        .drop_duplicates(subset=["stop_id"], keep="first")
-        .set_index("stop_id")[["address", "lat", "lng", "url"] if "url" in all_stops.columns else ["address", "lat", "lng"]]
-        .to_dict("index")
-    )
+    # 🔥 КЛЮЧЕВОЙ ФИКС: приводим stop_id к int для надёжного поиска
+    if "stop_id" in all_stops.columns:
+        all_stops["stop_id"] = all_stops["stop_id"].astype(int)
+    
+    # Создаём lookup с явным приведением ключей к int
+    stops_lookup = {}
+    for _, row in all_stops.drop_duplicates(subset=["stop_id"], keep="first").iterrows():
+        sid = int(row["stop_id"])
+        stops_lookup[sid] = {
+            "address": row["address"],
+            "lat": float(row["lat"]) if pd.notna(row["lat"]) else 0.0,
+            "lng": float(row["lng"]) if pd.notna(row["lng"]) else 0.0,
+            "url": row.get("url", "")
+        }
+    
+    logger.info(f"stops_lookup built: {len(stops_lookup)} entries, sample keys: {list(stops_lookup.keys())[:5]}")
 
     # Координаты в порядке nodes_order
     coords = []
     for stop_id in nodes_order:
-        info = stops_lookup.get(int(stop_id), {"lat": 0.0, "lng": 0.0})
+        sid = int(stop_id)
+        info = stops_lookup.get(sid, {"lat": 0.0, "lng": 0.0, "address": f"Unknown_{sid}"})
         coords.append([info["lat"], info["lng"]])
     coords = np.array(coords, dtype=np.float32)
 
