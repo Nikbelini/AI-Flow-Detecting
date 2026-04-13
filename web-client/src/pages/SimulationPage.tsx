@@ -671,8 +671,6 @@ const SimulationPage: React.FC = () => {
         console.warn('⚠️ Полные данные не найдены');
         alert('❌ Ошибка: данные остановки не найдены');
       }
-    } else if (editMode === 'select_route') {
-      alert('⚠️ Сейчас режим выбора маршрута. Переключитесь на "Выбор остановки"');
     }
   };
 
@@ -686,8 +684,6 @@ const SimulationPage: React.FC = () => {
       setSelectedRoute(route);
       setSelectedStop(null);
       console.log('✅ Выбран маршрут:', route.number);
-    } else if (editMode === 'select_stop') {
-      alert('⚠️ Сейчас режим выбора остановки. Переключитесь на "Выбор маршрута"');
     }
   };
 
