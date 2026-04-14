@@ -310,58 +310,6 @@ const ModalContent: React.FC<ModalContentProps> = ({
                   </div>
                 </div>
               </div>
-
-              {/* Быстрый прогноз */}
-              <div className="forecast-preview-section">
-                <div className="section-header">
-                  <h3>
-                    <span className="section-icon">🔮</span>
-                    Быстрый прогноз
-                  </h3>
-                  <button
-                    className="forecast-btn"
-                    onClick={handleOpenForecast}
-                  >
-                    <span className="btn-icon">📈</span>
-                    Подробный прогноз
-                  </button>
-                </div>
-                <div className="forecast-preview">
-                  <div className="forecast-item">
-                    <div className="forecast-time">
-                      <span className="time-icon">⏰</span>
-                      +15 мин
-                    </div>
-                    <div className="forecast-value">
-                      <span className="value-number">{Math.round(marker.count * 1.1)}</span>
-                      <span className="value-label">человек</span>
-                    </div>
-                    <div className="forecast-trend up">↗ +10%</div>
-                  </div>
-                  <div className="forecast-item">
-                    <div className="forecast-time">
-                      <span className="time-icon">⏰</span>
-                      +30 мин
-                    </div>
-                    <div className="forecast-value">
-                      <span className="value-number">{Math.round(marker.count * 1.2)}</span>
-                      <span className="value-label">человек</span>
-                    </div>
-                    <div className="forecast-trend up">↗ +20%</div>
-                  </div>
-                  <div className="forecast-item">
-                    <div className="forecast-time">
-                      <span className="time-icon">⏰</span>
-                      +60 мин
-                    </div>
-                    <div className="forecast-value">
-                      <span className="value-number">{Math.round(marker.count * 0.9)}</span>
-                      <span className="value-label">человек</span>
-                    </div>
-                    <div className="forecast-trend down">↘ -10%</div>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 

@@ -237,8 +237,8 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
                 </div>
                 <div className="preview-list">
                   {currentModifications.filter(m => m.enabled).slice(0, 5).map(mod => (
-                    <div 
-                      key={mod.id} 
+                    <div
+                      key={mod.id}
                       className="preview-item"
                       style={{ borderLeftColor: getModificationColor(mod.type) }}
                     >
@@ -278,7 +278,7 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
 
             <div className="modal-body">
               <div className="search-box">
-                <Search size={16} />
+                <span className="search-icon">🔍</span> {/* Замена Search иконки на эмодзи */}
                 <input
                   type="text"
                   placeholder="Поиск по названию или описанию..."
@@ -291,7 +291,7 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
               </div>
 
               {isLoading ? (
-                <div className="loading-spinner">Загрузка...</div>
+                <div className="loading-spinner">⏳ Загрузка...</div>
               ) : filteredScenarios.length === 0 ? (
                 <div className="empty-state">
                   <div className="empty-icon">📭</div>
@@ -304,7 +304,7 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
                   {favoriteScenarios.length > 0 && (
                     <div className="scenarios-group">
                       <div className="group-title">
-                        <Star size={14} /> Избранные
+                        <span className="group-icon">⭐</span> Избранные
                       </div>
                       {favoriteScenarios.map(scenario => (
                         <div
@@ -319,16 +319,16 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
                               <div className="scenario-description">{scenario.description}</div>
                             )}
                             <div className="scenario-meta">
-                              <span><Clock size={12} /> {formatDate(scenario.created_at)}</span>
-                              {scenario.version && <span>v{scenario.version}</span>}
-                              <span>Изменений: {scenario.modifications?.length || 0}</span>
+                              <span>📅 {formatDate(scenario.created_at)}</span>
+                              {scenario.version && <span>📌 v{scenario.version}</span>}
+                              <span>📋 Изменений: {scenario.modifications?.length || 0}</span>
                             </div>
                             {/* Превью изменений в сценарии */}
                             {scenario.modifications && scenario.modifications.length > 0 && (
                               <div className="scenario-modifications-preview">
                                 {scenario.modifications.slice(0, 3).map(mod => (
                                   <span key={mod.id} className="mod-preview-badge">
-                                    {getModificationIcon(mod.type)} {mod.type === 'delete_route' ? 'Удалить маршрут' : mod.label?.slice(0, 20)}
+                                    {getModificationIcon(mod.type)} {mod.type === 'delete_route' ? '🗑️ Удалить' : mod.label?.slice(0, 20)}
                                   </span>
                                 ))}
                                 {scenario.modifications.length > 3 && (
@@ -343,21 +343,21 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
                               onClick={(e) => toggleFavorite(scenario, e)}
                               title="Убрать из избранного"
                             >
-                              <Star size={16} fill="currentColor" />
+                              ⭐ {/* Звезда вместо Star иконки */}
                             </button>
                             <button
                               className="icon-btn copy"
                               onClick={(e) => duplicateScenario(scenario.id, e)}
                               title="Копировать"
                             >
-                              <Copy size={16} />
+                              📋 {/* Копировать вместо Copy иконки */}
                             </button>
                             <button
                               className="icon-btn delete"
                               onClick={(e) => deleteScenario(scenario.id, e)}
                               title="Удалить"
                             >
-                              <Trash2 size={16} />
+                              🗑️ {/* Корзина вместо Trash2 иконки */}
                             </button>
                           </div>
                         </div>
@@ -369,7 +369,7 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
                   {otherScenarios.length > 0 && (
                     <div className="scenarios-group">
                       <div className="group-title">
-                        Все сценарии
+                        <span className="group-icon">📋</span> Все сценарии
                       </div>
                       {otherScenarios.map(scenario => (
                         <div
@@ -384,16 +384,16 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
                               <div className="scenario-description">{scenario.description}</div>
                             )}
                             <div className="scenario-meta">
-                              <span><Clock size={12} /> {formatDate(scenario.created_at)}</span>
-                              {scenario.version && <span>v{scenario.version}</span>}
-                              <span>Изменений: {scenario.modifications?.length || 0}</span>
+                              <span>📅 {formatDate(scenario.created_at)}</span>
+                              {scenario.version && <span>📌 v{scenario.version}</span>}
+                              <span>📋 Изменений: {scenario.modifications?.length || 0}</span>
                             </div>
                             {/* Превью изменений в сценарии */}
                             {scenario.modifications && scenario.modifications.length > 0 && (
                               <div className="scenario-modifications-preview">
                                 {scenario.modifications.slice(0, 3).map(mod => (
                                   <span key={mod.id} className="mod-preview-badge">
-                                    {getModificationIcon(mod.type)} {mod.type === 'delete_route' ? '🗑️ Удалить' : mod.label?.slice(0, 15)}
+                                    {getModificationIcon(mod.type)} {mod.type === 'delete_route' ? '🗑️ Удалить' : mod.label?.slice(0, 20)}
                                   </span>
                                 ))}
                                 {scenario.modifications.length > 3 && (
@@ -408,21 +408,21 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
                               onClick={(e) => toggleFavorite(scenario, e)}
                               title="Добавить в избранное"
                             >
-                              <StarOff size={16} />
+                              ☆ {/* Пустая звезда вместо StarOff */}
                             </button>
                             <button
                               className="icon-btn copy"
                               onClick={(e) => duplicateScenario(scenario.id, e)}
                               title="Копировать"
                             >
-                              <Copy size={16} />
+                              📋
                             </button>
                             <button
                               className="icon-btn delete"
                               onClick={(e) => deleteScenario(scenario.id, e)}
                               title="Удалить"
                             >
-                              <Trash2 size={16} />
+                              🗑️
                             </button>
                           </div>
                         </div>
@@ -435,14 +435,14 @@ const ScenarioManager: React.FC<ScenarioManagerProps> = ({
 
             <div className="modal-footer">
               <button className="action-btn secondary" onClick={() => setShowLoadModal(false)}>
-                Отмена
+                ❌ Отмена
               </button>
               <button
                 className="action-btn primary"
                 onClick={() => selectedScenario && loadScenario(selectedScenario.id)}
                 disabled={!selectedScenario}
               >
-                Загрузить выбранный
+                ✅ Загрузить выбранный
               </button>
             </div>
           </div>

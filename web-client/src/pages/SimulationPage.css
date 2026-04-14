@@ -2253,3 +2253,17 @@ input:checked + .slider:before {
     min-width: 150px;
   }
 }
+
+.route-metrics {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: #475569;
+}
+
+.route-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}

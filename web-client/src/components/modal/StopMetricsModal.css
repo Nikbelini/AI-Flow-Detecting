@@ -1,0 +1,295 @@
+/* StopMetricsModal.css или добавьте в SimulationPage.css */
+
+/* Сетка для почасовой динамики */
+.hourly-grid {
+  margin-top: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.hourly-header {
+  display: grid;
+  grid-template-columns: 60px 1fr 1fr 1fr 1fr;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.hourly-header span {
+  padding: 10px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-align: center;
+}
+
+.hourly-header span:first-child {
+  text-align: left;
+}
+
+.hourly-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 1fr 1fr 1fr;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.hourly-row:last-child {
+  border-bottom: none;
+}
+
+.hourly-row span {
+  padding: 8px;
+  font-size: 13px;
+  color: #334155;
+  text-align: center;
+}
+
+.hourly-row span:first-child {
+  text-align: left;
+  font-weight: 500;
+}
+
+.hourly-row:hover {
+  background: #f8fafc;
+}
+
+/* Альтернативный вариант с прокруткой для большого количества строк */
+.hourly-grid-scrollable {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Индикатор пикового часа */
+.hourly-row.peak-hour {
+  background: #fef3c7;
+}
+
+.hourly-row.peak-hour span {
+  color: #92400e;
+  font-weight: 500;
+}
+
+/* StopMetricsModal стили */
+.stop-metrics-modal {
+  max-width: 800px;
+  width: 90%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.stop-metrics-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-icon {
+  color: #3b82f6;
+}
+
+.stop-id {
+  font-size: 12px;
+  color: #94a3b8;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.stop-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.2s;
+}
+
+.stat-card:hover {
+  background: #f1f5f9;
+  transform: translateY(-2px);
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  background: white;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3b82f6;
+}
+
+.stat-info {
+  flex: 1;
+}
+
+.stat-label {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.stat-hint {
+  display: block;
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.stat-diff {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 12px;
+}
+
+.stat-diff.up {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.stat-diff.down {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.hourly-section {
+  margin-top: 8px;
+}
+
+.hourly-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 12px;
+}
+
+.hourly-body {
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+.hourly-grid {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.hourly-header {
+  display: grid;
+  grid-template-columns: 60px 1fr 1fr 1fr 1fr;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+}
+
+.hourly-header span {
+  padding: 10px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-align: center;
+}
+
+.hourly-header span:first-child {
+  text-align: left;
+  padding-left: 12px;
+}
+
+.hourly-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 1fr 1fr 1fr;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.2s;
+}
+
+.hourly-row:last-child {
+  border-bottom: none;
+}
+
+.hourly-row span {
+  padding: 8px;
+  font-size: 13px;
+  color: #334155;
+  text-align: center;
+}
+
+.hourly-row span:first-child {
+  text-align: left;
+  padding-left: 12px;
+  font-weight: 500;
+}
+
+.hourly-row:hover {
+  background: #f8fafc;
+}
+
+.hourly-row.peak-hour {
+  background: #fef3c7;
+}
+
+.hourly-row.peak-hour span {
+  color: #92400e;
+  font-weight: 500;
+}
+
+.hourly-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.legend-color.peak {
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+}
+
+.legend-icon {
+  font-size: 12px;
+}
