@@ -15,6 +15,7 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import RegistrationPage from "./pages/RegistrationPage";
 import AdminPanel from "./pages/AdminPanel";
 import OptimalRoutePage from "./pages/Map/OptimalRoutePage";
+import StopDashboardPage from "./pages/StopDashboardPage";
 
 const App = () => {
     return (
@@ -46,6 +47,14 @@ const App = () => {
                     <ProtectedRoute allowedRoles={['ADMIN']}>
                         <MainLayout>
                             <AnalyticsPage />
+                        </MainLayout>
+                    </ProtectedRoute>
+                } />
+
+                <Route path="/statistics" element={
+                    <ProtectedRoute allowedRoles={['ADMIN', 'USER']}>
+                        <MainLayout>
+                            <StopDashboardPage />
                         </MainLayout>
                     </ProtectedRoute>
                 } />

@@ -23,7 +23,7 @@ class PostgresRepository:
     def __init__(self):
         self.db_url = os.getenv(
             "DB_URL",
-            "postgresql://postgres:postgres@localhost:5432/stops"
+            "postgresql://postgres:postgres@postgres:5432/stops"
         )
         self.engine = create_engine(self.db_url, pool_pre_ping=True)
 

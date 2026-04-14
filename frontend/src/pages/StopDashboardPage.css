@@ -1,0 +1,307 @@
+.stop-dashboard {
+  padding: 24px;
+  background: #f8fafc;
+  min-height: 100vh;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Header */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+  background: white;
+  padding: 16px 24px;
+  border-radius: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.header-left h1 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  color: #0f172a;
+}
+
+.stop-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stop-selector label {
+  font-weight: 500;
+  color: #334155;
+}
+
+.stop-selector select {
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  font-size: 14px;
+  min-width: 250px;
+  cursor: pointer;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.update-time {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.refresh-all {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.refresh-all:hover {
+  background: #2563eb;
+}
+
+/* Информационная карточка остановки */
+.stop-info-card {
+  background: white;
+  border-radius: 24px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.stop-address {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.stop-address .icon {
+  font-size: 24px;
+}
+.stop-id {
+  background: #e2e8f0;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: normal;
+  color: #334155;
+}
+
+.stop-metrics {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+.metric {
+  border-left: 3px solid;
+  padding-left: 12px;
+}
+.metric-label {
+  font-size: 12px;
+  color: #64748b;
+  display: block;
+}
+.metric-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* Две колонки */
+.dashboard-two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+/* Общие стили для карточек */
+.chart-card, .stats-card, .routes-card, .forecast-card, .stream-card {
+  background: white;
+  border-radius: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fefefe;
+}
+.card-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.refresh-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 30px;
+  transition: background 0.2s;
+}
+.refresh-btn:hover {
+  background: #f1f5f9;
+}
+.card-body {
+  padding: 20px;
+  flex: 1;
+}
+
+/* График */
+.chart-image {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+
+/* Таблица статистики */
+.table-wrapper {
+  overflow-x: auto;
+}
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.stats-table th, .stats-table td {
+  padding: 10px 8px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+.stats-table th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #334155;
+}
+.records-count {
+  font-family: monospace;
+}
+.load-pill {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* Список маршрутов */
+.routes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.route-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 16px;
+}
+.route-num-badge {
+  font-weight: 700;
+  font-size: 18px;
+  padding: 8px 16px;
+  border-radius: 40px;
+  min-width: 80px;
+  text-align: center;
+  background: #e2e8f0;
+}
+.route-info {
+  flex: 1;
+}
+.route-name {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.route-details {
+  font-size: 12px;
+  color: #475569;
+}
+.route-eta {
+  font-size: 13px;
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+/* Прогноз – встроенный компонент ForecastPanel уже имеет свои стили,
+   но мы можем добавить обёртку, чтобы он вписывался в карточку */
+.forecast-body {
+  padding: 0;
+}
+.forecast-body > div {
+  border-radius: 0;
+}
+
+/* Поток */
+.stream-card .card-body {
+  padding: 0;
+}
+.live-badge {
+  background: #ef4444;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 30px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* Placeholders */
+.loading-placeholder, .error-placeholder, .no-data-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  color: #64748b;
+}
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.error-placeholder button {
+  margin-left: 12px;
+  background: #3b82f6;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 20px;
+  color: white;
+  cursor: pointer;
+}
+
+/* Адаптив */
+@media (max-width: 1000px) {
+  .dashboard-two-columns {
+    grid-template-columns: 1fr;
+  }
+}

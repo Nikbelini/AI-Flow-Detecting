@@ -79,7 +79,7 @@ export const stopsApi = {
     }
   },
 
-  // Удалить остановку
+   // Удалить остановку
   deleteStop: async (id: number): Promise<void> => {
     try {
       await apiClient.delete(`/stops/${id}`);
@@ -102,4 +102,4 @@ export const stopsApi = {
       throw error;
     }
   },
-};
+}

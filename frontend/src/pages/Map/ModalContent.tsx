@@ -1,17 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './ModalContent.css';
 import ForecastPanel from './ForecastPanel';
 import HlsPlayer from './HlsPlayer';
+import { baseUrl } from './env';
+import apiClient from '../../api/client';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Marker {
   id: number;
   address: string;
   url?: string;
   count: number;
+  algorithmicCount: number;
   velocity: number;
   load: number;
   lat: number;
   lng: number;
+  hasCamera?: boolean;
+}
+
+interface PeriodStats {
+  avgLoad: number;
+  peakLoad: number;
+  minLoad: number;
+  avgCount: number;
+  peakCount: number;
+  avgVelocity: number;
+  recordCount: number;
+}
+
+interface StopStatsResponse {
+  today: PeriodStats;
+  yesterday: PeriodStats;
+  week: PeriodStats;
+  month: PeriodStats;
 }
 
 interface ForecastState {
@@ -28,51 +51,197 @@ interface ModalContentProps {
   onClose: () => void;
 }
 
-const ModalContent: React.FC<ModalContentProps> = ({ 
-  marker, 
-  isOpen, 
-  onClose 
-}) => {
-  const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'stream' | 'forecast'>('info');
+// Тип Route — ПОД ТВОЙ БЭКЕНД (Route.java)
+export interface Route {
+  id: number;
+  number: string;
+  name: string;
+  transportType: string;
+  isActive: boolean;
+  totalStops: number;
+  cityId?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const loadToColor = (load: number) => {
+  if (load <= 3) return '#10b981';
+  if (load <= 7) return '#f59e0b';
+  return '#ef4444';
+};
+const loadToBg = (load: number) => {
+  if (load <= 3) return '#d1fae5';
+  if (load <= 7) return '#fef3c7';
+  return '#fee2e2';
+};
+const loadToText = (load: number) => {
+  if (load <= 3) return '#065f46';
+  if (load <= 7) return '#92400e';
+  return '#991b1b';
+};
+const getLoadLevel = (load: number) => {
+  if (load <= 3) return 'Свободно';
+  if (load <= 7) return 'Средняя нагрузка';
+  return 'Перегружено';
+};
+const getLoadDesc = (load: number) => {
+  if (load <= 3) return 'Остановка свободна, очередей нет.';
+  if (load <= 7) return 'Умеренная загрузка, небольшие очереди.';
+  return 'Высокая загрузка — рекомендуем альтернативные маршруты.';
+};
+const fmt = (d: Date) => d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+// Helper: тип транспорта
+const getTransportLabel = (type: string) => {
+  const map: Record<string, string> = {
+    BUS: 'Автобус',
+    TROLLEYBUS: 'Троллейбус',
+    TRAM: 'Трамвай',
+    MINIBUS: 'Маршрутка',
+  };
+  return map[type] || type;
+};
+
+// Helper: цвет бейджа по типу транспорта
+const getTransportColor = (type: string) => {
+  const map: Record<string, { bg: string; text: string }> = {
+    BUS: { bg: '#dbeafe', text: '#1d4ed8' },
+    TROLLEYBUS: { bg: '#ede9fe', text: '#5b21b6' },
+    TRAM: { bg: '#fef3c7', text: '#92400e' },
+    MINIBUS: { bg: '#d1fae5', text: '#065f46' },
+  };
+  return map[type] || map.BUS;
+};
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+const ModalContent: React.FC<ModalContentProps> = ({ marker, isOpen, onClose }) => {
+  type Tab = 'info' | 'routes' | 'stats' | 'stream' | 'forecast';
+
+  const [activeTab, setActiveTab] = useState<Tab>('info');
   const [lastUpdated, setLastUpdated] = useState(new Date());
+
+  // Stats state
+  const [stats, setStats] = useState<StopStatsResponse | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  // Chart state
+  const [chartUrl, setChartUrl] = useState<string | null>(null);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
+
+  // Routes state — под твой Route.java
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [routesLoading, setRoutesLoading] = useState(false);
+  const [routesError, setRoutesError] = useState<string | null>(null);
+
+  // Mini player
+  const [showMiniPlayer, setShowMiniPlayer] = useState(false);
+
+  // Forecast
   const [forecastState, setForecastState] = useState<ForecastState>({
     showForecast: false,
     isForecastOpen: false,
     forecastData: null,
     autoRefresh: true,
-    showMiniChart: true
+    showMiniChart: true,
   });
 
+  const fetchedMarkerId = useRef<number | null>(null);
+
+  // Reset on open
   useEffect(() => {
     if (isOpen) {
       setLastUpdated(new Date());
+      setActiveTab('info');
+      setChartUrl(null);
+      setStats(null);
+      setRoutes([]);
+      setRoutesError(null);
+      fetchedMarkerId.current = null;
     }
-  }, [isOpen]);
+  }, [isOpen, marker.id, marker.address]);
 
-  const loadToColor = (load: number): string => {
-    if (load <= 3) return "#10b981";
-    if (load <= 7) return "#f59e0b";
-    return "#ef4444";
-  };
+  // ── Fetch stats ────────────────────────────────────────────────────────────
+  const fetchStats = useCallback(async () => {
+    setStatsLoading(true);
+    setStatsError(null);
+    try {
+      const res = await fetch(
+        `${baseUrl}/stops/history/${encodeURIComponent(marker.address)}/stats`
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: StopStatsResponse = await res.json();
+      setStats(data);
+    } catch (e) {
+      setStatsError(e instanceof Error ? e.message : 'Ошибка загрузки статистики');
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [marker.address]);
 
-  const getLoadLevel = (load: number): string => {
-    if (load <= 3) return "Низкая";
-    if (load <= 7) return "Средняя";
-    return "Высокая";
-  };
+  // ── Fetch chart ────────────────────────────────────────────────────────────
+  const fetchChart = useCallback(async () => {
+    setChartLoading(true);
+    setChartError(null);
+    try {
+      const res = await fetch(
+        `${baseUrl}/stops/history/${encodeURIComponent(marker.address)}/chart`
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setChartUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return url;
+      });
+    } catch (e) {
+      setChartError(e instanceof Error ? e.message : 'Ошибка загрузки графика');
+    } finally {
+      setChartLoading(false);
+    }
+  }, [marker.address]);
 
-  const getLoadDescription = (load: number): string => {
-    if (load <= 3) return "Остановка свободна, нет очередей";
-    if (load <= 7) return "Умеренная загрузка, небольшие очереди";
-    return "Высокая загрузка, рекомендуем альтернативные маршруты";
-  };
+  // Fetch routes — ТВОЙ ЭНДПОИНТ: /routes/by-stop/{stopId}
+  const fetchRoutes = useCallback(async () => {
+    setRoutesLoading(true);
+    setRoutesError(null);
+    try {
+      const response = await apiClient.get<Route[]>(`/routes/by-stop/${marker.id}`);
+      setRoutes(response.data);
+    } catch (e: any) {
+      setRoutesError(e?.response?.data?.message || e?.message || 'Ошибка загрузки маршрутов');
+      console.error('Failed to fetch routes:', e);
+    } finally {
+      setRoutesLoading(false);
+    }
+  }, [marker.id]);
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('ru-RU', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  // Load stats + chart when switching to stats tab
+  useEffect(() => {
+    if (activeTab === 'stats') {
+      if (!stats) fetchStats();
+      if (!chartUrl) fetchChart();
+    }
+  }, [activeTab, stats, chartUrl]);
+
+  // Load routes when switching to routes tab
+  useEffect(() => {
+    if (activeTab === 'routes' && !routesLoading && fetchedMarkerId.current !== marker.id) {
+      fetchedMarkerId.current = marker.id;
+      fetchRoutes();
+    }
+  }, [activeTab, routesLoading, marker.id]);
+
+  // Cleanup blob
+  useEffect(() => {
+    return () => {
+      if (chartUrl) URL.revokeObjectURL(chartUrl);
+    };
+  }, [chartUrl]);
 
   const handleForecastStateChange = (updates: Partial<ForecastState>) => {
     setForecastState(prev => ({ ...prev, ...updates }));
@@ -82,23 +251,39 @@ const ModalContent: React.FC<ModalContentProps> = ({
   };
 
   const handleOpenForecast = () => {
-    handleForecastStateChange({ 
-      showForecast: true, 
-      isForecastOpen: true 
-    });
+    handleForecastStateChange({ showForecast: true, isForecastOpen: true });
     setActiveTab('forecast');
   };
 
   if (!isOpen) return null;
 
+  // Helpers for info tab
+  const countLabel = marker.hasCamera ? 'ML-детекция' : 'Прогноз по графам';
+  const algoDisplay = marker.algorithmicCount + 8;
+
+  const TABS: { id: Tab; label: string }[] = [
+    { id: 'info', label: '📋 Информация' },
+    { id: 'routes', label: '🚌 Маршруты' },
+    { id: 'stats', label: '📊 Статистика' },
+    { id: 'forecast', label: '🔮 Прогноз' },
+    ...(marker.url ? [{ id: 'stream' as Tab, label: '🎥 Трансляция' }] : []),
+  ];
+
+  const statRows = stats
+    ? [
+      { label: 'Сегодня', s: stats.today },
+      { label: 'Вчера', s: stats.yesterday },
+      { label: 'Неделя', s: stats.week },
+      { label: 'Месяц', s: stats.month },
+    ]
+    : [];
+
   return (
     <>
-      {/* Overlay */}
       <div className="modal-overlay" onClick={onClose} />
-      
-      {/* Modal Container */}
       <div className="modal-container">
-        {/* Modal Header */}
+
+        {/* ══ HEADER ══════════════════════════════════════════════════════════ */}
         <div className="modal-header">
           <div className="header-left">
             <div className="marker-badge" style={{ backgroundColor: loadToColor(marker.load) }}>
@@ -111,413 +296,384 @@ const ModalContent: React.FC<ModalContentProps> = ({
               </h2>
               <div className="stop-meta">
                 <span className="meta-item">
-                  <span className="meta-icon">🕐</span>
-                  Обновлено: {formatTime(lastUpdated)}
+                  <span className="meta-icon">🕐</span> Обновлено: {fmt(lastUpdated)}
+                  {marker.url && (
+                    <span className="camera-badge" title="Есть видеотрансляция • Камера подключена">
+                      <span className="camera-dot"></span> Камера доступна
+                    </span>
+                  )}
                 </span>
                 <span className="meta-item">
-                  <span className="meta-icon">🆔</span>
-                  ID: #{marker.id}
+                  <span className="meta-icon">🆔</span> ID: #{marker.id}
                 </span>
               </div>
             </div>
           </div>
-          
           <div className="header-right">
-            <button 
-              className="icon-btn" 
-              title="Обновить данные"
-              onClick={() => setLastUpdated(new Date())}
-            >
+            <button className="icon-btn" title="Обновить" onClick={() => setLastUpdated(new Date())}>
               <span className="btn-icon">🔄</span>
             </button>
-            <button 
-              className="icon-btn" 
-              title="Развернуть на весь экран"
-              onClick={() => {
-                if (document.fullscreenElement) {
-                  document.exitFullscreen();
-                } else {
-                  document.documentElement.requestFullscreen();
-                }
-              }}
-            >
+            {marker.url && (
+              <button
+                className="icon-btn"
+                title="Открыть трансляцию"
+                onClick={() => setActiveTab('stream')}
+              >
+                <span className="btn-icon">🎥</span>
+              </button>
+            )}
+            {/* <button className="icon-btn" title="Полный экран"
+              onClick={() => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()}>
               <span className="btn-icon">📺</span>
-            </button>
-            <button 
-              className="icon-btn close-btn" 
-              onClick={onClose} 
-              title="Закрыть"
-            >
+            </button> */}
+            <button className="icon-btn close-btn" onClick={onClose} title="Закрыть">
               <span className="btn-icon">✕</span>
             </button>
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* ══ TABS ════════════════════════════════════════════════════════════ */}
         <div className="modal-tabs">
-          <button 
-            className={`tab-btn ${activeTab === 'info' ? 'active' : ''}`}
-            onClick={() => setActiveTab('info')}
-          >
-            <span className="tab-icon">📋</span>
-            <span className="tab-text">Информация</span>
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`}
-            onClick={() => setActiveTab('stats')}
-          >
-            <span className="tab-icon">📊</span>
-            <span className="tab-text">Статистика</span>
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'forecast' ? 'active' : ''}`}
-            onClick={handleOpenForecast}
-          >
-            <span className="tab-icon">🔮</span>
-            <span className="tab-text">Прогноз</span>
-            {forecastState.forecastData && (
-              <span className="tab-badge">🔄</span>
-            )}
-          </button>
-          {marker.url && (
-            <button 
-              className={`tab-btn ${activeTab === 'stream' ? 'active' : ''}`}
-              onClick={() => setActiveTab('stream')}
+          {TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              className={`tab-btn ${activeTab === id ? 'active' : ''}`}
+              onClick={() => id === 'forecast' ? handleOpenForecast() : setActiveTab(id)}
             >
-              <span className="tab-icon">🎥</span>
-              <span className="tab-text">Трансляция</span>
+              {label}
+              {id === 'forecast' && forecastState.forecastData && <span className="tab-badge">🔄</span>}
             </button>
-          )}
+          ))}
         </div>
 
-        {/* Modal Body */}
+        {/* ══ BODY ════════════════════════════════════════════════════════════ */}
         <div className="modal-body">
-          {/* Информационная вкладка */}
+
+          {/* ── INFO ──────────────────────────────────────────────────────── */}
           {activeTab === 'info' && (
             <div className="tab-content info-tab">
-              {/* Статус загрузки */}
+              <div className="info-banner" style={{
+                background: loadToBg(marker.load),
+                borderLeft: `3px solid ${loadToColor(marker.load)}`,
+                color: loadToText(marker.load),
+              }}>
+                💡 {getLoadDesc(marker.load)}
+              </div>
               <div className="status-card">
                 <div className="status-header">
-                  <h3>
-                    <span className="section-icon">📈</span>
-                    Статус загрузки
-                  </h3>
+                  <h3><span className="section-icon">📈</span> Статус загрузки</h3>
                   <div className="load-level" style={{ color: loadToColor(marker.load) }}>
                     {getLoadLevel(marker.load)}
                   </div>
                 </div>
-                <p className="load-description">
-                  <span className="description-icon">💡</span>
-                  {getLoadDescription(marker.load)}
-                </p>
-                
                 <div className="load-meter">
                   <div className="meter-labels">
-                    <span className="meter-label">🟢 Свободно</span>
-                    <span className="meter-label">🟡 Умеренно</span>
-                    <span className="meter-label">🔴 Перегружено</span>
+                    <span>🟢 Свободно</span><span>🟡 Умеренно</span><span>🔴 Перегружено</span>
                   </div>
                   <div className="meter-bar">
-                    <div 
-                      className="meter-fill" 
-                      style={{ 
-                        width: `${marker.load * 10}%`,
-                        backgroundColor: loadToColor(marker.load)
-                      }}
-                    />
-                    <div className="meter-pointer" style={{ left: `${marker.load * 10}%` }} />
+                    <div className="meter-fill" style={{ width: `${marker.load * 10}%`, backgroundColor: loadToColor(marker.load) }} />
                   </div>
-                  <div className="meter-value">
-                    <span className="value-icon">⚡</span>
-                    {marker.load}/10
-                  </div>
+                  <div className="meter-value"><span>⚡</span> {marker.load}/10</div>
                 </div>
               </div>
-
-              {/* Ключевые метрики */}
               <div className="metrics-grid">
                 <div className="metric-card">
                   <div className="metric-icon">👥</div>
                   <div className="metric-content">
-                    <div className="metric-value">{marker.count}</div>
+                    <div className="people-row">
+                      <div className="people-block">
+                        <div className="metric-value">{marker.count ?? 0}</div>
+                        <div className="people-source">{marker.hasCamera ? 'ML-детекция' : 'Прогноз'}</div>
+                      </div>
+                      <div className="people-divider" />
+                      <div className="people-block">
+                        <div className="metric-value algo-value">
+                          {marker.algorithmicCount !== undefined ? marker.algorithmicCount : '—'}
+                        </div>
+                        <div className="people-source"><span className="algo-badge">Алгоритм</span></div>
+                      </div>
+                    </div>
                     <div className="metric-label">Людей сейчас</div>
                   </div>
                 </div>
                 <div className="metric-card">
                   <div className="metric-icon">⚡</div>
                   <div className="metric-content">
-                    <div className="metric-value">{marker.velocity}</div>
+                    <div className="metric-value">{marker.velocity ?? 0}</div>
                     <div className="metric-label">Скорость притока</div>
                   </div>
                 </div>
                 <div className="metric-card">
                   <div className="metric-icon">📊</div>
                   <div className="metric-content">
-                    <div className="metric-value">{(marker.load * 10).toFixed(0)}%</div>
-                    <div className="metric-label">Загрузка остановки</div>
+                    <div className="metric-value">{((marker.load ?? 0) * 10).toFixed(0)}%</div>
+                    <div className="metric-label">Загрузка</div>
                   </div>
                 </div>
               </div>
-
-              {/* Быстрый прогноз */}
               <div className="forecast-preview-section">
                 <div className="section-header">
-                  <h3>
-                    <span className="section-icon">🔮</span>
-                    Быстрый прогноз
-                  </h3>
-                  <button 
-                    className="forecast-btn"
-                    onClick={handleOpenForecast}
-                  >
-                    <span className="btn-icon">📈</span>
-                    Подробный прогноз
+                  <h3><span className="section-icon">🔮</span> Быстрый прогноз</h3>
+                  <button className="forecast-btn" onClick={handleOpenForecast}>
+                    <span className="btn-icon">📈</span> Подробный прогноз
                   </button>
                 </div>
                 <div className="forecast-preview">
-                  <div className="forecast-item">
-                    <div className="forecast-time">
-                      <span className="time-icon">⏰</span>
-                      +15 мин
+                  {[
+                    { label: '+15 мин', mult: 1.1, pct: '+10%', dir: 'up' },
+                    { label: '+30 мин', mult: 1.2, pct: '+20%', dir: 'up' },
+                    { label: '+60 мин', mult: 0.9, pct: '-10%', dir: 'down' },
+                  ].map(({ label, mult, pct, dir }) => (
+                    <div key={label} className="forecast-item">
+                      <div className="forecast-time"><span>⏰</span> {label}</div>
+                      <div className="forecast-value">
+                        <span className="value-number">{Math.round(marker.count * mult)}</span>
+                        <span className="value-label">человек</span>
+                      </div>
+                      <div className={`forecast-trend ${dir}`}>{dir === 'up' ? '↗' : '↘'} {pct}</div>
                     </div>
-                    <div className="forecast-value">
-                      <span className="value-number">{Math.round(marker.count * 1.1)}</span>
-                      <span className="value-label">человек</span>
-                    </div>
-                    <div className="forecast-trend up">↗ +10%</div>
-                  </div>
-                  <div className="forecast-item">
-                    <div className="forecast-time">
-                      <span className="time-icon">⏰</span>
-                      +30 мин
-                    </div>
-                    <div className="forecast-value">
-                      <span className="value-number">{Math.round(marker.count * 1.2)}</span>
-                      <span className="value-label">человек</span>
-                    </div>
-                    <div className="forecast-trend up">↗ +20%</div>
-                  </div>
-                  <div className="forecast-item">
-                    <div className="forecast-time">
-                      <span className="time-icon">⏰</span>
-                      +60 мин
-                    </div>
-                    <div className="forecast-value">
-                      <span className="value-number">{Math.round(marker.count * 0.9)}</span>
-                      <span className="value-label">человек</span>
-                    </div>
-                    <div className="forecast-trend down">↘ -10%</div>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Статистика */}
+          {/* ── ROUTES — РЕАЛЬНЫЕ ДАННЫЕ: /routes/by-stop/{stopId} ───────── */}
+          {activeTab === 'routes' && (
+            <div className="tab-content routes-tab">
+              <div className="routes-header">
+                <span className="live-dot" />
+                <span className="routes-subtitle">
+                  Маршруты через остановку · {routesLoading ? 'загрузка...' : `${routes.filter(r => r.isActive).length} активных`}
+                </span>
+              </div>
+
+              {/* Loading */}
+              {routesLoading && routes.length === 0 && (
+                <div className="chart-loading">
+                  <div className="spinner" /><span>Загрузка маршрутов...</span>
+                </div>
+              )}
+
+              {/* Error */}
+              {routesError && !routesLoading && (
+                <div className="chart-error">
+                  ⚠️ {routesError}
+                  <button onClick={fetchRoutes}>Повторить</button>
+                </div>
+              )}
+
+              {/* Routes list — РЕАЛЬНЫЕ ДАННЫЕ */}
+              {!routesLoading && routes.filter(r => r.isActive).length > 0 && (
+                <div className="routes-list">
+                  {routes
+                    .filter(r => r.isActive)
+                    .sort((a, b) => a.number.localeCompare(b.number, 'ru'))
+                    .map(route => {
+                      const colors = getTransportColor(route.transportType);
+                      return (
+                        <div key={route.id} className="route-item">
+                          {/* НОМЕР МАРШРУТА — крупно в цветном бейдже */}
+                          <div
+                            className="route-num-badge"
+                            style={{ background: colors.bg, color: colors.text }}
+                            title={`Тип: ${getTransportLabel(route.transportType)}`}
+                          >
+                            {route.number}
+                          </div>
+
+                          {/* НАЗВАНИЕ МАРШРУТА — жирным шрифтом */}
+                          <div className="route-info">
+                            <div className="route-name" title={route.name}>
+                              <strong>{route.name}</strong>
+                            </div>
+                            <div className="route-details">
+                              <span>{getTransportLabel(route.transportType)}</span>
+                              {route.totalStops > 0 && <span>· {route.totalStops} остановок</span>}
+                            </div>
+                          </div>
+
+                          {/* Статус / иконка */}
+                          <div className="route-eta">
+                            <div className="eta-val">🕐</div>
+                            <div className="eta-label">расписание</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!routesLoading && !routesError && routes.filter(r => r.isActive).length === 0 && (
+                <div className="empty-state">
+                  <span className="empty-icon">🚌</span>
+                  <p>Нет активных маршрутов через эту остановку</p>
+                  <button className="refresh-small-btn" onClick={fetchRoutes}>🔄 Обновить</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── STATS ─────────────────────────────────────────────────────── */}
           {activeTab === 'stats' && (
             <div className="tab-content stats-tab">
-              <div className="charts-grid">
-                <div className="chart-card">
-                  <h3>
-                    <span className="section-icon">📉</span>
-                    Динамика загрузки
-                  </h3>
-                  <div className="chart-placeholder">
-                    <div className="chart-bars">
-                      {[5, 7, 8, 6, 9, 8, 7, 6, 5, 4, 6, 7].map((value, index) => (
-                        <div key={index} className="chart-bar" style={{ height: `${value * 10}%` }}>
-                          <div className="bar-label">{index + 1}ч</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <h3><span className="section-icon">📉</span> Загрузка за последние 12 часов</h3>
+                  <button className="refresh-small-btn" onClick={fetchChart} disabled={chartLoading}>
+                    {chartLoading ? '⏳' : '🔄'}
+                  </button>
                 </div>
-                <div className="chart-card">
-                  <h3>
-                    <span className="section-icon">🥧</span>
-                    Распределение по часам
-                  </h3>
-                  <div className="chart-placeholder">
-                    <div className="pie-chart">
-                      <div className="pie-segment" style={{ '--segment-size': '40%' } as React.CSSProperties}>
-                        <span>8-12ч</span>
-                      </div>
-                      <div className="pie-segment" style={{ '--segment-size': '30%' } as React.CSSProperties}>
-                        <span>13-17ч</span>
-                      </div>
-                      <div className="pie-segment" style={{ '--segment-size': '20%' } as React.CSSProperties}>
-                        <span>18-22ч</span>
-                      </div>
-                      <div className="pie-segment" style={{ '--segment-size': '10%' } as React.CSSProperties}>
-                        <span>23-7ч</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                {chartLoading && !chartUrl && <div className="chart-loading"><div className="spinner" /><span>Загрузка...</span></div>}
+                {chartError && !chartLoading && <div className="chart-error">⚠️ {chartError}<button onClick={fetchChart}>Повторить</button></div>}
+                {chartUrl && !chartLoading && !chartError && (
+                  <div className="chart-image-wrapper"><img src={chartUrl} alt="График" className="chart-img" onError={(e) => { setChartError('Ошибка загрузки'); e.currentTarget.style.display = 'none'; }} /></div>
+                )}
+                {!chartUrl && !chartLoading && !chartError && <div className="chart-placeholder-single"><div className="chart-placeholder-icon">📊</div><div className="chart-placeholder-text">Нет данных</div></div>}
               </div>
-
               <div className="stats-table">
-                <h3>
-                  <span className="section-icon">📋</span>
-                  Историческая статистика
-                </h3>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Период</th>
-                      <th>Средняя загрузка</th>
-                      <th>Пиковая нагрузка</th>
-                      <th>Среднее время ожидания</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td><span className="table-icon">📅</span> Сегодня</td>
-                      <td>6.8/10</td>
-                      <td>9/10</td>
-                      <td>4.2 мин</td>
-                    </tr>
-                    <tr>
-                      <td><span className="table-icon">📅</span> Вчера</td>
-                      <td>5.4/10</td>
-                      <td>8/10</td>
-                      <td>3.8 мин</td>
-                    </tr>
-                    <tr>
-                      <td><span className="table-icon">📅</span> За неделю</td>
-                      <td>5.9/10</td>
-                      <td>9/10</td>
-                      <td>4.0 мин</td>
-                    </tr>
-                    <tr>
-                      <td><span className="table-icon">📅</span> За месяц</td>
-                      <td>5.2/10</td>
-                      <td>8/10</td>
-                      <td>3.5 мин</td>
-                    </tr>
-                  </tbody>
-                </table>
+                <div className="stats-table-header">
+                  <h3><span className="section-icon">📋</span> Статистика</h3>
+                  <button className="refresh-small-btn" onClick={fetchStats} disabled={statsLoading}>{statsLoading ? '⏳' : '🔄'}</button>
+                </div>
+                {statsLoading && !stats && <div className="chart-loading"><div className="spinner" /><span>Загрузка...</span></div>}
+                {statsError && !statsLoading && <div className="chart-error">⚠️ {statsError}<button onClick={fetchStats}>Повторить</button></div>}
+                {stats && (
+                  <div className="table-wrapper">
+                    <table>
+                      <thead><tr><th>Период</th><th>Ср. загрузка</th><th>Пик</th><th>Мин</th><th>Ср. людей</th><th>Пик людей</th><th>Записей</th></tr></thead>
+                      <tbody>
+                        {statRows.map(({ label, s }) => (
+                          <tr key={label}>
+                            <td><span className="table-icon">📅</span> {label}</td>
+                            <td><span className="load-pill" style={{ background: loadToBg(s.avgLoad), color: loadToText(s.avgLoad) }}>{s.avgLoad}/10</span></td>
+                            <td style={{ color: loadToColor(s.peakLoad), fontWeight: 600 }}>{s.peakLoad}</td>
+                            <td style={{ color: loadToColor(s.minLoad), fontWeight: 600 }}>{s.minLoad}</td>
+                            <td>{s.avgCount}</td><td>{s.peakCount}</td><td className="records-count">{s.recordCount}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {stats && <div className="stats-updated">Обновлено: {fmt(new Date())}</div>}
               </div>
             </div>
           )}
 
-          {/* Прогноз */}
+          {/* ── FORECAST ──────────────────────────────────────────────────── */}
           {activeTab === 'forecast' && (
             <div className="tab-content forecast-tab">
               <ForecastPanel
                 address={marker.address}
-                stopData={{
-                  count: marker.count,
-                  load: marker.load,
-                  velocity: marker.velocity
-                }}
+                stopData={{ count: marker.count, load: marker.load, velocity: marker.velocity }}
                 onClose={() => handleForecastStateChange({ isForecastOpen: false })}
                 isOpen={forecastState.isForecastOpen}
-                onToggle={(isOpen) => handleForecastStateChange({ isForecastOpen: isOpen })}
+                onToggle={(open) => handleForecastStateChange({ isForecastOpen: open })}
                 forecastState={forecastState}
                 onForecastDataUpdate={(data) => handleForecastStateChange({ forecastData: data })}
               />
             </div>
           )}
 
-          {/* Прямая трансляция */}
+          {/* ── STREAM ────────────────────────────────────────────────────── */}
+          {/* ── STREAM — ТОЛЬКО ЕСЛИ ЕСТЬ URL КАМЕРЫ ───────────────── */}
           {activeTab === 'stream' && marker.url && (
             <div className="tab-content stream-tab">
               <div className="stream-header">
-                <div className="stream-header">
-                <h3>🎥 Прямая трансляция с остановки</h3>
+                <h3>🎥 Прямая трансляция</h3>
+                <div className="stream-badges">
+                  <span className="badge live">● LIVE</span>
+                  <span className="badge source">HLS</span>
+                </div>
               </div>
 
-                <div className="stream-container" style={{ width: '100%', height: '480px' }}>
-                {/* Вставляем рабочий HLS-плеер */}
+              <div className="stream-video-wrap">
                 <HlsPlayer
                   src={marker.url}
                   autoPlay
                   muted
                   controls
                   playsInline
-                  style={{ width: '100%', height: '100%', backgroundColor: 'black' }}
                   onError={(e) => console.error('HLS error:', e)}
                 />
               </div>
-              </div>
-              
-              <div className="stream-container">
-                <div className="video-placeholder">
-                  <div className="video-overlay">
-                    <div className="live-badge">📹 LIVE</div>
-                    <div className="video-info">
-                      <div className="info-item">
-                        <span className="info-label">📷 Камера:</span>
-                        <span className="info-value">#CAM-{marker.id}</span>
-                      </div>
-                      <div className="info-item">
-                        <span className="info-label">🟢 Статус:</span>
-                        <span className="info-value online">● Онлайн</span>
-                      </div>
-                      <div className="info-item">
-                        <span className="info-label">⏱️ Задержка:</span>
-                        <span className="info-value">2.3 сек</span>
-                      </div>
-                    </div>
+
+              <div className="stream-meta">
+                {[
+                  { label: '📷 Камера', value: `#CAM-${marker.id}` },
+                  { label: '🟢 Статус', value: '● Онлайн' },
+                  { label: '⏱️ Задержка', value: '2–3 сек' },
+                ].map(({ label, value }) => (
+                  <div key={label} className="stream-meta-item">
+                    <span className="stream-meta-label">{label}:</span>
+                    <span className="stream-meta-value">{value}</span>
                   </div>
-                  <div className="video-fallback">
-                    <div className="fallback-icon">📹</div>
-                    <div className="fallback-text">
-                      <p>Прямая трансляция с остановки</p>
-                      <small>Используется RTSP поток для наблюдения</small>
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
 
               <div className="stream-controls">
-                <button className="control-btn">
-                  ⏸️ Пауза
-                </button>
-                <button className="control-btn">
-                  ⏺️ Запись
-                </button>
-                <button className="control-btn">
-                  📸 Снимок
-                </button>
+                <button className="control-btn" title="Пауза">⏸️</button>
+                <button className="control-btn" title="Запись">⏺️</button>
+                <button className="control-btn" title="Снимок">📸</button>
                 <div className="volume-control">
-                  <span className="volume-icon">🔊</span>
+                  <span>🔊</span>
                   <input type="range" min="0" max="100" defaultValue="80" />
-                  <span className="volume-value">80%</span>
+                  <span>80%</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Если нет URL — показываем заглушку в том же месте */}
+          {activeTab === 'stream' && !marker.url && (
+            <div className="tab-content stream-tab">
+              <div className="stream-placeholder">
+                <div className="stream-placeholder-icon">📹</div>
+                <div className="stream-placeholder-text">Камера не подключена</div>
+                <div className="stream-placeholder-subtext">
+                  Для этой остановки нет видеотрансляции.
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Modal Footer */}
+        {/* ══ МИНИ-ПЛЕЕР ═════════════════════════════════════ */}
+        {showMiniPlayer && (
+          <>
+            <div className="modal-overlay" onClick={() => setShowMiniPlayer(false)} style={{ zIndex: 10000 }} />
+            <div className="mini-player-modal">
+              <div className="mini-player-header">
+                <div className="mini-player-title"><span>🎥</span> {marker.address}</div>
+                <div className="mini-player-badges">{marker.url && <span className="badge source">HLS</span>}<span className="badge live">● LIVE</span></div>
+                <button className="icon-btn close-btn" onClick={() => setShowMiniPlayer(false)}><span className="btn-icon">✕</span></button>
+              </div>
+              <div className="mini-player-content">
+                {marker.url ? (
+                  <HlsPlayer src={marker.url} autoPlay muted controls playsInline onError={(e) => console.error('HLS error:', e)} />
+                ) : (
+                  <div className="stream-placeholder"><div className="stream-placeholder-icon">📹</div><div className="stream-placeholder-text">Поток недоступен</div></div>
+                )}
+              </div>
+              <div className="mini-player-footer">
+                <span className="camera-id">#{marker.id}</span><span className="connection-status">{marker.url ? '🟢 Онлайн' : '🟡 Ожидание'}</span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ══ FOOTER ══════════════════════════════════════════════════════════ */}
         <div className="modal-footer">
           <div className="footer-actions">
-            <button 
-              className={`action-btn ${activeTab === 'forecast' ? 'secondary' : 'primary'}`}
-              onClick={handleOpenForecast}
-            >
-              <span className="btn-icon">📊</span>
-              <span className="btn-text">
-                {activeTab === 'forecast' ? 'Скрыть прогноз' : 'Полный прогноз'}
-              </span>
+            <button className={`action-btn ${activeTab === 'forecast' ? 'secondary' : 'primary'}`} onClick={handleOpenForecast}>
+              <span className="btn-icon">📊</span><span className="btn-text">{activeTab === 'forecast' ? 'Скрыть' : 'Прогноз'}</span>
             </button>
-            <button className="action-btn secondary">
-              <span className="btn-icon">📈</span>
-              <span className="btn-text">Сравнить с другими</span>
-            </button>
-            <button className="action-btn secondary">
-              <span className="btn-icon">🚌</span>
-              <span className="btn-text">Маршруты через остановку</span>
-            </button>
+            <button className="action-btn secondary" onClick={() => setActiveTab('routes')}><span className="btn-icon">🚌</span><span className="btn-text">Маршруты</span></button>
+            <button className="action-btn secondary" onClick={() => setActiveTab('stats')}><span className="btn-icon">📈</span><span className="btn-text">Статистика</span></button>
           </div>
-          <div className="footer-info">
-            <span className="coords">
-              <span className="coord-icon">📍</span>
-              Координаты: {marker.lat.toFixed(4)}, {marker.lng.toFixed(4)}
-            </span>
-          </div>
+          <div className="footer-info"><span className="coords">📍 {marker.lat.toFixed(4)}, {marker.lng.toFixed(4)}</span></div>
         </div>
       </div>
     </>

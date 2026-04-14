@@ -20,6 +20,7 @@ export interface Stop {
   count: number;
   velocity: number;
   load: number;
+  algorithmicCount: number;
   cityId: number;
   lat: number;
   lng: number;

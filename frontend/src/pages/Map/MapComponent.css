@@ -741,6 +741,12 @@
   }
 }
 
+.actions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* ===== City Selector ===== */
 .city-selector-wrapper { position: relative; margin-left: 12px; }
 .city-selector-btn {

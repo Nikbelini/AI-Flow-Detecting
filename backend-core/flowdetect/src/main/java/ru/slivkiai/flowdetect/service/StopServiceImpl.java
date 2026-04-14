@@ -282,10 +282,12 @@ public class StopServiceImpl implements StopService {
                                 .collect(Collectors.toList());
 
                 // Запрашиваем прогнозы ТОЛЬКО для слепых остановок этого города
-                Map<String, PredictionResponseDto> mlPredictionsMap = fetchPredictionsForAddresses(blindStops);
 
                 // Алгоритмический прогноз для ВСЕХ остановок
                 Map<String, PredictionResponseDto> algorithmicPredictionsMap = fetchAllPredictionsForCity(cityId);
+
+                Map<String, PredictionResponseDto> mlPredictionsMap = fetchPredictionsForAddresses(blindStops);
+
 
                 // Формируем ответ: реальные данные ИЛИ прогнозы
                 return cityStops.stream()

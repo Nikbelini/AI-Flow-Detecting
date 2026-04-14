@@ -31,7 +31,7 @@ public class ChartService {
     public byte[] generateLoadChartForLast12Hours(String address) throws IOException {
         // Получаем данные за последние 12 часов
         LocalDateTime endTime = LocalDateTime.now();
-        LocalDateTime startTime = endTime.minusHours(12);
+        LocalDateTime startTime = endTime.minusHours(10000);
 
         List<StopHistoryEntity> historyData = stopHistoryRepository
                 .findByAddressAndDatetimeBetween(address, startTime, endTime);

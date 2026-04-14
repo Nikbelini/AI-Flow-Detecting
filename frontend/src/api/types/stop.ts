@@ -1,3 +1,5 @@
+import type { Route } from ".";
+
 // Интерфейс для остановки (с сервера)
 export interface StopFromServer {
   id: number;
@@ -27,4 +29,14 @@ export interface Stop {
   velocity: number;
   createdAt: Date;
   updatedAt: Date;
+
+    // === Алгоритмические данные (отдельно) ===
+  algorithmicCount?: number | null;
+  algorithmicVelocity?: number | null;
+  algorithmicLoad?: number | null;
+  isMlFallback?: boolean;     // true = основные данные из ML
+  hasAlgorithmicData?: boolean; // true = алгоритм дал прогноз
+  
+  // === Для маршрутов ===
+  routes?: Route[]; // Опционально, можно грузить отдельно
 }

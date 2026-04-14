@@ -6,6 +6,7 @@ import {
   Speedometer2, ChevronDown, BoxArrowRight, 
   PersonGear, ShieldLock
 } from 'react-bootstrap-icons';
+import { MapPin, BarChart3, Route, PieChart } from 'lucide-react';
 import './NavigationHeader.css';
 
 const NavigationHeader: React.FC = () => {
@@ -41,6 +42,8 @@ const NavigationHeader: React.FC = () => {
     { key: 'map', label: 'Карта', color: 'primary', path: '/map' },
     { key: 'analytics', label: 'Аналитика', color: 'info', path: '/analytics' },
     { key: 'route-build', label: 'Построение маршрута', color: 'info', path: '/route-build' },
+    { key: 'statistics', label: 'Статистика', color: 'key', path: '/statistics' },
+
     ...(user?.role === 'ADMIN' ? [
       { key: 'admin', label: 'Админ-панель', color: 'warning', path: '/admin' }
     ] : [])
@@ -50,6 +53,8 @@ const NavigationHeader: React.FC = () => {
     switch(section) {
       case 'map': return <MapFill />;
       case 'analytics': return <GraphUp />;
+      case 'route-build': return <Route />;
+      case 'statistics': return <BarChart3 />;
       case 'admin': return <ShieldLock />;
       default: return <MapFill />;
     }

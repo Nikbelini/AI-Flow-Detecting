@@ -5,7 +5,7 @@ import './MapComponent.css';
 import ModalContent from './ModalContent';
 import {
   Clock, RefreshCw, MapPin, Minimize2, Maximize2, TrendingUp,
-  Users, Bus, Activity, Layers, Edit2, Trash2
+  Users, Bus, Activity, Layers, Edit2, Trash2, Thermometer
 } from 'lucide-react';
 import type { Stop, Route as ApiRoute } from '../../api/types';
 import { stopsApi } from '../../api/endpoints/stopsApi';
@@ -70,6 +70,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const [citiesList, setCitiesList] = useState<CityResponse[]>([]);
   const [isCityDropdownOpen, setIsCityDropdownOpen] = useState(false);
   const [citiesLoading, setCitiesLoading] = useState(false);
+  const [heatmapEnabled, setHeatmapEnabled] = useState(true);
 
   const [selectedCityId, setSelectedCityId] = useState<number>(
     cityId || 1
@@ -664,14 +665,14 @@ const MapComponent: React.FC<MapComponentProps> = ({
         if (cluster.count === 0) return;
 
         const size = getClusterSize(cluster.count);
-        const color = getClusterColor(cluster.avgLoad);
+        const clusterColor = heatmapEnabled ? getClusterColor(cluster.avgLoad) : '#3b82f6';
         const isSelected = isCreatingRoute && selectedStops.some(id => cluster.stops.some(s => s.id === id));
 
         const el = document.createElement('div');
         el.className = 'custom-marker cluster-marker';
         el.style.width = `${size}px`;
         el.style.height = `${size}px`;
-        el.style.backgroundColor = isSelected ? '#3B82F6' : color;
+        el.style.backgroundColor = isSelected ? '#3B82F6' : clusterColor;
         el.style.borderRadius = '50%';
         el.style.border = isSelected ? '3px solid #2563EB' : '3px solid white';
         el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
@@ -739,7 +740,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       // === РЕЖИМ ОТДЕЛЬНЫХ МАРКЕРОВ (при большом зуме) ===
       markers.forEach(marker => {
         const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
-        const color = loadToColor(marker.load);
+        const markerColor = heatmapEnabled ? loadToColor(marker.load) : '#3b82f6';
         const size = getMarkerSize(marker.load);
         const selectedIndex = isSelected ? selectedStops.indexOf(marker.id) + 1 : 0;
 
@@ -747,7 +748,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         el.className = 'custom-marker';
         el.style.width = `${size}px`;
         el.style.height = `${size}px`;
-        el.style.backgroundColor = isSelected ? '#3B82F6' : color;
+        el.style.backgroundColor = isSelected ? '#3B82F6' : markerColor;
         el.style.cursor = 'pointer';
         el.style.border = isSelected ? '3px solid #2563EB' : '3px solid white';
         el.style.borderRadius = '50%';
@@ -807,7 +808,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         markersRef.current.push(markerInstance);
       });
     }
-  }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops, mapLoaded, currentZoom]);
+  }, [markers, loading, isCreatingRoute, isCreatingStop, selectedStops, mapLoaded, currentZoom, heatmapEnabled]);
 
   const loadToColor = (load: number): string => {
     if (load <= 3) return "#10b981";
@@ -1019,28 +1020,28 @@ const MapComponent: React.FC<MapComponentProps> = ({
                     <span>Маршруты в системе</span>
                   </div>
                   <div className="routes-stats">
-  <div className="route-stat-item">
-    <span className="route-stat-label">Всего маршрутов</span>
-    <span className="route-stat-value">{displayRoutes.length}</span>
-  </div>
-  <div className="route-stat-item">
-    <span className="route-stat-label">Активных</span>
-    <span className="route-stat-value active">
-      {displayRoutes.filter(r => r.isActive).length}
-    </span>
-  </div>
-  <div className="route-stat-item">
-    <span className="route-stat-label">Средний интервал</span>
-    <span className="route-stat-value">
-      {displayRoutes.length > 0
-        ? Math.round(
-            displayRoutes.reduce((sum, r) => sum + (r.intervalMinutes || 15), 0) / 
-            displayRoutes.length
-          )
-        : 0} мин
-    </span>
-  </div>
-</div>
+                    <div className="route-stat-item">
+                      <span className="route-stat-label">Всего маршрутов</span>
+                      <span className="route-stat-value">{displayRoutes.length}</span>
+                    </div>
+                    <div className="route-stat-item">
+                      <span className="route-stat-label">Активных</span>
+                      <span className="route-stat-value active">
+                        {displayRoutes.filter(r => r.isActive).length}
+                      </span>
+                    </div>
+                    <div className="route-stat-item">
+                      <span className="route-stat-label">Средний интервал</span>
+                      <span className="route-stat-value">
+                        {displayRoutes.length > 0
+                          ? Math.round(
+                            displayRoutes.reduce((sum, r) => sum + (r.intervalMinutes || 15), 0) /
+                            displayRoutes.length
+                          )
+                          : 0} мин
+                      </span>
+                    </div>
+                  </div>
 
                   {/* Список маршрутов */}
                   <div className="routes-list-sidebar">
@@ -1106,6 +1107,17 @@ const MapComponent: React.FC<MapComponentProps> = ({
               <button className="action-btn primary" onClick={fetchMarkers} disabled={loading}>
                 <RefreshCw size={16} className={loading ? 'spin' : ''} />
                 {loading ? 'Обновление...' : 'Обновить данные'}
+              </button>
+
+              {/* Новая кнопка тепловой карты */}
+              <button
+                className={`action-btn ${heatmapEnabled ? 'active' : ''}`}
+                onClick={() => setHeatmapEnabled(!heatmapEnabled)}
+                title={heatmapEnabled ? 'Выключить тепловую карту' : 'Включить тепловую карту'}
+                style={{ marginTop: '8px' }} // или добавьте класс для отступа
+              >
+                <Thermometer size={16} />
+                Тепловая карта
               </button>
             </div>
 
