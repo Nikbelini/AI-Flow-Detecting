@@ -1,5 +1,6 @@
 package ru.slivkiai.flowdetect.user.repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,4 +17,8 @@ public interface DeviceSessionRepository extends JpaRepository<DeviceSession, Lo
     Optional<DeviceSession> findByUserIdAndDeviceFingerprintAndRevokedFalse(
             Long userId, String fingerprint);
     List<DeviceSession> findByUserIdAndRevokedFalse(Long userId);
+
+    List<DeviceSession> findByUserIdAndLastActiveAtAfter(Long userId, LocalDateTime date);
+
+    List<DeviceSession> findByUserIdAndRevokedIsFalse(Long userId);
 }

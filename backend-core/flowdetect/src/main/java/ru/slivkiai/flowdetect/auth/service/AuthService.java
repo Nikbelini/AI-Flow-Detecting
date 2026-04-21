@@ -74,7 +74,7 @@ public class AuthService {
         int lockDuration = policy.getLockDurationSeconds();
 
         if (user.isAccountLocked() || user.isLocked()) {
-            throw new RuntimeException("Аккаунт заблокировн");
+            throw new RuntimeException("Аккаунт заблокирован");
         }
 
         // Проверка временной блокировки

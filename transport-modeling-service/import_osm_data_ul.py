@@ -153,7 +153,7 @@ def parse_osm_xml(xml_path: str) -> Tuple[Dict, Dict]:
     return nodes, relations
 
 
-async def import_osm_data(pool: asyncpg.Pool, xml_path: str = "ul.xml", force_reload: bool = False):
+async def import_osm_data(pool: asyncpg.Pool, xml_path: str = "uly-small.xml", force_reload: bool = False):
     """Импорт данных из OSM XML файла"""
     
     logger.info("=" * 60)
