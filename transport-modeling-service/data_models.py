@@ -31,6 +31,8 @@ class Metrics(BaseModel):
     totalPassengers: int
     avgLoad: float
     transportUtilization: float
+    avgTravelTime: float = 0.0
+    maxTravelTime: float = 0.0
 
 class HourlyData(BaseModel):
     hour: int

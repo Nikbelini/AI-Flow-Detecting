@@ -294,7 +294,7 @@ class SimulationEngine:
         modifications: List[Modification]
     ) -> Tuple[List[Dict], List[Dict]]:
         """
-        Почасовая симуляция с агентами для точного измерения времени ожидания
+        Почасовая симуляция с агентами
         """
         hourly_results = []
         agents = []
@@ -310,11 +310,16 @@ class SimulationEngine:
                 modifications
             )
             
+            # ✅ Сохраняем travel_times в hour_result
+            hour_travel_times = [a.get("travel_time", 0) for a in completed_in_hour if a.get("travel_time", 0) > 0]
+            hour_result["travel_times"] = hour_travel_times
+            
             hourly_results.append(hour_result)
             agents = remaining_agents
             completed_agents.extend(completed_in_hour)
             
-            logger.info(f"⏰ Час {hour}: {hour_result['total_passengers']} пасс., уехало {hour_result['total_departed']}, ждут {len(agents)}")
+            logger.info(f"⏰ Час {hour}: {hour_result['total_passengers']} пасс., уехало {hour_result['total_departed']}, "
+                    f"ср.время в пути {np.mean(hour_travel_times) if hour_travel_times else 0:.1f} мин")
         
         return hourly_results, completed_agents
     
@@ -367,6 +372,9 @@ class SimulationEngine:
                     "start_hour": hour,
                     "start_minute": random.randint(0, 59),
                     "wait_time": 0,
+                    "travel_time": 0,
+                    "boarded_at_hour": None,
+                    "boarded_at_minute": None,
                     "status": "waiting",
                     "original_stop": stop_id
                 }
@@ -500,12 +508,33 @@ class SimulationEngine:
                 route_id = agent["chosen_route"]
                 route = network["routes"][route_id]
                 route_intervals = [route["current_interval"]]
-                agent["departure_hour"] = hour
-                agent["departure_minute"] = random.randint(0, 59)
-                agent["wait_time"] += self._calculate_agent_wait_time(route_intervals)
+                
+                # Запоминаем время посадки
+                agent["boarded_at_hour"] = hour
+                agent["boarded_at_minute"] = random.randint(0, 59)
+                
+                # Время ожидания
+                wait_time = self._calculate_agent_wait_time(route_intervals)
+                agent["wait_time"] += wait_time
+                
+                # Рассчитываем время в пути до destination
+                travel_time_minutes = self._calculate_travel_time(
+                    network, 
+                    stop_id, 
+                    agent["destination_stop"], 
+                    route_id,
+                    hour
+                )
+                agent["travel_time"] = travel_time_minutes
+                
                 agent["status"] = "departed"
                 completed_agents.append(agent)
+                
                 hour_result["stops"][stop_id]["wait_times"].append(agent["wait_time"])
+                
+                if "travel_times" not in hour_result["stops"][stop_id]:
+                    hour_result["stops"][stop_id]["travel_times"] = []
+                hour_result["stops"][stop_id]["travel_times"].append(travel_time_minutes)
             
             # Оставшиеся
             all_waiting = still_waiting + waiting
@@ -542,9 +571,66 @@ class SimulationEngine:
                 hour,
                 closed_stops
             )
+
+        all_travel_times = []
+        for stop_result in hour_result["stops"].values():
+            all_travel_times.extend(stop_result.get("travel_times", []))
+        
+        if all_travel_times:
+            hour_result["avg_travel_time"] = np.mean(all_travel_times)
+            hour_result["max_travel_time"] = np.max(all_travel_times)
+        else:
+            hour_result["avg_travel_time"] = 0
+            hour_result["max_travel_time"] = 0
         
         return hour_result, remaining_agents, completed_agents
     
+    def _calculate_travel_time(
+        self,
+        network: Dict,
+        from_stop_id: int,
+        to_stop_id: int,
+        route_id: int,
+        hour: int
+    ) -> float:
+        """
+        Расчёт времени поездки от остановки from_stop_id до остановки to_stop_id
+        по заданному маршруту route_id с учётом часа (для возможных пробок в будущем).
+        """
+        route = network["routes"].get(route_id)
+        if not route:
+            return 30  # значение по умолчанию
+        
+        stops = route.get("stops", [])
+        if not stops:
+            return 30
+        
+        # Находим позиции остановок в маршруте
+        try:
+            from_idx = stops.index(from_stop_id)
+            to_idx = stops.index(to_stop_id)
+        except ValueError:
+            # Остановки не найдены в маршруте → возвращаем базовое время
+            return 30
+        
+        if to_idx <= from_idx:
+            # Маршрут не проходит в нужном направлении
+            return 30
+        
+        # Базовое время между остановками (минут)
+        # В реальности можно взять из БД или рассчитать по расстоянию
+        base_travel_time_per_stop = 2
+        
+        # Количество промежутков между остановками
+        segments = to_idx - from_idx
+        travel_time = segments * base_travel_time_per_stop
+        
+        # Можно добавить коэффициент загруженности в час пик
+        if hour in [7, 8, 9, 17, 18, 19]:
+            travel_time *= 1.3  # +30% в часы пик
+        
+        return travel_time
+
     def _calculate_agent_wait_time(self, route_intervals: List[int]) -> float:
         """
         Расчёт времени ожидания для одного агента
@@ -933,7 +1019,7 @@ class SimulationEngine:
     
     def _calculate_metrics_from_hourly(self, hourly_data: List[Dict], network: Dict) -> Metrics:
         """
-        Расчёт базовых метрик
+        Расчёт базовых метрик с учётом времени в пути
         """
         if not hourly_data:
             return Metrics(
@@ -941,7 +1027,9 @@ class SimulationEngine:
                 maxWaitTime=0,
                 totalPassengers=0,
                 avgLoad=0,
-                transportUtilization=0
+                transportUtilization=0,
+                avgTravelTime=0,
+                maxTravelTime=0
             )
         
         total_passengers = sum(h["total_passengers"] for h in hourly_data)
@@ -960,12 +1048,25 @@ class SimulationEngine:
         loads = [stop.get("base_load", 3) for stop in network["stops"].values()]
         avg_load = np.mean(loads) if loads else 0
         
+        all_travel_times = []
+        for h in hourly_data:
+            all_travel_times.extend(h.get("travel_times", []))
+        
+        if all_travel_times:
+            avg_travel = np.mean(all_travel_times)
+            max_travel = np.max(all_travel_times)
+        else:
+            avg_travel = 0
+            max_travel = 0
+        
         return Metrics(
             avgWaitTime=float(weighted_wait),
             maxWaitTime=float(max_wait),
             totalPassengers=total_pass,
             avgLoad=float(avg_load),
-            transportUtilization=float(avg_load / 10)
+            transportUtilization=float(avg_load / 10),
+            avgTravelTime=float(avg_travel),
+            maxTravelTime=float(max_travel)
         )
     
     def _find_affected_stops(

@@ -9,8 +9,9 @@ interface MetricsData {
   totalPassengers: number;
   avgLoad: number;
   transportUtilization: number;
+  avgTravelTime: number;
+  maxTravelTime: number;
 }
-
 interface KeyMetricsProps {
   baseMetrics: MetricsData;
   modifiedMetrics: MetricsData;
@@ -41,7 +42,7 @@ const KeyMetrics: React.FC<KeyMetricsProps> = ({ baseMetrics, modifiedMetrics })
       modified: modifiedMetrics.avgWaitTime,
       color: '#3b82f6',
       description: 'Среднее время, которое пассажиры проводят на остановке',
-      isBetterWhenLower: true  // ✅ меньше = лучше
+      isBetterWhenLower: true
     },
     {
       id: 'maxWait',
@@ -88,6 +89,30 @@ const KeyMetrics: React.FC<KeyMetricsProps> = ({ baseMetrics, modifiedMetrics })
       description: 'Эффективность использования транспортных средств',
       isBetterWhenLower: false,
       formatter: (v: number) => v.toFixed(1)
+    },
+    {
+      id: 'travelTime',
+      title: 'Среднее время в пути',
+      unit: 'мин',
+      icon: <TrendingUp size={20} className="text-indigo-500" />,
+      base: baseMetrics.avgTravelTime,
+      modified: modifiedMetrics.avgTravelTime,
+      color: '#6366f1',
+      description: 'Среднее время поездки от посадки до прибытия',
+      isBetterWhenLower: true,
+      formatter: (v: number) => v.toFixed(1)
+    },
+    {
+      id: 'maxTravelTime',
+      title: 'Максимальное время в пути',
+      unit: 'мин',
+      icon: <TrendingUp size={20} className="text-red-500" />,
+      base: baseMetrics.maxTravelTime,
+      modified: modifiedMetrics.maxTravelTime,
+      color: '#ef4444',
+      description: 'Самая долгая поездка в системе',
+      isBetterWhenLower: true,
+      formatter: (v: number) => v.toFixed(1)
     }
   ];
 
@@ -106,13 +131,13 @@ const KeyMetrics: React.FC<KeyMetricsProps> = ({ baseMetrics, modifiedMetrics })
       <div className="metrics-grid">
         {metrics.map((metric, index) => {
           const change = getChange(metric.base, metric.modified);
-          const isBetter = metric.isBetterWhenLower 
+          const isBetter = metric.isBetterWhenLower
             ? change.type === 'negative'  // уменьшение = хорошо
             : change.type === 'positive';  // увеличение = хорошо
 
           return (
-            <div 
-              key={metric.id} 
+            <div
+              key={metric.id}
               className="metric-card"
               style={{ animationDelay: `${index * 0.05}s` }}
             >
@@ -136,7 +161,7 @@ const KeyMetrics: React.FC<KeyMetricsProps> = ({ baseMetrics, modifiedMetrics })
 
                 <div className="metric-arrow">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 4L12 20M12 20L8 16M12 20L16 16" stroke={metric.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M12 4L12 20M12 20L8 16M12 20L16 16" stroke={metric.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </div>
 
@@ -160,15 +185,15 @@ const KeyMetrics: React.FC<KeyMetricsProps> = ({ baseMetrics, modifiedMetrics })
 
               <div className="metric-progress">
                 <div className="progress-bar-bg">
-                  <div 
+                  <div
                     className="progress-bar-fill baseline"
-                    style={{ 
+                    style={{
                       width: `${Math.min(100, (metric.base / Math.max(metric.base, metric.modified)) * 100)}%`
                     }}
                   />
-                  <div 
+                  <div
                     className="progress-bar-fill modified"
-                    style={{ 
+                    style={{
                       width: `${Math.min(100, (metric.modified / Math.max(metric.base, metric.modified)) * 100)}%`,
                       backgroundColor: metric.color
                     }}
@@ -191,21 +216,21 @@ const KeyMetrics: React.FC<KeyMetricsProps> = ({ baseMetrics, modifiedMetrics })
             {(() => {
               let totalImprovement = 0;
               let count = 0;
-              
+
               metrics.forEach(m => {
                 const change = getChange(m.base, m.modified);
-                const isGood = m.isBetterWhenLower 
+                const isGood = m.isBetterWhenLower
                   ? change.type === 'negative'
                   : change.type === 'positive';
-                
+
                 if (change.type !== 'neutral') {
                   totalImprovement += isGood ? change.value : -change.value;
                   count++;
                 }
               });
-              
+
               const avgImprovement = count > 0 ? totalImprovement / count : 0;
-              
+
               if (avgImprovement > 5) return `✨ +${avgImprovement.toFixed(1)}% улучшение`;
               if (avgImprovement > 0) return `👍 +${avgImprovement.toFixed(1)}% улучшение`;
               if (avgImprovement > -5) return `⚪ ${Math.abs(avgImprovement).toFixed(1)}% изменение`;
@@ -216,11 +241,11 @@ const KeyMetrics: React.FC<KeyMetricsProps> = ({ baseMetrics, modifiedMetrics })
         <div className="summary-item">
           <span className="summary-label">Рекомендация</span>
           <div className="summary-value">
-            {baseMetrics.avgWaitTime > modifiedMetrics.avgWaitTime 
+            {baseMetrics.avgWaitTime > modifiedMetrics.avgWaitTime
               ? '✅ Изменения эффективны'
               : baseMetrics.avgWaitTime < modifiedMetrics.avgWaitTime
-              ? '💡 Требуется дополнительная оптимизация'
-              : '⚪ Нет значимых изменений'}
+                ? '💡 Требуется дополнительная оптимизация'
+                : '⚪ Нет значимых изменений'}
           </div>
         </div>
       </div>
