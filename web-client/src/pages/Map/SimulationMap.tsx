@@ -1,5 +1,4 @@
-// src/pages/Map/SimulationMap.tsx
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './SimulationMap.css';
@@ -37,13 +36,14 @@ interface SimulationMapProps {
   onMapClick?: (lngLat: [number, number]) => void;
   selectionMode?: boolean;
   creationMode?: 'stop' | 'route' | null;
-  // НОВЫЕ ПРОПСЫ
   showStops?: boolean;
   filteredRouteIds?: Set<number>;
   onShowStopsChange?: (show: boolean) => void;
+  // НОВЫЕ ПРОПСЫ ДЛЯ ВЫДЕЛЕНИЯ ОБЛАСТИ
+  regionBounds?: maplibregl.LngLatBounds | null;
 }
 
-const SimulationMap: React.FC<SimulationMapProps> = ({
+const SimulationMap = forwardRef<maplibregl.Map, SimulationMapProps>(({
   markers,
   routes = [],
   selectedStopId,
@@ -55,8 +55,9 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
   creationMode = null,
   showStops = true,
   filteredRouteIds = new Set(),
-  onShowStopsChange
-}) => {
+  onShowStopsChange,
+  regionBounds = null
+}, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
@@ -66,6 +67,9 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [hoveredStop, setHoveredStop] = useState<ExtendedStop | null>(null);
   const [hoveredRoute, setHoveredRoute] = useState<MapRoute | null>(null);
+
+  // Передаём ссылку на карту родителю
+  useImperativeHandle(ref, () => map.current as maplibregl.Map);
 
   // ФИЛЬТРАЦИЯ МАРКЕРОВ
   const visibleMarkers = showStops ? markers : [];
@@ -118,6 +122,65 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       }
     };
   }, []);
+
+  // Отрисовка выделенной области
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+
+    const boundsLayerId = 'region-bounds-outline';
+    const boundsFillId = 'region-bounds-fill';
+
+    // Удаляем старые слои
+    if (map.current.getLayer(boundsFillId)) map.current.removeLayer(boundsFillId);
+    if (map.current.getLayer(boundsLayerId)) map.current.removeLayer(boundsLayerId);
+    if (map.current.getSource('region-bounds')) map.current.removeSource('region-bounds');
+
+    if (regionBounds) {
+      const sw = regionBounds.getSouthWest();
+      const ne = regionBounds.getNorthEast();
+
+      const polygon: GeoJSON.Feature = {
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[
+            [sw.lng, sw.lat],
+            [ne.lng, sw.lat],
+            [ne.lng, ne.lat],
+            [sw.lng, ne.lat],
+            [sw.lng, sw.lat]
+          ]]
+        },
+        properties: {}
+      };
+
+      map.current.addSource('region-bounds', {
+        type: 'geojson',
+        data: polygon
+      });
+
+      map.current.addLayer({
+        id: boundsFillId,
+        type: 'fill',
+        source: 'region-bounds',
+        paint: {
+          'fill-color': '#3b82f6',
+          'fill-opacity': 0.1
+        }
+      });
+
+      map.current.addLayer({
+        id: boundsLayerId,
+        type: 'line',
+        source: 'region-bounds',
+        paint: {
+          'line-color': '#3b82f6',
+          'line-width': 3,
+          'line-dasharray': [5, 5]
+        }
+      });
+    }
+  }, [mapLoaded, regionBounds]);
 
   // Обработчик клика по карте для создания остановки
   useEffect(() => {
@@ -476,7 +539,7 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
         </div>
       )}
 
-      {/* НОВЫЙ: Бейдж "Остановки скрыты" */}
+      {/* Бейдж "Остановки скрыты" */}
       {!showStops && markers.length > 0 && (
         <div className="map-status-badge hidden-stops">
           <EyeOff size={14} />
@@ -487,7 +550,7 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
         </div>
       )}
 
-      {/* НОВЫЙ: Бейдж "Фильтрация маршрутов" */}
+      {/* Бейдж "Фильтрация маршрутов" */}
       {filteredRouteIds.size > 0 && routes.length > 0 && (
         <div className="map-status-badge filtered-routes">
           <RouteIcon size={14} />
@@ -550,6 +613,8 @@ const SimulationMap: React.FC<SimulationMapProps> = ({
       </div>
     </div>
   );
-};
+});
+
+SimulationMap.displayName = 'SimulationMap';
 
 export default SimulationMap;

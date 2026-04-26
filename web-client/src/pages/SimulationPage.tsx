@@ -1,4 +1,3 @@
-// src/pages/SimulationPage.tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './SimulationPage.css';
 import SimulationMap, { type MapRoute } from './Map/SimulationMap';
@@ -9,6 +8,7 @@ import {
   Clock, Users, Bus, TrendingUp,
   Plus, Trash2, Settings, Route as RouteIcon,
   PieChart, Activity, Target, Save,
+  Maximize2,
 } from 'lucide-react';
 import type { Stop } from '../api/types';
 import StopMetricsModal from '../components/modal/StopMetricsModal';
@@ -21,6 +21,9 @@ import {
 import KeyMetrics from '../components/KeyMetrics';
 import AffectedStopsList from '../components/AffectedStopsList';
 import ScenarioManager from '../components/ScenarioManager';
+import maplibregl from 'maplibre-gl';
+import MapRegionSelector from '../components/MapRegionSelector';
+import { SimulationRegionFilter } from '../components/SimulationRegionFilter';
 
 // ========== ТИПЫ ==========
 
@@ -194,6 +197,13 @@ const SimulationPage: React.FC = () => {
   const [showStops, setShowStops] = useState(true);
   const [searchRouteQuery, setSearchRouteQuery] = useState('');
   const [filteredRouteIds, setFilteredRouteIds] = useState<Set<number>>(new Set());
+
+  // Состояния для выделения области
+  const [selectedRegionBounds, setSelectedRegionBounds] = useState<maplibregl.LngLatBounds | null>(null);
+  const [regionFilteredStopIds, setRegionFilteredStopIds] = useState<Set<number>>(new Set());
+  const [regionFilteredRouteIds, setRegionFilteredRouteIds] = useState<Set<number>>(new Set());
+  const [regionSelectionEnabled, setRegionSelectionEnabled] = useState(false);
+  const mapRef = useRef<maplibregl.Map | null>(null);
 
   // Используем реактивные данные из хуков
   const {
@@ -714,6 +724,28 @@ const SimulationPage: React.FC = () => {
     linkElement.click();
   };
 
+  // Функция для обработки фильтрации по области
+  const handleRegionFilterChange = useCallback((stopIds: Set<number>, routeIds: Set<number>) => {
+    setRegionFilteredStopIds(stopIds);
+    setRegionFilteredRouteIds(routeIds);
+  }, []);
+
+  // Объединённые фильтры (область + ручной поиск)
+  const finalFilteredRouteIds = useCallback(() => {
+    let ids = new Set<number>();
+    if (regionFilteredRouteIds.size > 0) {
+      ids = new Set(regionFilteredRouteIds);
+    }
+    if (filteredRouteIds.size > 0) {
+      if (ids.size > 0) {
+        ids = new Set([...ids].filter(id => filteredRouteIds.has(id)));
+      } else {
+        ids = new Set(filteredRouteIds);
+      }
+    }
+    return ids;
+  }, [regionFilteredRouteIds, filteredRouteIds])();
+
   return (
     <div className="simulation-page">
       {/* Заголовок */}
@@ -840,6 +872,24 @@ const SimulationPage: React.FC = () => {
               </label>
             </div>
 
+            <div className="region-selector-wrapper">
+              <MapRegionSelector
+                map={mapRef.current}
+                onRegionSelected={(bounds) => setSelectedRegionBounds(bounds)}
+                enabled={regionSelectionEnabled}
+                onToggle={setRegionSelectionEnabled}
+              />
+            </div>
+
+            {selectedRegionBounds && (
+              <SimulationRegionFilter
+                bounds={selectedRegionBounds}
+                stops={cityStops}
+                routes={cityRoutes}
+                onFilterChange={handleRegionFilterChange}
+              />
+            )}
+
             <div className="route-search">
               <div className="search-header">
                 <RouteIcon size={16} />
@@ -912,13 +962,17 @@ const SimulationPage: React.FC = () => {
               )}
             </div>
 
-            {(searchRouteQuery || !showStops) && (
+            {(searchRouteQuery || !showStops || regionSelectionEnabled) && (
               <button
                 className="reset-filters-btn"
                 onClick={() => {
                   setSearchRouteQuery('');
                   setFilteredRouteIds(new Set());
                   setShowStops(true);
+                  setRegionSelectionEnabled(false);
+                  setSelectedRegionBounds(null);
+                  setRegionFilteredStopIds(new Set());
+                  setRegionFilteredRouteIds(new Set());
                 }}
               >
                 <RotateCcw size={14} />
@@ -1137,6 +1191,7 @@ const SimulationPage: React.FC = () => {
             <div className="loading-overlay">Загрузка остановок и маршрутов...</div>
           ) : (
             <SimulationMap
+              ref={mapRef}
               markers={cityStops.map(stop => ({ ...stop, color: getStopColor(stop.id) }))}
               routes={cityRoutes}
               onMarkerClick={handleMarkerClick}
@@ -1147,7 +1202,8 @@ const SimulationPage: React.FC = () => {
               selectedStopId={selectedStop?.id}
               selectedRouteId={selectedRoute?.id}
               showStops={showStops}
-              filteredRouteIds={filteredRouteIds}
+              filteredRouteIds={finalFilteredRouteIds}
+              regionBounds={selectedRegionBounds}
             />
           )}
           {(editMode === 'select_stop' || editMode === 'select_route') && (

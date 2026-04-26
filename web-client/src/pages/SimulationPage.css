@@ -2267,3 +2267,166 @@ input:checked + .slider:before {
   align-items: center;
   gap: 0.25rem;
 }
+
+/* Стили для MapRegionSelector */
+.map-region-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.region-selector-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    color: #334155;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.region-selector-btn:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.region-selector-btn.active {
+    background: #3b82f6;
+    border-color: #2563eb;
+    color: white;
+}
+
+.region-selector-start-btn {
+    padding: 6px 12px;
+    background: #10b981;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+.region-selector-start-btn:hover {
+    background: #059669;
+}
+
+.region-selector-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #dbeafe;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.region-info-text {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #1e40af;
+}
+
+.region-clear-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #ef4444;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.region-clear-btn:hover {
+    background: #fee2e2;
+}
+
+.region-selecting-hint {
+    padding: 6px 12px;
+    background: #fef3c7;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #92400e;
+    text-align: center;
+}
+
+/* Стили для SimulationRegionFilter */
+.simulation-region-filter {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+}
+
+.filter-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-weight: 500;
+    font-size: 14px;
+    color: #1e293b;
+}
+
+.filter-clear-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #94a3b8;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.filter-clear-btn:hover {
+    background: #f1f5f9;
+    color: #ef4444;
+}
+
+.filter-stats {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 10px;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.filter-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: #fef3c7;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #92400e;
+}
+
+.filter-success {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: #dcfce7;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #166534;
+}
