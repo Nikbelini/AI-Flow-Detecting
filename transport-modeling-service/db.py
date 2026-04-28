@@ -6,12 +6,146 @@ from datetime import datetime, timedelta
 import numpy as np
 import math
 
+from data_models import RegionBounds
+
 logger = logging.getLogger(__name__)
 
 class DatabaseService:
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
     
+    async def get_stops_in_region(self, city_id: int, bounds: RegionBounds) -> List[Dict]:
+        """Получение остановок, попадающих в заданную область"""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT id, address, lat, lng, count as current_count, 
+                    velocity as current_velocity, load as current_load
+                FROM stops 
+                WHERE city_id = $1 
+                AND lat BETWEEN $2 AND $3 
+                AND lng BETWEEN $4 AND $5
+            """, city_id, bounds.minLat, bounds.maxLat, bounds.minLng, bounds.maxLng)
+            return [dict(row) for row in rows]
+
+    async def get_routes_in_region(self, city_id: int, bounds: RegionBounds) -> List[Dict]:
+        """Получение маршрутов, которые проходят через остановки в области"""
+        # Сначала получаем id остановок в области
+        stops_in_region = await self.get_stops_in_region(city_id, bounds)
+        stop_ids = [s['id'] for s in stops_in_region]
+        if not stop_ids:
+            return []
+        
+        # Затем ищем маршруты, которые содержат хотя бы одну из этих остановок
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT DISTINCT r.id, r.number, r.name, r.transport_type, 
+                    r.interval_minutes, r.operating_hours, r.is_active,
+                    r.direction_a_name, r.direction_b_name
+                FROM routes r
+                JOIN route_stops rs ON rs.route_id = r.id
+                WHERE r.city_id = $1 AND rs.stop_id = ANY($2)
+            """, city_id, stop_ids)
+            
+            result = []
+            for row in rows:
+                route_dict = dict(row)
+                
+                # Получаем все остановки маршрута с координатами
+                stops = await conn.fetch("""
+                    SELECT s.id, s.lat, s.lng, rs.order_in_route
+                    FROM route_stops rs
+                    JOIN stops s ON s.id = rs.stop_id
+                    WHERE rs.route_id = $1
+                    ORDER BY rs.order_in_route
+                """, route_dict['id'])
+                
+                path = []
+                stop_ids_list = []
+                for stop in stops:
+                    lng = stop['lng']
+                    lat = stop['lat']
+                    
+                    if isinstance(lng, str):
+                        try:
+                            lng = float(lng.strip())
+                        except (ValueError, TypeError):
+                            lng = 0.0
+                    
+                    if isinstance(lat, str):
+                        try:
+                            lat = float(lat.strip())
+                        except (ValueError, TypeError):
+                            lat = 0.0
+                    
+                    path.append([float(lng), float(lat)])
+                    stop_ids_list.append(stop['id'])
+                
+                route_dict['path'] = path
+                route_dict['stops'] = stop_ids_list
+                result.append(route_dict)
+            
+            return result
+
+    # ✅ НОВЫЙ МЕТОД - получает маршруты по списку ID остановок
+    async def get_routes_by_stop_ids(self, city_id: int, stop_ids: List[int]) -> List[Dict]:
+        """
+        Получение маршрутов, проходящих через указанные остановки
+        """
+        if not stop_ids:
+            return []
+        
+        async with self.pool.acquire() as conn:
+            # Получаем маршруты, которые проходят через указанные остановки
+            rows = await conn.fetch("""
+                SELECT DISTINCT r.id, r.number, r.name, r.transport_type, 
+                    r.interval_minutes, r.operating_hours, r.is_active,
+                    r.direction_a_name, r.direction_b_name
+                FROM routes r
+                JOIN route_stops rs ON rs.route_id = r.id
+                WHERE r.city_id = $1 AND rs.stop_id = ANY($2)
+            """, city_id, stop_ids)
+            
+            result = []
+            for row in rows:
+                route_dict = dict(row)
+                
+                # Получаем все остановки маршрута с координатами (не только в области)
+                stops = await conn.fetch("""
+                    SELECT s.id, s.lat, s.lng, rs.order_in_route
+                    FROM route_stops rs
+                    JOIN stops s ON s.id = rs.stop_id
+                    WHERE rs.route_id = $1
+                    ORDER BY rs.order_in_route
+                """, route_dict['id'])
+                
+                path = []
+                stop_ids_list = []
+                for stop in stops:
+                    lng = stop['lng']
+                    lat = stop['lat']
+                    
+                    if isinstance(lng, str):
+                        try:
+                            lng = float(lng.strip())
+                        except (ValueError, TypeError):
+                            lng = 0.0
+                    
+                    if isinstance(lat, str):
+                        try:
+                            lat = float(lat.strip())
+                        except (ValueError, TypeError):
+                            lat = 0.0
+                    
+                    path.append([float(lng), float(lat)])
+                    stop_ids_list.append(stop['id'])
+                
+                route_dict['path'] = path
+                route_dict['stops'] = stop_ids_list
+                result.append(route_dict)
+            
+            logger.info(f"📦 Загружено {len(result)} маршрутов для stop_ids={stop_ids[:5]}...")
+            return result
+
     async def get_city_data(self, city_id: int) -> Optional[Dict]:
         """Получение информации о городе"""
         async with self.pool.acquire() as conn:
@@ -144,7 +278,6 @@ class DatabaseService:
     async def get_routes_with_path(self, city_id: int) -> List[Dict]:
         """
         Получение маршрутов с остановками для построения path
-        Исправлено под твою структуру БД
         """
         async with self.pool.acquire() as conn:
             # Получаем все маршруты города
@@ -161,7 +294,6 @@ class DatabaseService:
                 route_dict = dict(route)
                 
                 # Получаем остановки маршрута с координатами через route_stops
-                # Используем order_in_route для сортировки
                 stops = await conn.fetch("""
                     SELECT s.id, s.lat, s.lng, rs.order_in_route, rs.direction
                     FROM route_stops rs

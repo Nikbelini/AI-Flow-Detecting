@@ -204,6 +204,7 @@ const SimulationPage: React.FC = () => {
   const [regionFilteredRouteIds, setRegionFilteredRouteIds] = useState<Set<number>>(new Set());
   const [regionSelectionEnabled, setRegionSelectionEnabled] = useState(false);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<maplibregl.LngLatBounds | null>(null);
 
   // Используем реактивные данные из хуков
   const {
@@ -220,6 +221,10 @@ const SimulationPage: React.FC = () => {
 
   // Флаг для предотвращения двойной загрузки
   const initialLoadDone = useRef(false);
+
+  const handleRegionSelected = (bounds: maplibregl.LngLatBounds | null) => {
+    setSelectedRegion(bounds);
+  };
 
   // Реактивное обновление остановок из React Query
   useEffect(() => {
@@ -374,15 +379,31 @@ const SimulationPage: React.FC = () => {
 
     try {
       console.log('🚀 Запуск симуляции с изменениями:', modifications);
+
+      // Формируем тело запроса
+      const requestBody: any = {
+        city_id: CITY_ID,
+        modifications: modifications.filter(m => m.enabled),
+        simulation_hours: 24
+      };
+
+      // Если выбрана область моделирования - добавляем её в запрос
+      if (selectedRegionBounds) {
+        requestBody.region = {
+          minLng: selectedRegionBounds.getWest(),
+          maxLng: selectedRegionBounds.getEast(),
+          minLat: selectedRegionBounds.getSouth(),
+          maxLat: selectedRegionBounds.getNorth()
+        };
+        console.log('🎯 Моделирование ограничено областью:', requestBody.region);
+      }
+
       const response = await fetch('http://localhost:8084/simulate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          city_id: CITY_ID,
-          modifications: modifications.filter(m => m.enabled),
-          simulation_hours: 24
-        })
+        body: JSON.stringify(requestBody)
       });
+
 
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
@@ -410,7 +431,7 @@ const SimulationPage: React.FC = () => {
         errorMessage: error instanceof Error ? error.message : 'Неизвестная ошибка'
       }));
     }
-  }, [modifications, serviceAvailable, CITY_ID]);
+  }, [modifications, serviceAvailable, CITY_ID, selectedRegionBounds]);
 
   // ========== Управление модификациями ==========
 

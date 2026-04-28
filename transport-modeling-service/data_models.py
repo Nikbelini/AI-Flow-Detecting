@@ -122,13 +122,20 @@ class SimulationResults(BaseModel):
     modifiedThroughput: Optional[PassengerThroughput] = None
     baseWaitDistribution: Optional[WaitTimeDistribution] = None
     modifiedWaitDistribution: Optional[WaitTimeDistribution] = None
-    baseStopMetrics: Optional[Dict[int, StopMetricsDetail]] = None  # ← Исправлено здесь
-    modifiedStopMetrics: Optional[Dict[int, StopMetricsDetail]] = None  # ← Исправлено здесь
+    baseStopMetrics: Optional[Dict[int, StopMetricsDetail]] = None
+    modifiedStopMetrics: Optional[Dict[int, StopMetricsDetail]] = None
+
+class RegionBounds(BaseModel):
+    minLng: float
+    maxLng: float
+    minLat: float
+    maxLat: float
 
 class SimulationRequest(BaseModel):
     city_id: int
     modifications: List[Modification]
     simulation_hours: int = 24
+    region: Optional[RegionBounds] = None
 
 class SimulationResponse(BaseModel):
     task_id: Optional[str] = None

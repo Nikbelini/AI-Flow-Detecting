@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from data_models import (
     SimulationResults, Metrics, HourlyData, AffectedStop,
-    Modification, ModificationTarget, ModificationType, AffectedStopStatus,
+    Modification, ModificationTarget, ModificationType, AffectedStopStatus, RegionBounds
 )
 
 logger = logging.getLogger(__name__)
@@ -23,35 +23,147 @@ class SimulationEngine:
     def __init__(self, cache_service, db_service):
         self.cache = cache_service
         self.db = db_service
-        # Константы
-        self.BUS_CAPACITY = 50  # вместимость одного автобуса
-        self.WALKING_RADIUS = 500  # метров, радиус перераспределения
-        self.AGENT_SAMPLE_RATE = 0.5  # 50% пассажиров моделируем как агентов
+        
+        self.BUS_CAPACITY = 50
+        self.WALKING_RADIUS = 500
+        self.AGENT_SAMPLE_RATE = 0.5
     
+    def _create_empty_results(self) -> SimulationResults:
+        """Создаёт пустые результаты для случая, когда нет данных для моделирования"""
+        empty_metrics = Metrics(
+            avgWaitTime=0,
+            maxWaitTime=0,
+            totalPassengers=0,
+            avgLoad=0,
+            transportUtilization=0,
+            avgTravelTime=0,
+            maxTravelTime=0
+        )
+        
+        hourly_data = []
+        for hour in range(24):
+            hourly_data.append(HourlyData(
+                hour=hour,
+                basePassengers=0,
+                modifiedPassengers=0,
+                baseWaitTime=0,
+                modifiedWaitTime=0
+            ))
+        
+        return SimulationResults(
+            baseMetrics=empty_metrics,
+            modifiedMetrics=empty_metrics,
+            hourlyData=hourly_data,
+            affectedStops=[],
+            baseThroughput=None,
+            modifiedThroughput=None,
+            baseWaitDistribution=None,
+            modifiedWaitDistribution=None,
+            baseStopMetrics={},
+            modifiedStopMetrics={}
+        )
+
     async def run(
         self,
         city_id: int,
         modifications: List[Modification],
-        stops_data: List[Dict]
+        stops_data: List[Dict],
+        region: Optional[RegionBounds] = None
     ) -> SimulationResults:
         """
-        Запуск симуляции с учётом маршрутов
+        Запуск симуляции с учётом маршрутов и опциональной области моделирования
+        
+        Args:
+            city_id: ID города
+            modifications: Список модификаций
+            stops_data: Данные об остановках
+            region: Опциональные границы области моделирования (minLng, maxLng, minLat, maxLat)
         """
         logger.info(f"🏁 Запуск симуляции для города {city_id}")
+        logger.info(f"📊 Исходное количество остановок: {len(stops_data)}")
         
         # Фильтруем только включенные модификации
         active_mods = [m for m in modifications if m.enabled]
         
-        # Получаем маршруты города
+        # Если задана область моделирования, логируем её границы
+        if region:
+            logger.info(f"🗺️ Область моделирования: {region.minLng:.4f}E - {region.maxLng:.4f}E, "
+                        f"{region.minLat:.4f}N - {region.maxLat:.4f}N")
+        
+        # Фильтруем остановки по области, если задана
+        original_stops_count = len(stops_data)
+        filtered_stop_ids = set()
+        
+        if region and stops_data:
+            filtered_stops = []
+            for stop in stops_data:
+                lng = stop.get("lng", 0)
+                lat = stop.get("lat", 0)
+                
+                if isinstance(lng, str):
+                    try:
+                        lng = float(lng.strip())
+                    except (ValueError, TypeError):
+                        lng = 0.0
+                if isinstance(lat, str):
+                    try:
+                        lat = float(lat.strip())
+                    except (ValueError, TypeError):
+                        lat = 0.0
+                
+                # Проверяем, попадает ли остановка в область
+                if (region.minLng <= lng <= region.maxLng and 
+                    region.minLat <= lat <= region.maxLat):
+                    filtered_stops.append(stop)
+                    filtered_stop_ids.add(stop.get("id"))
+            
+            stops_data = filtered_stops
+            logger.info(f"📍 Отфильтровано остановок: {len(stops_data)} из {original_stops_count} в области")
+            
+            # Если после фильтрации не осталось остановок, возвращаем пустые результаты
+            if len(stops_data) == 0:
+                logger.warning(f"⚠️ В выбранной области нет остановок. Моделирование невозможно.")
+                return self._create_empty_results()
+        else:
+            logger.info(f"📍 Фильтрация по области не применяется, используются все {len(stops_data)} остановок")
+            # Если регион не задан, собираем все ID остановок
+            filtered_stop_ids = {stop.get("id") for stop in stops_data}
+        
+        logger.info(f"📊 Количество остановок в области: {len(filtered_stop_ids)}")
+        
+        # Получаем маршруты города (с учётом области, если задана)
         try:
-            routes_data = await self.db.get_routes_with_path(city_id)
-            logger.info(f"🛤️ Загружено {len(routes_data)} маршрутов")
+            if region and filtered_stop_ids:
+                # Получаем маршруты, проходящие через оставшиеся остановки
+                routes_data = await self.db.get_routes_by_stop_ids(city_id, list(filtered_stop_ids))
+                logger.info(f"🛤️ Загружено {len(routes_data)} маршрутов (фильтр по остановкам в области)")
+            else:
+                routes_data = await self.db.get_routes_with_path(city_id)
+                logger.info(f"🛤️ Загружено {len(routes_data)} маршрутов (все)")
         except Exception as e:
             logger.warning(f"⚠️ Не удалось загрузить маршруты: {e}")
             routes_data = []
         
+        # Отфильтровываем маршруты, которые не содержат остановки из области
+        if region and routes_data and filtered_stop_ids:
+            filtered_routes = []
+            for route in routes_data:
+                route_stops = route.get("stops", [])
+                # Проверяем, есть ли у маршрута хотя бы одна остановка в области
+                if any(stop_id in filtered_stop_ids for stop_id in route_stops):
+                    filtered_routes.append(route)
+            routes_data = filtered_routes
+            logger.info(f"🛤️ После фильтрации маршрутов по остановкам: {len(routes_data)}")
+        
         # 1. Строим полную модель сети
         network = self._build_network_model(stops_data, routes_data)
+        
+        # Проверяем, что сеть не пуста
+        if len(network["stops"]) == 0:
+            logger.warning("⚠️ Сеть не содержит остановок. Возвращаем пустые результаты.")
+            return self._create_empty_results()
+        
+        logger.info(f"🏗️ Построена сеть: {len(network['stops'])} остановок, {len(network['routes'])} маршрутов")
         
         # 2. Применяем изменения к сети
         modified_network = self._apply_modifications(network, active_mods)
@@ -116,6 +228,9 @@ class SimulationEngine:
         logger.info(f"✅ Симуляция завершена")
         logger.info(f"📊 Среднее время ожидания: {base_metrics.avgWaitTime:.1f} → {modified_metrics.avgWaitTime:.1f} мин")
         logger.info(f"📊 Пропускная способность: {base_throughput['peak_hour_passengers']} → {modified_throughput['peak_hour_passengers']} пасс/час")
+        if region:
+            logger.info(f"🗺️ Моделирование выполнено в заданной области: "
+                        f"{region.minLng:.4f} - {region.maxLng:.4f}, {region.minLat:.4f} - {region.maxLat:.4f}")
         
         return results
     

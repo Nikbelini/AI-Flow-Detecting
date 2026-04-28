@@ -107,6 +107,12 @@ export interface ModelingRequest {
   description?: string;
   parameters: Record<string, any>;
   durationHours?: number;
+   region?: {
+    minLng: number;
+    maxLng: number;
+    minLat: number;
+    maxLat: number;
+  };
 }
 
 export interface ModelingResponse {

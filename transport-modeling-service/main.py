@@ -171,7 +171,8 @@ async def run_simulation(request: SimulationRequest):
         results = await simulation_engine.run(
             city_id=request.city_id,
             modifications=request.modifications,
-            stops_data=stops_data
+            stops_data=stops_data,
+            region=request.region
         )
         
         logger.info("✅ Симуляция завершена")
