@@ -477,7 +477,7 @@ const OptimalRoutePage: React.FC = () => {
       type: "line",
       source: "optimal-route-line",
       paint: {
-        "line-color": "#10b981",
+        "line-color": "#31c5f7",
         "line-width": 5,
         "line-opacity": 0.95,
       },
