@@ -37,7 +37,7 @@ class LoadsBuilderService:
 
         # 2) Получаем прогноз от "blind stops" модели
         logger.debug(f"Fetching blind forecast for city {city_id}...")
-        forecast_result = forecast_city_blind_stops(city_id, horizon=1)
+        forecast_result = forecast_city_blind_stops(city_id, horizon=12)
         blind_forecast_map: Dict[int, float] = {}
         
         if forecast_result.get("predictions"):
@@ -48,7 +48,7 @@ class LoadsBuilderService:
             logger.warning(f"No predictions in forecast_result: {forecast_result.get('status')}")
 
         # 3) Строим граф соседей для алгоритмического предикта
-        logger.debug(f"🕸️  Building neighbor graph...")
+        logger.debug(f"Building neighbor graph...")
         edges = self.repo.get_transport_edges(city_id)
         graph: Dict[int, List[int]] = {}
         for e in edges:
@@ -79,13 +79,13 @@ class LoadsBuilderService:
                         dt_str=dt_str,
                         graph=graph,
                         stops_map=stops_map,
-                        last_known_flow={}
+                        last_known_flow=blind_forecast_map,
                     )
                     loads[stop_id] = max(0.0, min(1.0, predicted / 10.0))
                     predicted_count += 1
-                except Exception as e:
-                    logger.warning(f"Prediction failed for stop {stop_id}: {e}")
-                    loads[stop_id] = 0.0  # fallback
+                except Exception as exception:
+                    logger.warning(f"Prediction failed for stop {stop_id}: {exception}")
+                    loads[stop_id] = blind_forecast_map.get(stop_id, 0.0)
 
         logger.info(f"Loads built: total={len(loads)}, from_camera={camera_count}, predicted={predicted_count}")
         

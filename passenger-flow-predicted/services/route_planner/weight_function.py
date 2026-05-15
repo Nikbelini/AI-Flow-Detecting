@@ -24,8 +24,13 @@ def compute_edge_weight(
     cfg: RouteWeightsConfig,
     travel_time_min: float | None = None
 ) -> float:
-    # базовое время
-    t_base = (dist_km / cfg.speed_kmh) * 60.0
+    if travel_time_min is not None and travel_time_min > 0:
+        t_base = travel_time_min
+    else:
+        t_base = (dist_km / cfg.speed_kmh) * 60
+    
+    load_u = max(0.0, min(1.0, load_u))
+    load_v = max(0.0, min(1.0, load_v))
 
     # Ожидание на остановке
     t_wait = cfg.alpha_wait * load_u * cfg.w_max

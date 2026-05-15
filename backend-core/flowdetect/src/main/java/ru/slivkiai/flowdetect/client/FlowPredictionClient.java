@@ -18,7 +18,7 @@ import ru.slivkiai.flowdetect.dto.TrainingJobStatus;
 import ru.slivkiai.flowdetect.dto.TrainingRequest;
 import ru.slivkiai.flowdetect.dto.TrainingResponse;
 
-@FeignClient(name = "flow-prediction-ml", url = "${ml.passenger-flow.service.url:http://passenger-flow-predicted:8083}") // http://localhost:8083 
+@FeignClient(name = "flow-prediction-ml", url = "${ml.passenger-flow.service.url:http://localhost:8083}") // http://localhost:8083 
 public interface FlowPredictionClient {
     
     @PostMapping("/ml/forecast")

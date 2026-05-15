@@ -1,6 +1,6 @@
 import pandas as pd
 
-def has_enough_data(df: pd.DataFrame, min_steps: int = 32) -> bool:
+def has_enough_data(df: pd.DataFrame, min_steps: int = 32, **kwargs) -> bool:
     if df.empty:
         return False
     return df['datetime'].nunique() >= min_steps

@@ -115,9 +115,11 @@ class RouteSegmentDto(BaseModel):
     to_stop: int
     route_id: Optional[int] = None
     dist_km: float
-    travel_time_min: float
-    load_from: int
-    load_to: int
+    travel_time_min: Optional[float] = None
+    load_from: float
+    load_to: float
+    route_name: str = ""
+    route_number: str = ""
 
 # ===== DTO ОТВЕТА =====
 class RoutePlanResponseDto(BaseModel):

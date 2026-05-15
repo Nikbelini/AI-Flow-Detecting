@@ -25,7 +25,7 @@ import type { Stop } from "../../api/types";
 
 const { Option } = Select;
 
-// ===== UTILS =====
+// ====================== UTILS ======================
 const isValidCoordinate = (lat: number, lng: number): boolean => {
   return (
     Number.isFinite(lat) &&
@@ -52,11 +52,59 @@ const getMarkerSize = (load: number): "size-s" | "size-m" | "size-l" => {
   return "size-l";
 };
 
-type MarkerEntry = {
-  marker: maplibregl.Marker;
-  element: HTMLDivElement;
+const ROUTE_COLORS = [
+  "#31c5f7",
+  "#f59e0b",
+  "#10b981",
+  "#8b5cf6",
+  "#ef4444",
+  "#06b6d4",
+  "#ec4899",
+  "#84cc16",
+];
+
+type MarkerHTMLElement = HTMLDivElement & {
+  _clickHandler?: (e: MouseEvent) => void;
 };
 
+type MarkerEntry = {
+  marker: maplibregl.Marker;
+  element: MarkerHTMLElement;
+};
+
+// ====================== GEOJSON TYPES ======================
+type GeoJSONLineFeature = {
+  type: "Feature";
+  geometry: {
+    type: "LineString";
+    coordinates: [number, number][];
+  };
+  properties: {
+    routeId: number;
+    routeName: string;
+    routeNumber: string;
+    label: string;
+    color: string;
+  };
+};
+
+type GeoJSONPointFeature = {
+  type: "Feature";
+  geometry: {
+    type: "Point";
+    coordinates: [number, number];
+  };
+  properties: {
+    type: "start" | "end";
+  };
+};
+
+type GeoJSONFeatureCollection = {
+  type: "FeatureCollection";
+  features: GeoJSONPointFeature[];
+};
+
+// ====================== COMPONENT ======================
 const OptimalRoutePage: React.FC = () => {
   // refs
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -64,9 +112,18 @@ const OptimalRoutePage: React.FC = () => {
 
   const markersRef = useRef<Map<Stop["id"], MarkerEntry>>(new Map());
 
+  // flags (IMPORTANT: no state to avoid React warnings)
+  const mapLoadedRef = useRef(false);
+  const mapInitializingRef = useRef(true);
+
   // hooks
-  const { cities, loading: citiesLoading, selectedCityId, selectedCity, selectCity } =
-    useCities();
+  const {
+    cities,
+    loading: citiesLoading,
+    selectedCityId,
+    selectedCity,
+    selectCity,
+  } = useCities();
 
   const { getStopsByCity, loading: stopsLoading } = useStops();
 
@@ -86,9 +143,6 @@ const OptimalRoutePage: React.FC = () => {
 
   // states
   const [stops, setStops] = useState<Stop[]>([]);
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const [mapInitializing, setMapInitializing] = useState(true);
-
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -107,7 +161,7 @@ const OptimalRoutePage: React.FC = () => {
     setSelectMode(mode);
   }, []);
 
-  // ===== TIME =====
+  // ====================== TIME ======================
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
@@ -116,18 +170,17 @@ const OptimalRoutePage: React.FC = () => {
   const formatTime = (date: Date) =>
     date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 
-  // ===== LOAD STOPS =====
+  // ====================== LOAD STOPS ======================
   useEffect(() => {
     if (!selectedCityId) return;
 
     const loadStops = async () => {
       try {
         const data = await getStopsByCity(selectedCityId);
-
         setStops(data);
+
         clearSelection();
         clearResult();
-
         setSelectModeSafe("START");
       } catch (err) {
         console.error("Failed to load stops:", err);
@@ -135,12 +188,19 @@ const OptimalRoutePage: React.FC = () => {
     };
 
     loadStops();
-  }, [selectedCityId, getStopsByCity, clearSelection, clearResult, setSelectModeSafe]);
+  }, [
+    selectedCityId,
+    getStopsByCity,
+    clearSelection,
+    clearResult,
+    setSelectModeSafe,
+  ]);
 
-  // ===== MAP INIT =====
+  // ====================== MAP INIT ======================
   useEffect(() => {
     if (!mapContainer.current || !selectedCity) return;
 
+    // If map exists -> flyTo city
     if (map.current) {
       map.current.flyTo({
         center: toMapLibre(selectedCity.lat, selectedCity.lng),
@@ -150,9 +210,9 @@ const OptimalRoutePage: React.FC = () => {
       return;
     }
 
-    setMapInitializing(true);
+    mapInitializingRef.current = true;
 
-    map.current = new maplibregl.Map({
+    const newMap = new maplibregl.Map({
       container: mapContainer.current,
       style: {
         version: 8,
@@ -187,17 +247,19 @@ const OptimalRoutePage: React.FC = () => {
       fadeDuration: 0,
     });
 
-    map.current.addControl(
+    map.current = newMap;
+
+    newMap.addControl(
       new maplibregl.NavigationControl({ showCompass: true, showZoom: true }),
       "top-right"
     );
 
-    map.current.addControl(
+    newMap.addControl(
       new maplibregl.ScaleControl({ maxWidth: 120, unit: "metric" }),
       "bottom-left"
     );
 
-    map.current.addControl(
+    newMap.addControl(
       new maplibregl.GeolocateControl({
         positionOptions: { enableHighAccuracy: true },
         trackUserLocation: true,
@@ -205,43 +267,39 @@ const OptimalRoutePage: React.FC = () => {
       "top-right"
     );
 
-    map.current.on("load", () => {
-      setMapLoaded(true);
-      setMapInitializing(false);
-      map.current?.resize();
+    newMap.on("load", () => {
+      mapLoadedRef.current = true;
+      mapInitializingRef.current = false;
+      newMap.resize();
     });
 
-    map.current.on("error", (e) => console.error("Map error:", e.error));
+    newMap.on("error", (e) => console.error("Map error:", e.error));
 
     return () => {
-      if (map.current) {
-        markersRef.current.forEach(({ marker, element }) => {
-          if ((element as any)._clickHandler) {
-            element.removeEventListener("click", (element as any)._clickHandler);
-            delete (element as any)._clickHandler;
-          }
-          marker.remove();
-        });
+      markersRef.current.forEach(({ marker, element }) => {
+        if (element._clickHandler) {
+          element.removeEventListener("click", element._clickHandler);
+        }
+        marker.remove();
+      });
 
-        markersRef.current.clear();
+      markersRef.current.clear();
 
-        map.current.remove();
-        map.current = null;
-      }
+      newMap.remove();
+      map.current = null;
 
-      setMapLoaded(false);
-      setMapInitializing(true);
+      mapLoadedRef.current = false;
+      mapInitializingRef.current = true;
     };
   }, [selectedCity]);
 
-  // ===== MARKERS =====
+  // ====================== MARKER ELEMENT ======================
   const createMarkerElement = useCallback(
-    (stop: Stop, isStart: boolean, isGoal: boolean): HTMLDivElement => {
-      const root = document.createElement("div");
+    (stop: Stop, isStart: boolean, isGoal: boolean): MarkerHTMLElement => {
+      const root = document.createElement("div") as MarkerHTMLElement;
       root.className = "custom-marker-root";
 
       const inner = document.createElement("div");
-
       const sizeClass = getMarkerSize(stop.load);
       const color = isGoal
         ? "#ef4444"
@@ -249,9 +307,9 @@ const OptimalRoutePage: React.FC = () => {
         ? "#3b82f6"
         : getLoadColor(stop.load);
 
-      inner.className = `custom-marker-inner ${sizeClass}${isStart ? " is-start" : ""}${
-        isGoal ? " is-goal" : ""
-      }`;
+      inner.className = `custom-marker-inner ${sizeClass}${
+        isStart ? " is-start" : ""
+      }${isGoal ? " is-goal" : ""}`;
 
       inner.style.backgroundColor = color;
 
@@ -265,7 +323,11 @@ const OptimalRoutePage: React.FC = () => {
       root.setAttribute(
         "title",
         `${stop.address}\n${
-          isStart ? "🚦 Старт" : isGoal ? "🏁 Финиш" : `Загрузка: ${stop.load}/10`
+          isStart
+            ? "🚦 Старт"
+            : isGoal
+            ? "🏁 Финиш"
+            : `Загрузка: ${stop.load}/10`
         }`
       );
 
@@ -275,7 +337,7 @@ const OptimalRoutePage: React.FC = () => {
   );
 
   const updateMarkerElement = useCallback(
-    (root: HTMLDivElement, stop: Stop, isStart: boolean, isGoal: boolean) => {
+    (root: MarkerHTMLElement, stop: Stop, isStart: boolean, isGoal: boolean) => {
       const inner = root.querySelector(".custom-marker-inner") as HTMLDivElement;
       if (!inner) return;
 
@@ -286,9 +348,9 @@ const OptimalRoutePage: React.FC = () => {
         ? "#3b82f6"
         : getLoadColor(stop.load);
 
-      inner.className = `custom-marker-inner ${sizeClass}${isStart ? " is-start" : ""}${
-        isGoal ? " is-goal" : ""
-      }`;
+      inner.className = `custom-marker-inner ${sizeClass}${
+        isStart ? " is-start" : ""
+      }${isGoal ? " is-goal" : ""}`;
 
       inner.style.backgroundColor = color;
 
@@ -299,15 +361,21 @@ const OptimalRoutePage: React.FC = () => {
       }
 
       const newTitle = `${stop.address}\n${
-        isStart ? "🚦 Старт" : isGoal ? "🏁 Финиш" : `Загрузка: ${stop.load}/10`
+        isStart
+          ? "🚦 Старт"
+          : isGoal
+          ? "🏁 Финиш"
+          : `Загрузка: ${stop.load}/10`
       }`;
 
-      if (root.getAttribute("title") !== newTitle) root.setAttribute("title", newTitle);
+      if (root.getAttribute("title") !== newTitle) {
+        root.setAttribute("title", newTitle);
+      }
     },
     []
   );
 
-  // ===== FIX CLICK LOGIC =====
+  // ====================== CLICK HANDLER ======================
   const handleMarkerClick = useCallback(
     (e: MouseEvent, stopId: Stop["id"]) => {
       e.preventDefault();
@@ -315,44 +383,55 @@ const OptimalRoutePage: React.FC = () => {
 
       const mode = selectModeRef.current;
 
-      // START selection
       if (mode === "START") {
         setStartStop(stopId);
 
-        // если выбрали старт = финиш -> сбрасываем финиш
-        if (goalStopId === stopId) {
-          setGoalStop(null);
-        }
+        if (goalStopId === stopId) setGoalStop(null);
 
-        clearResult?.();
+        clearResult();
         setSelectModeSafe("GOAL");
         return;
       }
 
-      // GOAL selection
       if (mode === "GOAL") {
         setGoalStop(stopId);
 
-        // если выбрали финиш = старт -> сбрасываем старт
-        if (startStopId === stopId) {
-          setStartStop(null);
-        }
+        if (startStopId === stopId) setStartStop(null);
 
-        clearResult?.();
-
-        // можешь оставить GOAL или переключить обратно на START:
-        // setSelectModeSafe("START");
+        clearResult();
         return;
       }
     },
-    [goalStopId, startStopId, setStartStop, setGoalStop, clearResult, setSelectModeSafe]
+    [
+      goalStopId,
+      startStopId,
+      setStartStop,
+      setGoalStop,
+      clearResult,
+      setSelectModeSafe,
+    ]
   );
 
-  // ===== MARKERS RENDER =====
-  useEffect(() => {
-    if (!map.current || !mapLoaded || mapInitializing) return;
+  // ====================== ROUTE STOP IDS ======================
+  const routeStopIds = useMemo<Set<number>>(() => {
+    if (!routeResult?.segments) return new Set<number>();
 
-    // update existing markers
+    const ids = new Set<number>();
+    for (const seg of routeResult.segments) {
+      ids.add(seg.from_stop);
+      ids.add(seg.to_stop);
+    }
+
+    return ids;
+  }, [routeResult]);
+
+  // ====================== MARKERS RENDER ======================
+  useEffect(() => {
+    if (!map.current) return;
+    if (!mapLoadedRef.current) return;
+    if (mapInitializingRef.current) return;
+
+    // update existing
     markersRef.current.forEach((value, stopId) => {
       const stop = stops.find((s) => s.id === stopId);
       if (!stop) return;
@@ -361,21 +440,31 @@ const OptimalRoutePage: React.FC = () => {
       const isGoal = stop.id === goalStopId;
 
       updateMarkerElement(value.element, stop, isStart, isGoal);
+
+      if (routeResult) {
+        value.element.style.display = routeStopIds.has(stopId) ? "" : "none";
+      } else {
+        value.element.style.display = "";
+      }
     });
 
-    // create new markers
-    stops.forEach((stop) => {
-      if (!isValidCoordinate(stop.lat, stop.lng)) return;
-      if (markersRef.current.has(stop.id)) return;
+    // create new
+    for (const stop of stops) {
+      if (!isValidCoordinate(stop.lat, stop.lng)) continue;
+      if (markersRef.current.has(stop.id)) continue;
 
       const isStart = stop.id === startStopId;
       const isGoal = stop.id === goalStopId;
 
       const el = createMarkerElement(stop, isStart, isGoal);
 
+      if (routeResult && !routeStopIds.has(stop.id)) {
+        el.style.display = "none";
+      }
+
       const handler = (e: MouseEvent) => handleMarkerClick(e, stop.id);
       el.addEventListener("click", handler);
-      (el as any)._clickHandler = handler;
+      el._clickHandler = handler;
 
       const markerInstance = new maplibregl.Marker({
         element: el,
@@ -383,22 +472,19 @@ const OptimalRoutePage: React.FC = () => {
         clickTolerance: 10,
       })
         .setLngLat(toMapLibre(stop.lat, stop.lng))
-        .addTo(map.current!);
+        .addTo(map.current);
 
       markersRef.current.set(stop.id, { marker: markerInstance, element: el });
-    });
+    }
 
-    // remove old markers
+    // remove old
     markersRef.current.forEach((value, stopId) => {
       if (!stops.find((s) => s.id === stopId)) {
-        const { marker, element } = value;
-
-        if ((element as any)._clickHandler) {
-          element.removeEventListener("click", (element as any)._clickHandler);
-          delete (element as any)._clickHandler;
+        if (value.element._clickHandler) {
+          value.element.removeEventListener("click", value.element._clickHandler);
         }
 
-        marker.remove();
+        value.marker.remove();
         markersRef.current.delete(stopId);
       }
     });
@@ -406,90 +492,262 @@ const OptimalRoutePage: React.FC = () => {
     stops,
     startStopId,
     goalStopId,
-    mapLoaded,
-    mapInitializing,
+    routeResult,
+    routeStopIds,
     createMarkerElement,
     updateMarkerElement,
     handleMarkerClick,
   ]);
 
-  // ===== ROUTE DRAW =====
-  const drawOptimalRoute = useCallback(() => {
-    if (!map.current || !routeResult) return;
+  // ====================== CLEAN ROUTE LAYERS ======================
+  const cleanRouteLayers = useCallback(() => {
+    if (!map.current) return;
 
-    ["optimal-route-line", "optimal-route-points"].forEach((id) => {
-      if (map.current?.getLayer(id)) map.current.removeLayer(id);
-      if (map.current?.getSource(id)) map.current.removeSource(id);
-    });
+    const style = map.current.getStyle();
+    if (!style) return;
+
+    const layers = style.layers ?? [];
+
+    for (const layer of layers) {
+      if (
+        layer.id.startsWith("route-segment-") ||
+        layer.id === "optimal-route-points" ||
+        layer.id.endsWith("-hitbox")
+      ) {
+        if (map.current.getLayer(layer.id)) {
+          map.current.removeLayer(layer.id);
+        }
+      }
+    }
+
+    const sources = style.sources ?? {};
+    for (const id of Object.keys(sources)) {
+      if (id.startsWith("route-segment-") || id === "optimal-route-points") {
+        if (map.current.getSource(id)) {
+          map.current.removeSource(id);
+        }
+      }
+    }
+
+    const popup = (
+      map.current as unknown as { _routePopup?: maplibregl.Popup }
+    )._routePopup;
+
+    if (popup) {
+      popup.remove();
+      delete (
+        map.current as unknown as { _routePopup?: maplibregl.Popup }
+      )._routePopup;
+    }
+  }, []);
+
+  // ====================== DRAW ROUTE ======================
+  const drawOptimalRoute = useCallback(() => {
+    if (!map.current) return;
+    if (!routeResult) return;
+
+    cleanRouteLayers();
 
     if (!routeResult.segments || routeResult.segments.length === 0) return;
 
-    const lineCoords: [number, number][] = [];
-    const pointFeatures: any[] = [];
+    type RouteGroup = {
+      routeId: number;
+      routeName: string;
+      routeNumber: string;
+      coords: [number, number][];
+    };
 
-    routeResult.segments.forEach((seg, idx) => {
-      const fromStopId = Number(seg.from_stop ?? seg.fromStop);
-      const toStopId = Number(seg.to_stop ?? seg.toStop);
+    const groups: RouteGroup[] = [];
+    let currentGroup: RouteGroup | undefined;
 
-      if (!fromStopId || !toStopId) return;
+    for (const seg of routeResult.segments) {
+      const fromStop = stops.find((s) => s.id === seg.from_stop);
+      const toStop = stops.find((s) => s.id === seg.to_stop);
 
-      const fromStop = stops.find((s) => Number(s.id) === fromStopId);
-      const toStop = stops.find((s) => Number(s.id) === toStopId);
+      if (!fromStop || !toStop) continue;
+      if (!isValidCoordinate(fromStop.lat, fromStop.lng)) continue;
+      if (!isValidCoordinate(toStop.lat, toStop.lng)) continue;
 
-      if (fromStop && isValidCoordinate(fromStop.lat, fromStop.lng)) {
-        lineCoords.push(toMapLibre(fromStop.lat, fromStop.lng));
-
-        if (idx === 0) {
-          pointFeatures.push({
-            type: "Feature",
-            geometry: { type: "Point", coordinates: toMapLibre(fromStop.lat, fromStop.lng) },
-            properties: { type: "start", label: "Старт" },
-          });
-        }
+      if (!currentGroup || currentGroup.routeId !== seg.route_id) {
+        currentGroup = {
+          routeId: seg.route_id,
+          routeName: seg.route_name ?? "",
+          routeNumber: seg.route_number ?? "",
+          coords: [],
+        };
+        groups.push(currentGroup);
       }
 
-      if (toStop && isValidCoordinate(toStop.lat, toStop.lng)) {
-        lineCoords.push(toMapLibre(toStop.lat, toStop.lng));
-
-        if (idx === routeResult.segments.length - 1) {
-          pointFeatures.push({
-            type: "Feature",
-            geometry: { type: "Point", coordinates: toMapLibre(toStop.lat, toStop.lng) },
-            properties: { type: "end", label: "Финиш" },
-          });
-        }
+      if (currentGroup.coords.length === 0) {
+        currentGroup.coords.push([fromStop.lng, fromStop.lat]);
       }
-    });
 
-    if (lineCoords.length < 2) return;
+      currentGroup.coords.push([toStop.lng, toStop.lat]);
+    }
 
-    map.current.addSource("optimal-route-line", {
-      type: "geojson",
-      data: {
+    const allCoords: [number, number][] = [];
+
+    groups.forEach((group, idx) => {
+      if (group.coords.length < 2) return;
+
+      const sourceId = `route-segment-${idx}`;
+      const color = ROUTE_COLORS[idx % ROUTE_COLORS.length];
+
+      allCoords.push(...group.coords);
+
+      const label = [
+        group.routeNumber ? `№${group.routeNumber}` : "",
+        group.routeName,
+      ]
+        .filter(Boolean)
+        .join(" — ");
+
+      const feature: GeoJSONLineFeature = {
         type: "Feature",
-        geometry: { type: "LineString", coordinates: lineCoords },
-        properties: {},
-      } as any,
-    });
+        geometry: {
+          type: "LineString",
+          coordinates: group.coords,
+        },
+        properties: {
+          routeId: group.routeId,
+          routeName: group.routeName,
+          routeNumber: group.routeNumber,
+          label,
+          color,
+        },
+      };
 
-    map.current.addLayer({
-      id: "optimal-route-line",
-      type: "line",
-      source: "optimal-route-line",
-      paint: {
-        "line-color": "#31c5f7",
-        "line-width": 5,
-        "line-opacity": 0.95,
-      },
-    });
-
-    if (pointFeatures.length > 0) {
-      map.current.addSource("optimal-route-points", {
+      map.current!.addSource(sourceId, {
         type: "geojson",
-        data: { type: "FeatureCollection", features: pointFeatures } as any,
+        data: feature,
       });
 
-      map.current.addLayer({
+      // hitbox
+      map.current!.addLayer({
+        id: `${sourceId}-hitbox`,
+        type: "line",
+        source: sourceId,
+        paint: {
+          "line-color": color,
+          "line-width": 18,
+          "line-opacity": 0,
+        },
+      });
+
+      // visible line
+      map.current!.addLayer({
+        id: sourceId,
+        type: "line",
+        source: sourceId,
+        paint: {
+          "line-color": color,
+          "line-width": 5,
+          "line-opacity": 0.95,
+        },
+      });
+
+      map.current!.on("mouseenter", `${sourceId}-hitbox`, (e) => {
+        map.current!.getCanvas().style.cursor = "pointer";
+
+        const prevPopup = (
+          map.current as unknown as { _routePopup?: maplibregl.Popup }
+        )._routePopup;
+
+        if (prevPopup) prevPopup.remove();
+
+        const popup = new maplibregl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+          className: "route-hover-popup",
+          offset: 12,
+        })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<div class="route-popup-inner">
+              <div class="route-popup-number">🚌 ${
+                group.routeNumber ? `№${group.routeNumber}` : "—"
+              }</div>
+              ${
+                group.routeName
+                  ? `<div class="route-popup-name">${group.routeName}</div>`
+                  : ""
+              }
+            </div>`
+          )
+          .addTo(map.current!);
+
+        (
+          map.current as unknown as { _routePopup?: maplibregl.Popup }
+        )._routePopup = popup;
+      });
+
+      map.current!.on("mousemove", `${sourceId}-hitbox`, (e) => {
+        const popup = (
+          map.current as unknown as { _routePopup?: maplibregl.Popup }
+        )._routePopup;
+
+        popup?.setLngLat(e.lngLat);
+      });
+
+      map.current!.on("mouseleave", `${sourceId}-hitbox`, () => {
+        map.current!.getCanvas().style.cursor = "";
+
+        const popup = (
+          map.current as unknown as { _routePopup?: maplibregl.Popup }
+        )._routePopup;
+
+        if (popup) {
+          popup.remove();
+          delete (
+            map.current as unknown as { _routePopup?: maplibregl.Popup }
+          )._routePopup;
+        }
+      });
+    });
+
+    // start/end points
+    const firstSeg = routeResult.segments[0];
+    const lastSeg = routeResult.segments[routeResult.segments.length - 1];
+
+    const startStop = stops.find((s) => s.id === firstSeg.from_stop);
+    const endStop = stops.find((s) => s.id === lastSeg.to_stop);
+
+    const pointFeatures: GeoJSONPointFeature[] = [];
+
+    if (startStop && isValidCoordinate(startStop.lat, startStop.lng)) {
+      pointFeatures.push({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [startStop.lng, startStop.lat],
+        },
+        properties: { type: "start" },
+      });
+    }
+
+    if (endStop && isValidCoordinate(endStop.lat, endStop.lng)) {
+      pointFeatures.push({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [endStop.lng, endStop.lat],
+        },
+        properties: { type: "end" },
+      });
+    }
+
+    if (pointFeatures.length > 0) {
+      const fc: GeoJSONFeatureCollection = {
+        type: "FeatureCollection",
+        features: pointFeatures,
+      };
+
+      map.current!.addSource("optimal-route-points", {
+        type: "geojson",
+        data: fc,
+      });
+
+      map.current!.addLayer({
         id: "optimal-route-points",
         type: "circle",
         source: "optimal-route-points",
@@ -510,61 +768,117 @@ const OptimalRoutePage: React.FC = () => {
       });
     }
 
-    const bounds = new maplibregl.LngLatBounds();
-    lineCoords.forEach((c) => bounds.extend(c));
+    // fit bounds
+    if (allCoords.length >= 2) {
+      const bounds = new maplibregl.LngLatBounds();
+      allCoords.forEach((c) => bounds.extend(c));
 
-    map.current.fitBounds(bounds, {
-      padding: {
-        top: 80,
-        bottom: 80,
-        left: 40,
-        right: isSidebarCollapsed ? 40 : 420,
-      },
-      duration: 1000,
-      maxZoom: 14,
-    });
-  }, [routeResult, stops, isSidebarCollapsed]);
+      map.current!.fitBounds(bounds, {
+        padding: {
+          top: 80,
+          bottom: 80,
+          left: 40,
+          right: isSidebarCollapsed ? 40 : 420,
+        },
+        duration: 1000,
+        maxZoom: 14,
+      });
+    }
+  }, [routeResult, stops, isSidebarCollapsed, cleanRouteLayers]);
 
+  // ====================== REDRAW ROUTE ON RESULT ======================
   useEffect(() => {
-    if (!map.current || !mapLoaded || !routeResult) return;
-    setTimeout(() => drawOptimalRoute(), 50);
-  }, [routeResult, mapLoaded, drawOptimalRoute]);
+    if (!map.current) return;
+    if (!mapLoadedRef.current) return;
 
-  // ===== RESIZE =====
+    if (!routeResult) {
+      cleanRouteLayers();
+      return;
+    }
+
+    const t = setTimeout(() => {
+      drawOptimalRoute();
+    }, 50);
+
+    return () => clearTimeout(t);
+  }, [routeResult, drawOptimalRoute, cleanRouteLayers]);
+
+  // ====================== RESIZE ======================
   useEffect(() => {
     const handleResize = () => {
-      if (map.current && mapLoaded) {
-        requestAnimationFrame(() => {
-          map.current?.resize();
-          map.current?.triggerRepaint();
-        });
-      }
+      if (!map.current) return;
+      requestAnimationFrame(() => {
+        map.current?.resize();
+        map.current?.triggerRepaint();
+      });
     };
 
     handleResize();
+
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [isSidebarCollapsed, mapLoaded]);
+  }, [isSidebarCollapsed]);
 
-  // ===== FILTER =====
+  // ====================== ROUTE STOP FILTER ======================
   const filteredStops = useMemo(() => {
-    if (!searchQuery.trim()) return stops;
+    let baseStops = stops;
+
+    if (routeResult) {
+      baseStops = stops.filter((s) => routeStopIds.has(s.id));
+    }
+
+    if (!searchQuery.trim()) return baseStops;
+
     const query = searchQuery.toLowerCase();
 
-    return stops.filter(
+    return baseStops.filter(
       (s) =>
         s.address.toLowerCase().includes(query) ||
         s.url?.toLowerCase().includes(query)
     );
-  }, [stops, searchQuery]);
+  }, [stops, searchQuery, routeResult, routeStopIds]);
 
-  // ===== BUILD ROUTE =====
+  // ====================== BUILD ROUTE ======================
   const handleBuildRoute = async () => {
     if (!selectedCityId || !isReadyToBuild) return;
     await buildRoute(selectedCityId, optimizationMode, stops);
   };
 
-  // ===== UI =====
+  // ====================== LEGEND ======================
+  const routeLegend = useMemo(() => {
+    if (!routeResult?.segments) return [];
+
+    const seen = new Set<number>();
+    const items: {
+      routeId: number;
+      routeNumber: string;
+      routeName: string;
+      color: string;
+    }[] = [];
+
+    let colorIdx = 0;
+
+    for (const seg of routeResult.segments) {
+      if (typeof seg.route_id !== "number") continue;
+
+      if (!seen.has(seg.route_id)) {
+        seen.add(seg.route_id);
+
+        items.push({
+          routeId: seg.route_id,
+          routeNumber: seg.route_number ?? "",
+          routeName: seg.route_name ?? "",
+          color: ROUTE_COLORS[colorIdx % ROUTE_COLORS.length],
+        });
+
+        colorIdx++;
+      }
+    }
+
+    return items;
+  }, [routeResult]);
+
+  // ====================== UI ======================
   return (
     <div className="optimal-route-page">
       {/* HEADER */}
@@ -613,13 +927,16 @@ const OptimalRoutePage: React.FC = () => {
         <aside className={`sidebar ${isSidebarCollapsed ? "collapsed" : ""}`}>
           <div className="sidebar-header">
             {!isSidebarCollapsed && <h3>⚙️ Настройки</h3>}
-
             <button
               className="toggle-sidebar-btn"
               onClick={() => setIsSidebarCollapsed((p) => !p)}
               title={isSidebarCollapsed ? "Развернуть" : "Свернуть"}
             >
-              {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+              {isSidebarCollapsed ? (
+                <ChevronRight size={18} />
+              ) : (
+                <ChevronLeft size={18} />
+              )}
             </button>
           </div>
 
@@ -628,27 +945,34 @@ const OptimalRoutePage: React.FC = () => {
               {/* MODE */}
               <div className="mode-selector">
                 <label>Режим:</label>
-
                 <div className="mode-buttons">
-                  {(["FASTEST", "LESS_CROWDED", "MIN_TRANSFERS"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      className={`mode-btn ${optimizationMode === mode ? "active" : ""}`}
-                      onClick={() => setOptimizationMode(mode)}
-                      disabled={routeLoading}
-                    >
-                      <span className="icon">
-                        {mode === "FASTEST" ? "⚡" : mode === "LESS_CROWDED" ? "👥" : "🔀"}
-                      </span>
-                      <span>
-                        {mode === "FASTEST"
-                          ? "Быстрый"
-                          : mode === "LESS_CROWDED"
-                          ? "Свободный"
-                          : "Мин. пересадок"}
-                      </span>
-                    </button>
-                  ))}
+                  {(["FASTEST", "LESS_CROWDED", "MIN_TRANSFERS"] as const).map(
+                    (mode) => (
+                      <button
+                        key={mode}
+                        className={`mode-btn ${
+                          optimizationMode === mode ? "active" : ""
+                        }`}
+                        onClick={() => setOptimizationMode(mode)}
+                        disabled={routeLoading}
+                      >
+                        <span className="icon">
+                          {mode === "FASTEST"
+                            ? "⚡"
+                            : mode === "LESS_CROWDED"
+                            ? "👥"
+                            : "🔀"}
+                        </span>
+                        <span>
+                          {mode === "FASTEST"
+                            ? "Быстрый"
+                            : mode === "LESS_CROWDED"
+                            ? "Свободный"
+                            : "Мин. пересадок"}
+                        </span>
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
 
@@ -657,14 +981,15 @@ const OptimalRoutePage: React.FC = () => {
                 <h4>📍 Маршрут</h4>
 
                 <div className="select-mode-hint">
-                  Сейчас выбирается: <b>{selectMode === "START" ? "Откуда" : "Куда"}</b>
+                  Сейчас выбирается:{" "}
+                  <b>{selectMode === "START" ? "Откуда" : "Куда"}</b>
                 </div>
 
                 {/* START */}
                 <div
-                  className={`point-card ${selectMode === "START" ? "active-select" : ""} ${
-                    startStopId ? "selected" : ""
-                  }`}
+                  className={`point-card ${
+                    selectMode === "START" ? "active-select" : ""
+                  } ${startStopId ? "selected" : ""}`}
                   onClick={() => setSelectModeSafe("START")}
                 >
                   <div className="point-header">
@@ -677,7 +1002,7 @@ const OptimalRoutePage: React.FC = () => {
                         onClick={(e) => {
                           e.stopPropagation();
                           setStartStop(null);
-                          clearResult?.();
+                          clearResult();
                           setSelectModeSafe("START");
                         }}
                       >
@@ -699,9 +1024,9 @@ const OptimalRoutePage: React.FC = () => {
 
                 {/* GOAL */}
                 <div
-                  className={`point-card ${selectMode === "GOAL" ? "active-select" : ""} ${
-                    goalStopId ? "selected goal" : ""
-                  }`}
+                  className={`point-card ${
+                    selectMode === "GOAL" ? "active-select" : ""
+                  } ${goalStopId ? "selected goal" : ""}`}
                   onClick={() => setSelectModeSafe("GOAL")}
                 >
                   <div className="point-header">
@@ -714,7 +1039,7 @@ const OptimalRoutePage: React.FC = () => {
                         onClick={(e) => {
                           e.stopPropagation();
                           setGoalStop(null);
-                          clearResult?.();
+                          clearResult();
                           setSelectModeSafe("GOAL");
                         }}
                       >
@@ -778,7 +1103,9 @@ const OptimalRoutePage: React.FC = () => {
                     <div className="result-stats">
                       <div className="result-stat">
                         <span className="label">Время</span>
-                        <span className="value">{routeResult.totalCostMinutes / 5} мин</span>
+                        <span className="value">
+                          {Math.round(routeResult.totalCostMinutes)} мин
+                        </span>
                       </div>
 
                       <div className="result-stat">
@@ -803,13 +1130,44 @@ const OptimalRoutePage: React.FC = () => {
                         {routeResult.goalStop?.address}
                       </span>
                     </div>
+
+                    {/* LEGEND */}
+                    {routeLegend.length > 0 && (
+                      <div className="route-legend">
+                        <div className="route-legend-title">Маршруты:</div>
+                        {routeLegend.map((item) => (
+                          <div key={item.routeId} className="route-legend-item">
+                            <span
+                              className="route-legend-color"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className="route-legend-number">
+                              {item.routeNumber ? `№${item.routeNumber}` : "—"}
+                            </span>
+                            {item.routeName && (
+                              <span
+                                className="route-legend-name"
+                                title={item.routeName}
+                              >
+                                {item.routeName}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
               {/* STOPS LIST */}
               <div className="stops-list-section">
-                <h4>📍 Остановки ({stops.length})</h4>
+                <h4>
+                  📍 Остановки ({filteredStops.length})
+                  {routeResult && (
+                    <span style={{ color: "#10b981" }}> (по маршруту)</span>
+                  )}
+                </h4>
 
                 <Input
                   className="stops-search"
@@ -830,7 +1188,9 @@ const OptimalRoutePage: React.FC = () => {
                     <div className="empty-state">
                       <MapPin size={32} className="icon" />
                       <p>Не найдено</p>
-                      <small>{searchQuery ? "Другой запрос" : "Другой город"}</small>
+                      <small>
+                        {searchQuery ? "Другой запрос" : "Другой город"}
+                      </small>
                     </div>
                   ) : (
                     filteredStops.map((stop) => {
@@ -838,12 +1198,18 @@ const OptimalRoutePage: React.FC = () => {
                       const isGoal = stop.id === goalStopId;
 
                       const loadLabel =
-                        stop.load <= 3 ? "low" : stop.load <= 7 ? "medium" : "high";
+                        stop.load <= 3
+                          ? "low"
+                          : stop.load <= 7
+                          ? "medium"
+                          : "high";
 
                       return (
                         <div
                           key={stop.id}
-                          className={`stop-item ${isStart ? "is-start" : isGoal ? "is-goal" : ""}`}
+                          className={`stop-item ${
+                            isStart ? "is-start" : isGoal ? "is-goal" : ""
+                          }`}
                           onClick={() => {
                             const mode = selectModeRef.current;
 
@@ -854,11 +1220,15 @@ const OptimalRoutePage: React.FC = () => {
                               setGoalStop(stop.id);
                             }
 
-                            clearResult?.();
+                            clearResult();
                           }}
                         >
                           {(isStart || isGoal) && (
-                            <div className={`stop-indicator ${isStart ? "start" : "goal"}`}>
+                            <div
+                              className={`stop-indicator ${
+                                isStart ? "start" : "goal"
+                              }`}
+                            >
                               {isStart ? "А" : "Б"}
                             </div>
                           )}
@@ -869,7 +1239,10 @@ const OptimalRoutePage: React.FC = () => {
                             </div>
 
                             <div className="stop-meta">
-                              <Badge className={`load-badge ${loadLabel}`} text={`${stop.load}/10`} />
+                              <Badge
+                                className={`load-badge ${loadLabel}`}
+                                text={`${stop.load}/10`}
+                              />
                               <span className="stop-coords">
                                 {stop.lat.toFixed(4)}, {stop.lng.toFixed(4)}
                               </span>
@@ -887,7 +1260,7 @@ const OptimalRoutePage: React.FC = () => {
 
         {/* MAP */}
         <main className="map-area">
-          {(mapInitializing || stopsLoading || citiesLoading) && !mapLoaded && (
+          {(citiesLoading || stopsLoading) && (
             <div className="map-overlay">
               <Spin size="large" />
             </div>
@@ -895,14 +1268,7 @@ const OptimalRoutePage: React.FC = () => {
 
           {routeError && <div className="map-error">⚠️ {routeError}</div>}
 
-          <div
-            ref={mapContainer}
-            className="map-container"
-            style={{
-              opacity: mapInitializing ? 0.5 : 1,
-              transition: "opacity 0.3s ease",
-            }}
-          />
+          <div ref={mapContainer} className="map-container" />
         </main>
       </div>
     </div>

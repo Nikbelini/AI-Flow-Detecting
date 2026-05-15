@@ -32,4 +32,10 @@ public class RouteSegmentDto {
     
     @JsonProperty("load_to")
     private Integer loadTo;
+
+    @JsonProperty("route_name")
+    private String routeName;
+    
+    @JsonProperty("route_number")
+    private String routeNumber;
 }

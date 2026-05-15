@@ -29,22 +29,29 @@ def dijkstra_route(
 
     dist: Dict[State, float] = {start_state: 0.0}
     parent: Dict[State, Tuple[State, Edge]] = {}
+    visited: set[State] = set()
 
     pq: list[tuple[float, State]] = []
     heapq.heappush(pq, (0.0, start_state))
     
-    visited = 0
+    visits_count = 0
     expanded = 0
 
     while pq:
-        current_cost, (u, current_route) = heapq.heappop(pq)
-        visited += 1
+        current_cost, state = heapq.heappop(pq)
+        u, current_route = state
+
+        if state in visited:
+            continue
+        visited.add(state)
+
+        visits_count += 1
 
         if current_cost > dist.get((u, current_route), float("inf")):
             continue
 
         if u == goal_stop:
-            logger.info(f"🎯 Goal reached after {visited} visits, {expanded} expansions")
+            logger.info(f"Goal reached after {visited} visits, {expanded} expansions")
             goal_state = (u, current_route)
 
             # Восстановление пути

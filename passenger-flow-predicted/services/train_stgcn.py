@@ -12,7 +12,7 @@ from tqdm import tqdm
 from typing import Dict, Optional
 
 from database.db import load_stop_history, get_all_stops_in_city
-from database.dataset_builder import build_sequences
+from database.dataset_builder import build_sequences, get_target_time_weights
 from services.model_io import save_model_atomic
 from models.factory import build_model
 from services.graph_builder import GraphBuilder
@@ -21,6 +21,7 @@ from services.data_preprocessor import DataPreprocessor
 from services.masked_loss import masked_loss
 from services.metrics import calculate_metrics
 from services.augment import augment_batch, augment_graph
+from algorithm.timezone_resolver import resolve_timezone
 
 
 logging.basicConfig(
@@ -36,19 +37,21 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)  # Создаём папку, ес�
 
 
 def train(city_id: int, force_retrain: bool = False,
-        augment: bool = True,  # ← флаг аугментации
+        augment: bool = True,
         augment_config: Optional[Dict] = None) -> Dict:
     """
-    Обучение: граф по всем остановкам, обучение на тех, где есть данные.
+    Обучение модели для города.
+    Граф строится по ВСЕМ остановкам, обучение на тех, где есть данные.
+    Timezone определяется автоматически по координатам/названию города.
     """
     model_path = MODEL_DIR / f"city_{city_id}.pt"
     
     # Если модель уже есть и не форсим — можно пропустить
-    if os.path.exists(model_path) and not force_retrain:
+    if os.path.isfile(model_path) and not force_retrain:
         return {
             'status': 'SKIPPED',
             'message': 'Model already trained (use force_retrain=true to override)',
-            'model_path': model_path
+            'model_path': str(model_path)
         }
 
     """ Обучение модели для города  """
@@ -61,8 +64,11 @@ def train(city_id: int, force_retrain: bool = False,
                 'message': f'Not enough data: {df["datetime"].nunique() if not df.empty else 0}/32 timestamps'
             }
         
-        # ===== Все остановки города для графа =====
+        # ===== Все остановки города для построения графа =====
         all_stops = get_all_stops_in_city(city_id)
+            
+        logger.info(f"Сюда доходим??")
+
         # если stops пуст ИЛИ нет колонки stop_id
         if all_stops.empty or "stop_id" not in all_stops.columns:
             if "stop_id" in df.columns and df["stop_id"].notna().any():
@@ -92,7 +98,14 @@ def train(city_id: int, force_retrain: bool = False,
                 .fillna(0.0)
                 .values
              )
+        
+        # Timezone по координатам города
+        center_lat = float(np.mean(coords[:, 0]))
+        center_lng = float(np.mean(coords[:, 1]))
+        tz_name = resolve_timezone(lat=center_lat, lng=center_lng)
+        logger.info(f"[{city_id}] Timezone: {tz_name} (center: {center_lat:.4f}, {center_lng:.4f})")
 
+        # Устройство и граф
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         logger.info(f"Using device: {device}")
 
@@ -120,7 +133,7 @@ def train(city_id: int, force_retrain: bool = False,
         logger.info(f"camera_mask: total={len(camera_mask)}, cameras={camera_mask.sum().item()}, "
                    f"blind={(1-camera_mask).sum().item()}, %cam={camera_mask.sum()/len(camera_mask)*100:.1f}%")
 
-        # scaler fit только на камерах
+        # Нормализация (scaler fit только на камерах)
         df_fit = df[
             df["stop_id"].astype("Int64").isin(
                 pd.Series(list(camera_stop_ids), dtype="Int64")
@@ -144,11 +157,18 @@ def train(city_id: int, force_retrain: bool = False,
             logger.info(f"full data: min={df_norm['count'].min():.4f}, max={df_norm['count'].max():.4f}, std={df_norm['count'].std():.4f}")
 
         time_steps = 12
-        X_seq, y_seq = build_sequences(df_norm, nodes_order, time_steps=time_steps)
+        horizon = 12
+        X_seq, y_seq = build_sequences(df_norm, nodes_order, time_steps=time_steps, horizon=horizon)
+        
+        tw_seq = get_target_time_weights(df_norm, nodes_order, time_steps=time_steps, horizon=horizon)
 
         logger.info(f"DEBUG: Sequences stats:")
         logger.info(f"   X_seq: shape={X_seq.shape}, count_channel: min={X_seq[..., 0, :].min():.4f}, max={X_seq[..., 0, :].max():.4f}, std={X_seq[..., 0, :].std():.4f}")
         logger.info(f"   y_seq: shape={y_seq.shape}, min={y_seq.min():.4f}, max={y_seq.max():.4f}, std={y_seq.std():.4f}")
+
+        logger.info(
+            f"Sequences: X={X_seq.shape}, y={y_seq.shape}, tw={tw_seq.shape}"
+        )
 
         if 'stop_id' in df.columns and df['stop_id'].notna().any():
             # Грубая эвристика: взять первые 100 последовательностей и посчитать std только по ненулевым
@@ -160,7 +180,7 @@ def train(city_id: int, force_retrain: bool = False,
             else:
                 logger.warning("DEBUG: y_seq is ALL zeros!")
 
-        dataset = TensorDataset(X_seq, y_seq)
+        dataset = TensorDataset(X_seq, y_seq, tw_seq)
         total = len(dataset)
 
         if total < 20:
@@ -176,20 +196,21 @@ def train(city_id: int, force_retrain: bool = False,
             generator=torch.Generator().manual_seed(42)
         )
 
-        use_pin_memory = torch.cuda.is_available() and os.name != "nt" 
+        use_pin_memory = torch.cuda.is_available() and os.name != "nt"
+        num_workers = 0 if os.name == "nt" else 2
 
         train_loader = DataLoader(
             train_ds, 
             batch_size=32, 
             shuffle=True, 
-            num_workers=0 if os.name == "nt" else 2,
+            num_workers=num_workers,
             pin_memory=use_pin_memory
         )
 
         val_loader = DataLoader(
             val_ds, 
             batch_size=32,
-            num_workers=0 if os.name == "nt" else 2,
+            num_workers=num_workers,
             pin_memory=use_pin_memory
         )
 
@@ -227,19 +248,24 @@ def train(city_id: int, force_retrain: bool = False,
             "graph_apply_prob": 0.3
         }
 
-        test_X, test_y = next(iter(train_loader))
+        test_X, test_y, test_tw = next(iter(train_loader))
         test_X = test_X.to(device, non_blocking=False)
         logger.info(f"[DEBUG] Batch device: {test_X.device}, Model device: {next(model.parameters()).device}")
         
+        logger.info(f"🚀🚀🚀 STARTING TRAINING LOOP. Epochs: {epochs}, Device: {device}")
+        logger.info(f"🚀 Model params count: {sum(p.numel() for p in model.parameters())}")
+        logger.info(f"🚀 Train loader batches: {len(train_loader)}")
+
         for epoch in range(epochs):
             # Train
             model.train()
             train_loss = 0.0
 
-            for i, (X_batch, y_batch) in enumerate(tqdm(train_loader, desc=f"City {city_id} Epoch {epoch+1}"), 1):
+            for i, (X_batch, y_batch, tw_batch) in enumerate(tqdm(train_loader, desc=f"City {city_id} Epoch {epoch+1}"), 1):
                 # Батчи на GPU с асинхронной передачей
                 X_batch = _safe_to_device(X_batch, device)
                 y_batch = _safe_to_device(y_batch, device)
+                tw_batch = _safe_to_device(tw_batch, device)
 
                 # Проверка (можно убрать потом)
                 if X_batch.device.type != 'cuda' and device.type == 'cuda':
@@ -290,7 +316,7 @@ def train(city_id: int, force_retrain: bool = False,
                     logger.error(f"Forward pass failed at batch {i}. X_dev: {X_batch.device}, Adj_dev: {adj.device}")
                     raise exception
                 
-                loss = masked_loss(pred, y_batch, camera_mask)
+                loss = masked_loss(pred, y_batch, camera_mask, time_weights=tw_batch)
 
                 loss.backward()
 
@@ -320,15 +346,16 @@ def train(city_id: int, force_retrain: bool = False,
             val_metrics_list = [] # для агрегации метрик
 
             with torch.no_grad():
-                for X_batch, y_batch in val_loader:
+                for X_batch, y_batch, tw_batch in val_loader:
 
                     X_batch = _safe_to_device(X_batch, device)
                     y_batch = _safe_to_device(y_batch, device)
+                    tw_batch = _safe_to_device(tw_batch, device)
 
                     pred = model(X_batch, adj)
 
                     # Loss
-                    val_losses.append(masked_loss(pred, y_batch, camera_mask).item())
+                    val_losses.append(masked_loss(pred, y_batch, camera_mask, time_weights=tw_batch).item())
 
                     metrics = calculate_metrics(
                         predictions=pred.cpu(), 
@@ -378,7 +405,10 @@ def train(city_id: int, force_retrain: bool = False,
                     "scaler": scaler,
                     "time_steps": time_steps,
                     "augment_used": augment,
-                    "augment_config": aug_cfg if augment else None
+                    "augment_config": aug_cfg if augment else None,
+                    "timezone": tz_name,
+                    "center_lat": center_lat,
+                    "center_lng": center_lng,
                 })
                 logger.info(f"New best model saved at epoch {epoch+1}")
 
@@ -406,8 +436,11 @@ def train(city_id: int, force_retrain: bool = False,
                 "camera_mask": camera_mask.cpu().tolist(),
                 "scaler": scaler,
                 "time_steps": time_steps,
-                "sigma": sigma,
-                "augment_used": augment, "augment_config": aug_cfg if augment else None
+                "augment_used": augment, 
+                "augment_config": aug_cfg if augment else None,
+                "timezone": tz_name,
+                "center_lat": center_lat,
+                "center_lng": center_lng
             })
 
         return {
@@ -418,6 +451,7 @@ def train(city_id: int, force_retrain: bool = False,
             "num_nodes": num_nodes,
             "model_path": model_path,
             "augment_used": augment,
+            "timezone": tz_name,
             "message": f'Training completed for city {city_id}'
         }
         
@@ -426,7 +460,7 @@ def train(city_id: int, force_retrain: bool = False,
         return {'status': 'FAILED', 'message': str(exception), 'error_type': type(exception).__name__}
     
 
-def _safe_to_device(tensor, device):
+def _safe_to_device(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
     """Гарантированный перенос тензора на устройство"""
     if tensor.device != device:
         return tensor.to(device, non_blocking=False).contiguous()

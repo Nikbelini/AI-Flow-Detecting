@@ -19,7 +19,7 @@ CITY_NAME = "Ульяновск"
 CITY_LAT = 54.3181
 CITY_LNG = 48.3868
 
-HISTORY_DAYS = 2
+HISTORY_DAYS = 14
 HISTORY_START_HOUR = 3
 HISTORY_END_HOUR = 26
 
@@ -266,6 +266,8 @@ async def import_osm_data(pool: asyncpg.Pool, xml_path: str = "uly-small.xml", f
         # 4. Генерация исторических данных
         logger.info("\n📊 Генерация исторических данных...")
         
+        from history_generator import generate_stop_history
+        
         history_count = 0
         
         for node_id, node in nodes.items():
@@ -273,12 +275,6 @@ async def import_osm_data(pool: asyncpg.Pool, xml_path: str = "uly-small.xml", f
                 continue
             
             stop_db_id = stop_id_map[node_id]
-            address = node['name']
-            base_count = random.randint(5, 20)
-
-            # Берём координаты ПРЯМО из XML-узла (гарантия точности)
-            node_lat = node['lat']
-            node_lon = node['lon']
 
             is_camera_stop = (int(node_id) % 3 == 0)
 
@@ -287,56 +283,37 @@ async def import_osm_data(pool: asyncpg.Pool, xml_path: str = "uly-small.xml", f
                 # Они просто не попадут в stops_history → в тензоре будут нули (отсутствие данных)
                 continue
             
-            for day in range(HISTORY_DAYS):
-                is_weekend = (day % 7) >= 5
-                
-                for hour in range(HISTORY_START_HOUR, HISTORY_END_HOUR):
-                    hour_of_day = hour % 24
-                    
-                    # Дневной ритм
-                    if 6 <= hour_of_day <= 10:
-                        day_factor = 1.5
-                    elif 17 <= hour_of_day <= 20:
-                        day_factor = 1.8
-                    elif 11 <= hour_of_day <= 16:
-                        day_factor = 1.2
-                    else:
-                        day_factor = 0.3
-                    
-                    if is_weekend:
-                        day_factor *= 0.7
-                    
-                    # Реальные данные только для камерных
-                    count = max(0, int(base_count * day_factor * random.uniform(0.7, 1.3)))
-                    velocity = random.randint(-3, 3)
-                    load = min(10, max(1, count // 5))
-                    
-                    dt = datetime.now() - timedelta(days=HISTORY_DAYS - day, hours=23 - hour_of_day)
-                    
-                    try:
-                        # Вставляем ВСЕ поля строго в порядке объявления колонок
-                        await conn.execute("""
-                            INSERT INTO stops_history 
-                                (city_id, stop_id, address, lat, lng, count, velocity, load, datetime)
-                            VALUES 
-                                ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                        """, 
-                            city_id,
-                            stop_db_id,                            
-                            address,
-                            node_lat,
-                            node_lon,
-                            count,
-                            velocity,
-                            load,
-                            dt
-                        )
-                        history_count += 1
-                    except Exception as e:
-                        pass
-                    
-                    if history_count % 2000 == 0 and history_count > 0:
-                        logger.info(f"      Сгенерировано {history_count} записей...")
+            stop_db_id = stop_id_map[node_id]
+            records = generate_stop_history(
+                node_id=node_id,
+                stop_db_id=stop_db_id,
+                address=node["name"],
+                node_lat=node["lat"],
+                node_lon=node["lon"],
+                city_id=city_id,
+                city_name=CITY_NAME,
+                history_days=HISTORY_DAYS,
+                start_hour=HISTORY_START_HOUR,
+                end_hour=HISTORY_END_HOUR,
+            )
+
+            for rec in records:
+                try:
+                    await conn.execute("""
+                        INSERT INTO stops_history
+                            (city_id, stop_id, address, lat, lng, count, velocity, load, datetime)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    """,
+                        rec["city_id"], rec["stop_id"], rec["address"],
+                        rec["lat"], rec["lng"], rec["count"],
+                        rec["velocity"], rec["load"], rec["datetime"],
+                    )
+                    history_count += 1
+                except Exception:
+                    pass
+
+            if history_count % 10000 == 0 and history_count > 0:
+                logger.info(f"      Сгенерировано {history_count} записей...")
         
         logger.info(f"   ✅ Сгенерировано {history_count} записей истории")
         

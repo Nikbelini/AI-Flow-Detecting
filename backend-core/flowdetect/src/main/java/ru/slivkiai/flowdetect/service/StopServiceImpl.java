@@ -82,7 +82,7 @@ public class StopServiceImpl implements StopService {
                         try {
                                 PredictionRequestDto request = PredictionRequestDto.builder()
                                                 .cityId(entry.getKey().intValue())
-                                                .horizon(1)
+                                                .horizon(12)
                                                 .build();
 
                                 List<PredictionResponseDto> predictions = flowPredictionClient.predict(request);

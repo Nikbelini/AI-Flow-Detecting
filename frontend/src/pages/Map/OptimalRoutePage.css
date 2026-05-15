@@ -726,3 +726,101 @@
     font-size: 13px;
   }
 }
+
+/* ===== ROUTE HOVER POPUP ===== */
+.route-hover-popup .maplibregl-popup-content {
+  padding: 0;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  border: none;
+}
+
+.route-popup-inner {
+  padding: 10px 14px;
+  min-width: 160px;
+  max-width: 280px;
+}
+
+.route-popup-number {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.route-popup-name {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* ===== ROUTE LEGEND ===== */
+.route-legend {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.route-legend-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.route-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.route-legend-color {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+.route-legend-number {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #1e293b;
+  min-width: 32px;
+}
+
+.route-legend-name {
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.route-hover-popup .maplibregl-popup-content {
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-family: Inter, Arial, sans-serif;
+  font-size: 13px;
+}
+
+.route-popup-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.route-popup-number {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.route-popup-name {
+  font-size: 12px;
+  opacity: 0.85;
+}

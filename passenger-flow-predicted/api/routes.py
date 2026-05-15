@@ -11,6 +11,7 @@ router = APIRouter(prefix="/routes", tags=["Routes"])
 logger = logging.getLogger(__name__)
 
 repository = PostgresRepository()
+route_service = RoutePlannerService(repository)
 
 
 # Смещение Самары: UTC+4
@@ -38,10 +39,7 @@ async def build_route(request: RoutePlanRequestDto):
         # Нормализация даты
         dt_str = normalize_dt(request.datetime)
         
-        # Вызов сервиса маршрутизации
-        service = RoutePlannerService(repository)
-        
-        result = service.build_route(
+        result = route_service.build_route(
             city_id=request.cityId,
             start_stop_id=request.startStopId,
             goal_stop_id=request.goalStopId,

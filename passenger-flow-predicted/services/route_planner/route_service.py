@@ -25,6 +25,11 @@ class RoutePlannerService:
         edges = self.repo.get_transport_edges(city_id)
         # edges: from_stop_id, to_stop_id, dist_km, route_id, travel_time_min(optional)
 
+        # загружаем мета один раз
+        route_meta: Dict[int, dict] = {
+            r["id"]: r for r in self.repo.get_routes_info(city_id)
+        }
+
         graph = TransportGraph()
         for e in edges:
             graph.add_edge(
@@ -50,6 +55,13 @@ class RoutePlannerService:
 
         if result is None:
             return {"status": "FAILED", "message": "Route not found"}
+
+        # добавляем название/номер в каждый сегмент
+        for seg in result["segments"]:
+            rid = seg.get("route_id")
+            meta = route_meta.get(rid, {})
+            seg["route_name"]   = meta.get("name", "")
+            seg["route_number"] = meta.get("number", "")
 
         return {
             "status": "SUCCESS",

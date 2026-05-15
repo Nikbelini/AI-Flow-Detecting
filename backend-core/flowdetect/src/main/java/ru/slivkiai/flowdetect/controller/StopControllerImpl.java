@@ -1,6 +1,8 @@
 package ru.slivkiai.flowdetect.controller;
 
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.RestController;
 import ru.slivkiai.flowdetect.domain.StopRequest;
 import ru.slivkiai.flowdetect.domain.StopResponse;
@@ -17,16 +19,19 @@ public class StopControllerImpl implements StopController {
     private final StopService stopServiceImpl;
 
     @Override
+    @Cacheable(value = "stops", key = "'all'")
     public Map<String, List<StopResponse>> getStops() {
         return Map.of("stops", stopServiceImpl.getAllStops());
     }
 
     @Override
+    @Cacheable(value = "stops_url", key = "'all'")
     public Map<String, List<StopResponseUrl>> getStopsUrl() {
         return Map.of("stops", stopServiceImpl.getAllStopsUrl());
     }
 
     @Override
+    @Cacheable(value = "stops_city", key = "#cityId")
     public Map<String, List<StopResponse>> getStopsByCityId(Long cityId) {
         return Map.of("stops", stopServiceImpl.getAllStopsByCityId(cityId));
     }
