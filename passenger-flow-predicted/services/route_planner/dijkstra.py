@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from services.route_planner.graph_loader import Edge, TransportGraph
-from services.route_planner.weight_function import compute_edge_weight, RouteWeightsConfig
+from services.route_planner.weight_function import WALK_ROUTE_ID, compute_edge_weight, RouteWeightsConfig
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,11 @@ class RouteSegmentData:
     load_to: float
     route_name: str = ""
     route_number: str = ""
+
+    @property
+    def is_walk(self) -> bool:
+        from services.route_planner.walking_edges import WALK_ROUTE_ID
+        return self.route_id == WALK_ROUTE_ID
 
 
 @dataclass
@@ -120,7 +125,19 @@ def dijkstra_route(
             next_route = edge.route_id
 
             is_entry = current_route is None
-            is_transfer = (not is_entry) and (next_route != current_route)
+
+            # Пересадка = смена маршрута (включая случай когда шли пешком)
+            is_transfer = (
+                not is_entry 
+                and next_route != current_route
+                and next_route != WALK_ROUTE_ID
+            )
+
+            # Если текущий маршрут был пешеходным надо ждать транспорт
+            is_entry_after_walk = (
+                current_route == WALK_ROUTE_ID
+                and next_route != WALK_ROUTE_ID                
+            )
 
             load_u = loads.get(u, 0.0)
             load_v = loads.get(v, 0.0)
@@ -132,8 +149,10 @@ def dijkstra_route(
                 load_v=load_v,
                 is_transfer=is_transfer,
                 is_entry=is_entry,
+                is_entry_after_walk=is_entry_after_walk,
                 mode=mode,
-                cfg=cfg
+                cfg=cfg,
+                route_id=edge.route_id,
             )
 
             # === защита от NaN/inf ===

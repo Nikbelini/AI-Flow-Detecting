@@ -4,12 +4,13 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, List
 
-from services.route_planner.dijkstra import dijkstra_route, RouteSegmentData
+from services.route_planner.dijkstra import RouteSegmentData
 from services.route_planner.weight_function import RouteWeightsConfig
 from services.route_planner.graph_loader import TransportGraph
 from services.route_planner.loads import LoadsBuilderService
 from services.route_planner.time_guard import TimeGuardResult, evaluate_request_time
 from services.route_planner.alternatives import find_alternatives
+from services.route_planner.walking_edges import StopCoord, build_walking_edges
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,7 @@ class RoutePlannerService:
         }
 
         graph = TransportGraph()
+        
         for edge in edges:
             try:
                 graph.add_edge(
@@ -117,7 +119,22 @@ class RoutePlannerService:
             except (ValueError, KeyError) as exception:
                 logger.warning("Skipping malformed edge %s: %s", edge, exception)
 
-        logger.debug("Graph built: %d nodes, %d routes", len(graph), len(route_meta))
+        # Пешеходные рёбра между близкими остановками
+        stops_dto = self.repo.get_all_stops(city_id)
+        stop_coords = [
+            StopCoord(stop_id=s.id, latitude=s.lat, longitude=s.lng)
+            for s in stops_dto
+            if s.lat is not None and s.lng is not None
+        ]
+
+        walk_edges = build_walking_edges(stop_coords, max_dist_m=500)
+        added = graph.add_walking_edges_bulk(walk_edges)
+
+        logger.info(
+            "Graph built: %d nodes, %d transport routes, %d walking edges added",
+            len(graph), len(route_meta), added,
+        )
+
         return graph, route_meta
 
 
@@ -131,8 +148,9 @@ def _segment_to_dict(s: RouteSegmentData) -> Dict[str, Any]:
         "travel_time_min": s.travel_time_min,
         "load_from": s.load_from,
         "load_to": s.load_to,
-        "route_name": s.route_name,
-        "route_number": s.route_number,
+        "route_name": s.route_name if not s.is_walk else "Пешком",
+        "route_number": s.route_number if not s.is_walk else "🚶",
+        "is_walk": s.is_walk,
     }
 
 
@@ -142,6 +160,11 @@ def _enrich_segments(
 ) -> None:
     """Добавляет route_name и route_number к каждому сегменту in-place."""
     for segment in segments:
+        if segment.is_walk:
+            segment.route_name = "Пешком"
+            segment.route_number = ""
+            continue
+
         rid = segment.route_id
         meta = route_meta.get(rid, {}) if rid is not None else {}
         segment.route_name = meta.get("name", "")
