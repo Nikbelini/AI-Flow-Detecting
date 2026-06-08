@@ -1,29 +1,36 @@
 import { useState, useCallback } from "react";
 import { routesApi } from "../../api/endpoints/routesApi";
-import type {
-  Route,
-  RouteCreateRequest,
-  RouteSearchRequest,
-  RouteStopRequest
-} from "../../api/types";
+import type { Route, RouteCreateRequest, RouteSearchRequest, RouteStopRequest } from "../../api/types";
+
+type RouteUpdateRequest = Partial<Omit<Route, "id">>;
+
+interface RoutesApiExtended {
+  getAllRoutes: () => Promise<Route[]>;
+  getRouteById: (id: number) => Promise<Route>;
+  createRoute: (request: RouteCreateRequest) => Promise<Route>;
+  searchRoutes: (request: RouteSearchRequest) => Promise<Route[]>;
+  updateRouteStops: (routeId: number, stops: RouteStopRequest[]) => Promise<Route>;
+  updateRoute?: (id: number, request: RouteUpdateRequest) => Promise<Route>;
+  deleteRoute?: (id: number) => Promise<void>;
+}
+
+const api = routesApi as RoutesApiExtended;
 
 export const useRoutes = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // добавили локальное состояние routes
   const [routes, setRoutes] = useState<Route[]>([]);
 
   const getAllRoutes = useCallback(async () => {
     setLoading(true);
     setError(null);
-
     try {
       const data = await routesApi.getAllRoutes();
       setRoutes(data);
       return data;
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch routes");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to fetch routes";
+      setError(message);
       throw err;
     } finally {
       setLoading(false);
@@ -33,11 +40,11 @@ export const useRoutes = () => {
   const getRouteById = useCallback(async (id: number) => {
     setLoading(true);
     setError(null);
-
     try {
       return await routesApi.getRouteById(id);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch route");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to fetch route";
+      setError(message);
       throw err;
     } finally {
       setLoading(false);
@@ -47,16 +54,13 @@ export const useRoutes = () => {
   const createRoute = useCallback(async (request: RouteCreateRequest) => {
     setLoading(true);
     setError(null);
-
     try {
       const created = await routesApi.createRoute(request);
-
-      // добавляем в список
       setRoutes((prev) => [...prev, created]);
-
       return created;
-    } catch (err: any) {
-      setError(err.message || "Failed to create route");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to create route";
+      setError(message);
       throw err;
     } finally {
       setLoading(false);
@@ -66,13 +70,13 @@ export const useRoutes = () => {
   const searchRoutes = useCallback(async (request: RouteSearchRequest) => {
     setLoading(true);
     setError(null);
-
     try {
       const data = await routesApi.searchRoutes(request);
       setRoutes(data);
       return data;
-    } catch (err: any) {
-      setError(err.message || "Failed to search routes");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to search routes";
+      setError(message);
       throw err;
     } finally {
       setLoading(false);
@@ -82,72 +86,58 @@ export const useRoutes = () => {
   const updateRouteStops = useCallback(async (routeId: number, stops: RouteStopRequest[]) => {
     setLoading(true);
     setError(null);
-
     try {
       const updated = await routesApi.updateRouteStops(routeId, stops);
-
-      // обновляем список
       setRoutes((prev) =>
         prev.map((r) => (Number(r.id) === Number(routeId) ? updated : r))
       );
-
       return updated;
-    } catch (err: any) {
-      setError(err.message || "Failed to update route stops");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to update route stops";
+      setError(message);
       throw err;
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // updateRoute - если ручки нет, просто обновим локально
-  const updateRoute = useCallback(async (routeId: number, request: any) => {
+  const updateRoute = useCallback(async (routeId: number, request: RouteUpdateRequest) => {
     setLoading(true);
     setError(null);
-
     try {
-      const apiAny: any = routesApi;
-
       let updated: Route;
-
-      if (typeof apiAny.updateRoute === "function") {
-        updated = await apiAny.updateRoute(routeId, request);
+      if (api.updateRoute) {
+        updated = await api.updateRoute(routeId, request);
       } else {
-        // fallback: обновляем локально (чтобы UI не ломался)
         const existing = routes.find((r) => Number(r.id) === Number(routeId));
-        updated = { ...(existing as any), ...request };
+        if (!existing) throw new Error("Route not found");
+        updated = { ...existing, ...request };
       }
-
       setRoutes((prev) =>
         prev.map((r) => (Number(r.id) === Number(routeId) ? updated : r))
       );
-
       return updated;
-    } catch (err: any) {
-      setError(err.message || "Failed to update route");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to update route";
+      setError(message);
       throw err;
     } finally {
       setLoading(false);
     }
   }, [routes]);
 
-  // deleteRoute - если ручки нет, просто удаляем локально
   const deleteRoute = useCallback(async (routeId: number) => {
     setLoading(true);
     setError(null);
-
     try {
-      const apiAny: any = routesApi;
-
-      if (typeof apiAny.deleteRoute === "function") {
-        await apiAny.deleteRoute(routeId);
+      if (api.deleteRoute) {
+        await api.deleteRoute(routeId);
       }
-
       setRoutes((prev) => prev.filter((r) => Number(r.id) !== Number(routeId)));
-
       return true;
-    } catch (err: any) {
-      setError(err.message || "Failed to delete route");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to delete route";
+      setError(message);
       throw err;
     } finally {
       setLoading(false);
@@ -155,7 +145,6 @@ export const useRoutes = () => {
   }, []);
 
   return {
-    // старое
     loading,
     error,
     getAllRoutes,
@@ -163,8 +152,6 @@ export const useRoutes = () => {
     createRoute,
     searchRoutes,
     updateRouteStops,
-
-    // новое для AnalyticsPage
     routes,
     isLoading: loading,
     updateRoute,

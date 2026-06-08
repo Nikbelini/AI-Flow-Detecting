@@ -19,6 +19,7 @@ export interface StopFromServer {
 export interface Stop {
   id: number;
   name: string;
+  url?: string;
   latitude: number;
   longitude: number;
   coordinates: [number, number]; // [lng, lat] для Mapbox

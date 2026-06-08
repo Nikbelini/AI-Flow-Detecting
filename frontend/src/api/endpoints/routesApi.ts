@@ -1,13 +1,7 @@
 import apiClient from '../client';
-import type {
-    Route,
-    RouteStop,
-    RouteCreateRequest,
-    RouteUpdateRequest,
-    RouteSearchRequest,
-    RouteStopRequest,
-    RouteDirectionsResponse
-} from '../types';
+import type { Route, RouteStop, RouteCreateRequest,
+    RouteUpdateRequest, RouteSearchRequest, RouteStopRequest, 
+    RouteDirectionsResponse } from '../types';
 
 export const routesApi = {
   // Получить все маршруты

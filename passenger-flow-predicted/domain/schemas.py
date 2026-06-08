@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Any, Dict, List, Literal, Optional
 from datetime import datetime
 from enum import Enum
@@ -100,14 +100,44 @@ class RouteMode(str, Enum):
 # ===== DTO ЗАПРОСА (Pydantic модель для JSON body) =====
 class RoutePlanRequestDto(BaseModel):
     cityId: int = Field(..., gt=0, alias="city_id")       
-    datetime: str = Field(..., description="ISO 8601 datetime")
     startStopId: int = Field(..., alias="start_stop_id")   
     goalStopId: int = Field(..., alias="goal_stop_id") 
     mode: RouteMode = Field(default=RouteMode.FASTEST)
 
+    datetime: Optional[str] = Field(
+        default=None,
+        description="ISO-8601 datetime для текущего момента. Если не передан — берём now() по Самаре.",
+    )
+
+    # Запланированное время отправления
+    scheduledFor: Optional[str] = Field(
+        default=None,
+        description=(
+            "Запланировать маршрут на конкретное время отправления (ISO-8601). "
+            "Имеет приоритет над полем datetime."
+        ),
+    )
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        allowed = {"FASTEST", "LESS_CROWDED", "MIN_TRANSFERS"}
+        upper = v.upper()
+        if upper not in allowed:
+            raise ValueError(f"mode must be one of {allowed}, got {v!r}")
+        return upper
+
+    @field_validator("cityId", "startStopId", "goalStopId")
+    @classmethod
+    def validate_positive_int(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError(f"Must be positive integer, got {v}")
+        return v
+
     class Config:
         populate_by_name = True  
         allow_population_by_field_name = True
+
 
 # ===== DTO СЕГМЕНТА =====
 class RouteSegmentDto(BaseModel):
@@ -121,6 +151,16 @@ class RouteSegmentDto(BaseModel):
     route_name: str = ""
     route_number: str = ""
 
+
+class RouteAlternativeDto(BaseModel):
+    label: str
+    mode_used: str
+    total_cost_minutes: float
+    stops: List[int]
+    routes: List[Optional[int]]
+    segments: List[RouteSegmentDto]
+
+
 # ===== DTO ОТВЕТА =====
 class RoutePlanResponseDto(BaseModel):
     status: Literal["SUCCESS", "ERROR"] = "SUCCESS"
@@ -130,3 +170,11 @@ class RoutePlanResponseDto(BaseModel):
     routes: List[Optional[int]]
     segments: List[RouteSegmentDto]
     error: Optional[str] = None
+
+    # Ночной/плановый режим
+    is_scheduled: bool = False
+    scheduled_message: Optional[str] = None
+    effective_datetime: Optional[str] = None
+
+    # Альтернативы
+    alternatives: List[RouteAlternativeDto] = []

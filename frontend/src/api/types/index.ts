@@ -25,6 +25,20 @@ export interface Stop {
   lat: number;
   lng: number;
   coordinates?: [number, number];
+  
+  name: string;
+  passengerCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+  
+  // === Алгоритмические данные (отдельно) ===
+  algorithmicVelocity?: number | null;
+  algorithmicLoad?: number | null;
+  isMlFallback?: boolean;     // true = основные данные из ML
+  hasAlgorithmicData?: boolean; // true = алгоритм дал прогноз
+    
+  // === Для маршрутов ===
+  routes?: Route[]; // Опционально, можно грузить отдельно
 }
 
 // Типы для маршрутов
@@ -106,7 +120,7 @@ export interface ModelingRequest {
   cityId: number;
   scenarioName: string;
   description?: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
   durationHours?: number;
 }
 
@@ -116,7 +130,7 @@ export interface ModelingResponse {
   status: string;
   message?: string;
   timestamp: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
 }
 
 export interface SimulationStatusResponse {
@@ -124,7 +138,7 @@ export interface SimulationStatusResponse {
   status: string;
   message?: string;
   timestamp: string;
-  results?: Record<string, any>;
+  results?: Record<string, unknown>;
 }
 
 export interface CityAnalysisRequest {
@@ -138,8 +152,8 @@ export interface CityAnalysisRequest {
 export interface CityAnalysisResponse {
   success: boolean;
   cityId: number;
-  analysis: Record<string, any>;
-  correlationAnalysis: Record<string, any>;
+  analysis: Record<string, unknown>;
+  correlationAnalysis: Record<string, unknown>;
   timestamp: string;
 }
 
@@ -158,20 +172,20 @@ export interface DemandPredictionResponse {
     start: string;
     end: string;
   };
-  predictions: Record<string, any>;
+  predictions: Record<string, unknown>;
   timestamp: string;
 }
 
 export interface RouteOptimizationRequest {
   cityId: number;
   optimizationGoals: string[];
-  constraints?: Record<string, any>;
+  constraints?: Record<string, unknown>;
 }
 
 export interface RouteOptimizationResponse {
   success: boolean;
   cityId: number;
-  currentAnalysis: Record<string, any>;
+  currentAnalysis: Record<string, unknown>;
   recommendations: string[];
   optimizationGoals: string[];
   timestamp: string;
@@ -180,28 +194,28 @@ export interface RouteOptimizationResponse {
 export interface ScenarioEvaluationRequest {
   cityId: number;
   name: string;
-  changes: Record<string, any>;
+  changes: Record<string, unknown>;
   evaluationMetrics?: string[];
 }
 
 export interface ScenarioEvaluationResponse {
   success: boolean;
   scenarioName: string;
-  comparison: Record<string, any>;
-  estimatedImpact: Record<string, any>;
+  comparison: Record<string, unknown>;
+  estimatedImpact: Record<string, unknown>;
   timestamp: string;
 }
 
 export interface VisualizationRequest {
   cityId: number;
   types: string[];
-  parameters?: Record<string, any>;
+  parameters?: Record<string, unknown>;
   formats?: string[];
 }
 
 export interface VisualizationResponse {
   success: boolean;
-  visualizations: Record<string, any>;
+  visualizations: Record<string, unknown>;
   formats: string[];
   timestamp: string;
 }

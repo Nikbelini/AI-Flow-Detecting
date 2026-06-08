@@ -31,6 +31,18 @@ public class RoutePlanResponseDto {
     
     @JsonProperty("segments")
     private List<RouteSegmentDto> segments;
+
+    @JsonProperty("alternatives")
+    private List<RouteAlternativeDto> alternatives;
+
+    @JsonProperty("is_scheduled")
+    private Boolean isScheduled;
+
+    @JsonProperty("scheduled_message")
+    private String scheduledMessage;
+
+    @JsonProperty("effective_datetime")
+    private String effectiveDatetime;
     
     @JsonProperty("error")
     private String error;

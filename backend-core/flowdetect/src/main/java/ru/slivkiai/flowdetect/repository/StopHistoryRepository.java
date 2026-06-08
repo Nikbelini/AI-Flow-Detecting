@@ -4,7 +4,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-import ru.slivkiai.flowdetect.domain.entity.StopEntity;
 import ru.slivkiai.flowdetect.domain.entity.StopHistoryEntity;
 
 import java.time.LocalDateTime;

@@ -7,7 +7,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.slivkiai.flowdetect.domain.Route;
-import ru.slivkiai.flowdetect.domain.RouteCreateRequest;
 import ru.slivkiai.flowdetect.domain.entity.CityEntity;
 import ru.slivkiai.flowdetect.domain.entity.RouteEntity;
 import ru.slivkiai.flowdetect.domain.entity.TransportType;
@@ -26,7 +25,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)

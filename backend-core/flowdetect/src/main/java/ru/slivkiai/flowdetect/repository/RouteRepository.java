@@ -7,7 +7,6 @@ import ru.slivkiai.flowdetect.domain.entity.RouteEntity;
 import ru.slivkiai.flowdetect.domain.entity.TransportType;
 
 import java.util.List;
-import java.util.Optional;
 
 public interface RouteRepository extends JpaRepository<RouteEntity, Long> {
     List<RouteEntity> findByCityIdAndTransportType(Long cityId, TransportType transportType);

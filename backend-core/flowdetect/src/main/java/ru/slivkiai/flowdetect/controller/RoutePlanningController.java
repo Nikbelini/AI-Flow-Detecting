@@ -25,9 +25,8 @@ public class RoutePlanningController {
     public ResponseEntity<RoutePlanResponseDto> buildRoute(
             @RequestBody RoutePlanRequestDto request
     ) {
-        log.info("🚀 Запрос на построение маршрута: cityId={}, mode={}, stopsCount={}",
-                request.getCityId(),
-                request.getMode());
+        log.info("Запрос на построение маршрута: cityId={}, mode={}, scheduledFor={}",
+            request.getCityId(), request.getMode(), request.getScheduledFor());
 
         try {
             // Валидация входных данных
@@ -41,30 +40,33 @@ public class RoutePlanningController {
 
             // Обработка ответа
             if ("ERROR".equalsIgnoreCase(response.getStatus())) {
-                log.warn("❌ Ошибка от ML-сервиса: {}", response.getError());
+                log.warn("Ошибка от ML-сервиса: {}", response.getError());
                 return ResponseEntity.badRequest().body(response);
             }
 
-            log.info("✅ Маршрут успешно построен: время={:.2f} мин, сегментов={}",
+            int alternativesCount = response.getAlternatives() != null ? response.getAlternatives().size() : 0;
+
+            log.info("Маршрут успешно построен: время={:.2f} мин, сегментов={}, альтернатив={}",
                     response.getTotalCostMinutes(),
-                    response.getSegments() != null ? response.getSegments().size() : 0);
+                    response.getSegments() != null ? response.getSegments().size() : 0,
+                    alternativesCount);
 
             return ResponseEntity.ok(response);
 
-        } catch (RoutePlanningException e) {
-            log.error("💥 Ошибка планирования маршрута: {}", e.getMessage(), e);
+        } catch (RoutePlanningException exception) {
+            log.error("Ошибка планирования маршрута: {}", exception.getMessage(), exception);
             return ResponseEntity.badRequest().body(
                 RoutePlanResponseDto.builder()
                     .status("ERROR")
-                    .error(e.getMessage())
+                    .error(exception.getMessage())
                     .build()
             );
-        } catch (Exception e) {
-            log.error("💥 Неожиданная ошибка при построении маршрута", e);
+        } catch (Exception exception) {
+            log.error("Неожиданная ошибка при построении маршрута", exception);
             return ResponseEntity.internalServerError().body(
                 RoutePlanResponseDto.builder()
                     .status("ERROR")
-                    .error("Внутренняя ошибка сервера: " + e.getMessage())
+                    .error("Внутренняя ошибка сервера: " + exception.getMessage())
                     .build()
             );
         }
@@ -77,6 +79,7 @@ public class RoutePlanningController {
         if (request.getCityId() == null || request.getCityId() <= 0) {
             throw new RoutePlanningException("city_id обязателен и должен быть положительным");
         }
+        
         if (request.getDatetime() == null || request.getDatetime().isBlank()) {
             throw new RoutePlanningException("datetime обязателен");
         }

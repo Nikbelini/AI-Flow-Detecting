@@ -13,7 +13,6 @@ import ru.slivkiai.flowdetect.domain.StopStatsUpdateRequest;
 import ru.slivkiai.flowdetect.domain.entity.CityEntity;
 import ru.slivkiai.flowdetect.domain.entity.StopEntity;
 import ru.slivkiai.flowdetect.domain.entity.StopHistoryEntity;
-import ru.slivkiai.flowdetect.dto.PredictionResponseDto;
 import ru.slivkiai.flowdetect.repository.CityRepository;
 import ru.slivkiai.flowdetect.repository.StopHistoryRepository;
 import ru.slivkiai.flowdetect.repository.StopRepository;
@@ -23,7 +22,6 @@ import ru.slivkiai.flowdetect.service.WeatherService;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
