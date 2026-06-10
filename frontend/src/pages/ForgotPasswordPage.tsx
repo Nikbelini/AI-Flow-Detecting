@@ -1,12 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Form, Input, Button, Alert, Typography,
-    Card, Space, message, Result, Divider } from 'antd';
-import { MailOutlined, SafetyOutlined, KeyOutlined, CheckCircleOutlined, 
-    ArrowLeftOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+    Form, Input, Button, Alert, Typography,
+    Card, Space, message, Result, Divider
+} from 'antd';
+import {
+    MailOutlined, SafetyOutlined, KeyOutlined, CheckCircleOutlined,
+    ArrowLeftOutlined, ReloadOutlined
+} from '@ant-design/icons';
 
-import { forgotPassword, resendOtp, resetPasswordByToken,
-    verifyOtpForResetToken } from '../api/endpoints/auth';
+import {
+    forgotPassword, resendOtp, resetPasswordByToken,
+    verifyOtpForResetToken
+} from '../api/endpoints/auth';
 import type { OtpVerifyResponse } from '../api/types/auth';
 import './ForgotPasswordPage.css';
 
@@ -22,7 +28,7 @@ const ForgotPasswordPage: React.FC = () => {
     const [countdown, setCountdown] = useState(0);
     const [email, setEmail] = useState('');
     const [resetToken, setResetToken] = useState<string | null>(null);
-    
+
     // Локальное состояние для цифр OTP
     const [otpDigits, setOtpDigits] = useState<string[]>(Array(6).fill(''));
 
@@ -48,8 +54,8 @@ const ForgotPasswordPage: React.FC = () => {
             setCountdown(60);
             message.success('Код отправлен на вашу почту');
             setTimeout(() => otpInputsRef.current[0]?.focus(), 100);
-        } catch (err: any) {
-            const errorMsg = err.message || 'Не удалось отправить код';
+        } catch (err: unknown) {
+            const errorMsg = err instanceof Error ? err.message : 'Не удалось отправить код';
             setError(errorMsg);
             message.error('Ошибка: ' + errorMsg);
         } finally {
@@ -60,7 +66,7 @@ const ForgotPasswordPage: React.FC = () => {
     // Шаг 2: Верификация OTP
     const handleVerifyOtp = async () => {
         const otp = otpDigits.join('');
-        
+
         if (!otp || otp.length !== 6) {
             setError('Введите 6-значный код');
             return;
@@ -78,8 +84,8 @@ const ForgotPasswordPage: React.FC = () => {
             setResetToken(data.resetToken);
             setStep('reset');
             message.success('Код подтверждён');
-        } catch (err: any) {
-            const errorMsg = err.message || 'Неверный или истёкший код';
+        } catch (err: unknown) {
+            const errorMsg = err instanceof Error ? err.message : 'Неверный или истёкший код';
             setError(errorMsg);
             message.error('Ошибка: ' + errorMsg);
         } finally {
@@ -118,8 +124,8 @@ const ForgotPasswordPage: React.FC = () => {
             setResetToken(null);
             setStep('success');
             message.success('Пароль изменён!');
-        } catch (err: any) {
-            const errorMsg = err.message || 'Не удалось изменить пароль';
+        } catch (err: unknown) {
+            const errorMsg = err instanceof Error ? err.message : 'Не удалось изменить пароль';
             setError(errorMsg);
             message.error('Ошибка: ' + errorMsg);
         } finally {
@@ -148,16 +154,16 @@ const ForgotPasswordPage: React.FC = () => {
         const digit = value.replace(/\D/g, '').slice(0, 1);
         const newDigits = [...otpDigits];
         newDigits[index] = digit;
-        
+
         setOtpDigits(newDigits);
         form.setFieldValue('otp', newDigits.join(''));
-        
+
         if (digit && index < 5) {
             setTimeout(() => {
                 otpInputsRef.current[index + 1]?.focus();
             }, 0);
         }
-        
+
         const otp = newDigits.join('');
         if (otp.length === 6 && /^\d{6}$/.test(otp)) {
             setTimeout(() => handleVerifyOtp(), 150);
@@ -174,7 +180,7 @@ const ForgotPasswordPage: React.FC = () => {
             form.setFieldValue('otp', newDigits.join(''));
             otpInputsRef.current[index - 1]?.focus();
         }
-        
+
         if (e.key === 'ArrowLeft' && index > 0) {
             e.preventDefault();
             otpInputsRef.current[index - 1]?.focus();
@@ -183,8 +189,8 @@ const ForgotPasswordPage: React.FC = () => {
             e.preventDefault();
             otpInputsRef.current[index + 1]?.focus();
         }
-        
-        if (e.key.length === 1 && !/\d/.test(e.key) && 
+
+        if (e.key.length === 1 && !/\d/.test(e.key) &&
             !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
             e.preventDefault();
         }
@@ -259,7 +265,7 @@ const ForgotPasswordPage: React.FC = () => {
                             key={i}
                             ref={(el) => {
                                 if (el) {
-                                    otpInputsRef.current[i] = (el as any).input as HTMLInputElement;
+                                    otpInputsRef.current[i] = (el).input as HTMLInputElement;
                                 }
                             }}
                             maxLength={1}
@@ -350,7 +356,7 @@ const ForgotPasswordPage: React.FC = () => {
                 rules={[
                     { required: true, message: 'Подтвердите пароль' },
                     ({ getFieldValue }) => ({
-                        validator(_: any, value: string) {
+                        validator(_rule: unknown, value: string) {
                             if (!value || getFieldValue('newPassword') === value) {
                                 return Promise.resolve();
                             }

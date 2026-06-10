@@ -12,17 +12,16 @@ import { stopsApi } from '../../api/endpoints/stopsApi';
 import type { CityResponse } from '../../api/endpoints/citiesApi';
 import { citiesApi } from '../../api/endpoints/citiesApi';
 import { routesApi } from '../../api/endpoints/routesApi';
+import type { Feature, LineString, GeoJsonProperties } from 'geojson';
 
+// Расширенный тип карты для хранения попапа
+interface MapWithPopup extends maplibregl.Map {
+  _routePopup?: maplibregl.Popup;
+}
 
-// Интерфейс для кластеризованного маркера
-interface ClusterMarker {
-  type: 'cluster';
-  count: number;
-  avgLoad: number;
-  coordinates: [number, number];
-  point_count: number;
-  point_count_abbreviated: number;
-  cluster_id: number;
+// Расширенный тип DOM-элемента для хранения обработчика
+interface MarkerElement extends HTMLDivElement {
+  _clickHandler?: (e: MouseEvent) => void;
 }
 
 interface MapComponentProps {
@@ -33,8 +32,9 @@ interface MapComponentProps {
   onMapClick?: (lat: number, lng: number) => void;
   onMarkerClick?: (marker: Stop) => void;
   onRouteClick?: (route: ApiRoute) => void;
-  onEditStop?: (stop: Stop) => void;
-  onDeleteStop?: (stopId: number) => void;
+  // Удаляем неиспользуемые пропсы
+  // onEditStop?: (stop: Stop) => void;
+  // onDeleteStop?: (stopId: number) => void;
   onEditRoute?: (route: ApiRoute) => void;
   onDeleteRoute?: (routeId: number) => void;
   isCreatingStop?: boolean;
@@ -50,8 +50,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
   onMapClick,
   onMarkerClick,
   onRouteClick,
-  onEditStop,
-  onDeleteStop,
   onEditRoute,
   onDeleteRoute,
   isCreatingStop = false,
@@ -59,12 +57,11 @@ const MapComponent: React.FC<MapComponentProps> = ({
   selectedStops = []
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<maplibregl.Map | null>(null);
+  const map = useRef<MapWithPopup | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const onMarkerClickRef = useRef(onMarkerClick);
   const onMapClickRef = useRef(onMapClick);
   const onRouteClickRef = useRef(onRouteClick);
-  const superclusterRef = useRef<any>(null);
 
   // Состояния для селектора городов
   const [citiesList, setCitiesList] = useState<CityResponse[]>([]);
@@ -76,7 +73,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
     cityId || 1
   );
 
-  // Используем либо внешний cityId, либо внутренний
   const activeCityId = cityId ?? selectedCityId;
 
   const [localMarkers, setLocalMarkers] = useState<Stop[]>([]);
@@ -86,9 +82,11 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const [selectedModalMarker, setSelectedModalMarker] = useState<Stop | null>(null);
 
   const [localRoutes, setLocalRoutes] = useState<ApiRoute[]>([]);
-  const [routesLoading, setRoutesLoading] = useState(false);
+  // Удаляем неиспользуемое состояние routesLoading
+  // const [routesLoading, setRoutesLoading] = useState(false);
 
-  const [selectedRouteTooltip, setSelectedRouteTooltip] = useState<ApiRoute | null>(null);
+  // Удаляем неиспользуемое состояние для тултипа
+  // const [selectedRouteTooltip, setSelectedRouteTooltip] = useState<ApiRoute | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<'stats' | 'routes'>('stats');
@@ -141,7 +139,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       setLoading(true);
       setError(null);
       const fetchedMarkers = await stopsApi.getStopsByCity(activeCityId);
-      const normalized = fetchedMarkers.map((m: any) => ({
+      const normalized: Stop[] = fetchedMarkers.map((m: Stop) => ({
         ...m,
         id: Number(m.id),
         lat: Number(m.lat),
@@ -156,7 +154,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
     }
   };
 
-  // Получение координат города из списка
   const getCityCoords = (id: number): { center: [number, number]; zoom: number } | null => {
     const city = citiesList.find(c => c.id === id);
     if (city && city.lat != null && city.lng != null) {
@@ -165,22 +162,18 @@ const MapComponent: React.FC<MapComponentProps> = ({
     return null;
   };
 
-  // Обработчик выбора города
   const handleCitySelect = (newCityId: number) => {
     setIsCityDropdownOpen(false);
 
-    // Если cityId передан извне — уведомляем родителя
     if (cityId !== undefined) {
-      if ((window as any).__onCityChange) {
-        (window as any).__onCityChange(newCityId);
+      if ((window as { __onCityChange?: (id: number) => void }).__onCityChange) {
+        (window as { __onCityChange?: (id: number) => void }).__onCityChange?.(newCityId);
       }
-      return; // Не меняем локально, если компонент контролируемый
+      return;
     }
 
-    // Если cityId не передан — меняем внутреннее состояние
     setSelectedCityId(newCityId);
 
-    // Перемещаем карту
     if (map.current && mapLoaded) {
       const coords = getCityCoords(newCityId);
       if (coords) {
@@ -193,7 +186,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
     }
   };
 
-  // Загрузка маршрутов при смене города
   useEffect(() => {
     if (activeCityId) {
       fetchRoutes();
@@ -202,13 +194,13 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
   const fetchRoutes = async () => {
     try {
-      setRoutesLoading(true);
-      const data = await routesApi.getRoutesByCity(activeCityId, undefined, true); // только активные
+      // setRoutesLoading(true); // удалено
+      const data = await routesApi.getRoutesByCity(activeCityId, undefined, true);
       setLocalRoutes(data);
     } catch (err) {
       console.error('Failed to fetch routes:', err);
     } finally {
-      setRoutesLoading(false);
+      // setRoutesLoading(false);
     }
   };
 
@@ -216,7 +208,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
   useEffect(() => {
     if (!mapContainer.current) return;
 
-    // Определяем центр карты: из API или дефолт (Ульяновск)
     const cityCoords = getCityCoords(activeCityId) || { center: [48.366667, 54.316667], zoom: 12 };
 
     map.current = new maplibregl.Map({
@@ -247,7 +238,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       zoom: cityCoords.zoom,
       maxZoom: 18,
       minZoom: 8
-    });
+    }) as MapWithPopup;
 
     map.current.addControl(new maplibregl.NavigationControl());
     map.current.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }));
@@ -271,7 +262,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
     };
   }, []);
 
-  // Обработка кликов для создания остановки
   useEffect(() => {
     if (!map.current) return;
 
@@ -295,7 +285,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
   const displayRoutes = routes.length > 0 ? routes : localRoutes;
 
-  // Отрисовка маршрутов с обработчиками кликов
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
     drawRoutes();
@@ -323,19 +312,19 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
     if (routes.length === 0) return;
 
-    const features: any[] = [];
+    const features: Feature<LineString, GeoJsonProperties>[] = [];
 
     routes.forEach(route => {
       if (!route.stops || route.stops.length < 2) return;
 
       const sortedStops = [...route.stops].sort((a, b) => a.orderInRoute - b.orderInRoute);
 
-      const coordinates = sortedStops
+      const coordinates: [number, number][] = sortedStops
         .map(stop => {
           if (!stop.lng || !stop.lat) return null;
-          return [stop.lng, stop.lat];
+          return [stop.lng, stop.lat] as [number, number];
         })
-        .filter(coord => coord !== null);
+        .filter((coord): coord is [number, number] => coord !== null);
 
       if (coordinates.length < 2) return;
 
@@ -370,7 +359,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
         }
       });
 
-      // Слой для невыделенных маршрутов
       map.current.addLayer({
         id: 'routes-line',
         type: 'line',
@@ -388,7 +376,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
         }
       });
 
-      // Слой для подсветки при наведении
       map.current.addLayer({
         id: 'routes-hover',
         type: 'line',
@@ -405,7 +392,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
         }
       });
 
-      // Слой для выделенного маршрута
       if (selectedRouteId) {
         map.current.addLayer({
           id: 'routes-line-selected',
@@ -423,8 +409,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
           }
         });
 
-        const selectedFeature = features.find(f => f.properties.id === selectedRouteId);
-        if (selectedFeature) {
+        const selectedFeature = features.find(f => f.properties?.id === selectedRouteId);
+        if (selectedFeature && selectedFeature.geometry.type === 'LineString') {
           const bounds = new maplibregl.LngLatBounds();
           selectedFeature.geometry.coordinates.forEach((coord: [number, number]) => {
             bounds.extend(coord);
@@ -433,7 +419,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
         }
       }
 
-      // Добавляем обработчики событий на маршруты
       setupRouteEventHandlers();
 
     } catch (error) {
@@ -444,7 +429,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const setupRouteEventHandlers = () => {
     if (!map.current) return;
 
-    // ===== КЛИКИ (показывают попап) =====
     map.current.on('click', 'routes-line', (e) => {
       if (!e.features || e.features.length === 0) return;
       const feature = e.features[0];
@@ -469,7 +453,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
       }
     });
 
-    // ===== НАВЕДЕНИЕ (только подсветка, без попапа) =====
     map.current.on('mouseenter', 'routes-line', (e) => {
       if (!e.features || e.features.length === 0) return;
       const feature = e.features[0];
@@ -495,13 +478,11 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const showRouteTooltip = (route: ApiRoute, lngLat: maplibregl.LngLat) => {
     if (!map.current) return;
 
-    // Удаляем старый попап
-    if ((map.current as any)._routePopup) {
-      (map.current as any)._routePopup.remove();
+    if (map.current._routePopup) {
+      map.current._routePopup.remove();
     }
 
     const transportIcon = getTransportIcon(route.transportType);
-    const statusIcon = route.isActive ? '✅' : '⛔';
     const statusText = route.isActive ? 'Активен' : 'Неактивен';
 
     const popup = new maplibregl.Popup({
@@ -562,7 +543,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
       `)
       .addTo(map.current);
 
-    // Добавляем обработчики для кнопок в попапе
     const popupElement = popup.getElement();
     const editBtn = popupElement.querySelector('.popup-edit-btn');
     const deleteBtn = popupElement.querySelector('.popup-delete-btn');
@@ -585,7 +565,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       });
     }
 
-    (map.current as any)._routePopup = popup;
+    map.current._routePopup = popup;
   };
 
   const getTransportIcon = (type: string): string => {
@@ -598,14 +578,12 @@ const MapComponent: React.FC<MapComponentProps> = ({
     }
   };
 
-  // Функция для получения цвета кластера на основе средней загрузки
   const getClusterColor = (avgLoad: number): string => {
     if (avgLoad <= 3) return "#10b981";
     if (avgLoad <= 7) return "#f59e0b";
     return "#ef4444";
   };
 
-  // Функция для получения размера кластера
   const getClusterSize = (count: number): number => {
     if (count <= 5) return 40;
     if (count <= 15) return 50;
@@ -613,31 +591,25 @@ const MapComponent: React.FC<MapComponentProps> = ({
     return 70;
   };
 
-  // Отрисовка маркеров с кластеризацией
   useEffect(() => {
     if (!map.current || !mapLoaded || loading || markers.length === 0) return;
 
-    // Удаляем старые маркеры
     markersRef.current.forEach(marker => {
-      const el = marker.getElement();
-      if (el && (el as any)._clickHandler) {
-        el.removeEventListener('click', (el as any)._clickHandler);
+      const el = marker.getElement() as MarkerElement;
+      if (el && el._clickHandler) {
+        el.removeEventListener('click', el._clickHandler);
       }
       marker.remove();
     });
     markersRef.current = [];
 
-    // Порог для кластеризации (при зуме меньше 12 - показываем кластеры)
     const zoom = map.current.getZoom();
     const shouldCluster = zoom < 12;
 
     if (shouldCluster) {
-      // === РЕЖИМ КЛАСТЕРИЗАЦИИ ===
-      // Группируем остановки по близости (упрощённая кластеризация на основе сетки)
       const clusterMap = new Map<string, { stops: Stop[]; avgLoad: number; count: number; centerLng: number; centerLat: number }>();
 
       markers.forEach(marker => {
-        // Сетка 0.02 градуса (~2 км на широте 54°)
         const gridX = Math.floor(marker.lng / 0.02);
         const gridY = Math.floor(marker.lat / 0.02);
         const key = `${gridX}:${gridY}`;
@@ -660,7 +632,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
         cluster.avgLoad = (cluster.avgLoad * (cluster.count - 1) + (marker.load || 0)) / cluster.count;
       });
 
-      // Создаём маркеры для кластеров
       clusterMap.forEach((cluster) => {
         if (cluster.count === 0) return;
 
@@ -668,7 +639,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         const clusterColor = heatmapEnabled ? getClusterColor(cluster.avgLoad) : '#3b82f6';
         const isSelected = isCreatingRoute && selectedStops.some(id => cluster.stops.some(s => s.id === id));
 
-        const el = document.createElement('div');
+        const el = document.createElement('div') as MarkerElement;
         el.className = 'custom-marker cluster-marker';
         el.style.width = `${size}px`;
         el.style.height = `${size}px`;
@@ -699,20 +670,17 @@ const MapComponent: React.FC<MapComponentProps> = ({
         el.appendChild(countSpan);
         el.appendChild(loadSpan);
 
-        // Обработчик клика на кластер
         const clickHandler = (e: MouseEvent) => {
           e.stopPropagation();
           e.preventDefault();
 
           if (isCreatingRoute) {
-            // При создании маршрута - выбираем все остановки в кластере
             cluster.stops.forEach(stop => {
               if (onMarkerClickRef.current && !selectedStops.includes(stop.id)) {
                 onMarkerClickRef.current(stop);
               }
             });
           } else {
-            // Приближаемся к кластеру
             if (map.current) {
               const currentZoom = map.current.getZoom();
               map.current.flyTo({
@@ -725,7 +693,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         };
 
         el.addEventListener('click', clickHandler);
-        (el as any)._clickHandler = clickHandler;
+        el._clickHandler = clickHandler;
 
         const markerInstance = new maplibregl.Marker({
           element: el,
@@ -737,14 +705,13 @@ const MapComponent: React.FC<MapComponentProps> = ({
         markersRef.current.push(markerInstance);
       });
     } else {
-      // === РЕЖИМ ОТДЕЛЬНЫХ МАРКЕРОВ (при большом зуме) ===
       markers.forEach(marker => {
         const isSelected = isCreatingRoute && selectedStops.includes(marker.id);
         const markerColor = heatmapEnabled ? loadToColor(marker.load) : '#3b82f6';
         const size = getMarkerSize(marker.load);
         const selectedIndex = isSelected ? selectedStops.indexOf(marker.id) + 1 : 0;
 
-        const el = document.createElement('div');
+        const el = document.createElement('div') as MarkerElement;
         el.className = 'custom-marker';
         el.style.width = `${size}px`;
         el.style.height = `${size}px`;
@@ -777,8 +744,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
           e.stopPropagation();
           e.preventDefault();
 
-          console.log('Marker clicked:', marker);
-
           if (isCreatingRoute && onMarkerClickRef.current) {
             onMarkerClickRef.current(marker);
             return;
@@ -796,7 +761,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         };
 
         el.addEventListener('click', clickHandler);
-        (el as any)._clickHandler = clickHandler;
+        el._clickHandler = clickHandler;
 
         const markerInstance = new maplibregl.Marker({
           element: el,
@@ -841,7 +806,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
                   </div>
                 </div>
 
-                {/* 🌍 Селектор города */}
                 <div className="city-selector-wrapper">
                   <button
                     className="city-selector-btn"
@@ -887,7 +851,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
               </button>
             </div>
 
-            {/* Табы */}
             <div className="panel-tabs">
               <button
                 className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`}
@@ -905,7 +868,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
               </button>
             </div>
 
-            {/* Содержимое вкладок */}
             <div className="panel-content">
               {activeTab === 'stats' && (
                 <>
@@ -1043,7 +1005,6 @@ const MapComponent: React.FC<MapComponentProps> = ({
                     </div>
                   </div>
 
-                  {/* Список маршрутов */}
                   <div className="routes-list-sidebar">
                     {routes.map(route => (
                       <div
@@ -1109,12 +1070,11 @@ const MapComponent: React.FC<MapComponentProps> = ({
                 {loading ? 'Обновление...' : 'Обновить данные'}
               </button>
 
-              {/* Новая кнопка тепловой карты */}
               <button
                 className={`action-btn ${heatmapEnabled ? 'active' : ''}`}
                 onClick={() => setHeatmapEnabled(!heatmapEnabled)}
                 title={heatmapEnabled ? 'Выключить тепловую карту' : 'Включить тепловую карту'}
-                style={{ marginTop: '8px' }} // или добавьте класс для отступа
+                style={{ marginTop: '8px' }}
               >
                 <Thermometer size={16} />
                 Тепловая карта

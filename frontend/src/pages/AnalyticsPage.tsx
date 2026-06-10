@@ -52,18 +52,18 @@ const AnalyticsPage: React.FC = () => {
   const [routes, setRoutes] = useState<ApiRoute[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); });
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [stopsData, routesData] = await Promise.all([getStops(), getAllRoutes()]);
-      const normalizedStops = stopsData.map((stop: any) => ({
+      const normalizedStops = stopsData.map((stop: Stop) => ({
         ...stop, id: Number(stop.id), address: String(stop.address || '').trim(), url: stop.url || ''
       }));
       setStops(normalizedStops);
       setRoutes(routesData);
-    } catch (error) {
+    } catch {
       showNotificationFunc('Ошибка при загрузке данных', 'error');
     } finally {
       setLoading(false);
@@ -113,8 +113,8 @@ const AnalyticsPage: React.FC = () => {
       setNewStopData({ address: '', url: '', lat: 0, lng: 0, count: 0, velocity: 0, load: 1, cityId: 1 });
       setCreationMode('none');
       showNotificationFunc('🎉 Остановка создана!', 'success');
-    } catch (error) {
-      showNotificationFunc('Ошибка при создании', 'error');
+    } catch {
+      showNotificationFunc('Ошибка при создании');
     }
   };
 
@@ -142,8 +142,8 @@ const AnalyticsPage: React.FC = () => {
       setSelectedStopsForRoute([]);
       setNewRouteData({ number: '', name: '', transportType: 'BUS', cityId: 1, directionAName: '', directionBName: '', intervalMinutes: 15, operatingHours: '06:00-23:00' });
       showNotificationFunc(`🚌 Маршрут ${newRouteData.number} создан!`, 'success');
-    } catch (error) {
-      showNotificationFunc('Ошибка при создании маршрута', 'error');
+    } catch {
+      showNotificationFunc('Ошибка при создании маршрута');
     }
   };
 

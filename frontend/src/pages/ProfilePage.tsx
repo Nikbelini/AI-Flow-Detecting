@@ -1,31 +1,21 @@
-// src/pages/ProfilePage.tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import {
-  Card, Typography, Button, Divider, Alert, Tabs,
-  Form, Input, Modal, Descriptions, Tag, List,
-  message, Popconfirm, Space, Tooltip, Spin
-} from 'antd';
-import {
-  UserOutlined, SafetyOutlined, DeleteOutlined,
-  LockOutlined, MobileOutlined, ClockCircleOutlined,
-  EditOutlined, CheckOutlined, CloseOutlined,
-  LogoutOutlined, LaptopOutlined, GlobalOutlined,
-  ReloadOutlined, WarningOutlined, UnlockOutlined
-} from '@ant-design/icons';
-import {
-  getMe, updateProfile, requestConfirmation,
-  confirmEmailAndEnable2fa, disableTwoFactor,
-  changePassword, deleteAccount,
-  getSecurityPolicy, updateSecurityPolicy,
-  getDeviceSessions, revokeSession, revokeAllOtherSessions, logoutAllSessions
-} from '../api/endpoints/user';
-import type {
-  UserUpdate, ChangePassword, PolicyUpdate,
-  SecurityPolicyDto, DeviceSessionDto
-} from '../api/types/user';
+import { Card, Typography, Button, Divider, Alert, Tabs,
+  Form, Input, Modal, Descriptions, Tag, List, message, 
+  Popconfirm, Space, Tooltip, Spin } from 'antd';
+import { UserOutlined, SafetyOutlined, DeleteOutlined, LockOutlined, 
+  MobileOutlined, ClockCircleOutlined, EditOutlined, CheckOutlined, 
+  CloseOutlined, LogoutOutlined, LaptopOutlined, GlobalOutlined,
+  ReloadOutlined, WarningOutlined, UnlockOutlined } from '@ant-design/icons';
+import { getMe, updateProfile, requestConfirmation, confirmEmailAndEnable2fa, 
+  disableTwoFactor, changePassword, deleteAccount, getSecurityPolicy, 
+  updateSecurityPolicy, getDeviceSessions, revokeSession, 
+  revokeAllOtherSessions, logoutAllSessions } from '../api/endpoints/user';
+import type { UserUpdate, ChangePassword, PolicyUpdate,
+  SecurityPolicyDto, DeviceSessionDto } from '../api/types/user';
 import './ProfilePage.css';
+import { AxiosError } from 'axios';
 
 const { Title, Text } = Typography;
 const { TabPane } = Tabs;
@@ -110,13 +100,16 @@ const ProfilePage: React.FC = () => {
         setSessions(Array.isArray(data) ? data : []);
         sessionsLoadedRef.current = true;
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (mountedRef.current) {
-        const errorMsg = err?.response?.status === 401
-          ? 'Сессия истекла. Пожалуйста, войдите снова.'
-          : err?.response?.status === 404
-            ? 'Эндпоинт не найден. Проверьте конфигурацию сервера.'
-            : 'Не удалось загрузить сессии. Проверьте соединение.';
+        let errorMsg = 'Не удалось загрузить сессии. Проверьте соединение.';
+        if (err instanceof AxiosError) {
+          if (err.response?.status === 401) {
+            errorMsg = 'Сессия истекла. Пожалуйста, войдите снова.';
+          } else if (err.response?.status === 404) {
+            errorMsg = 'Эндпоинт не найден. Проверьте конфигурацию сервера.';
+          }
+        }
         setSessionsError(errorMsg);
         setSessions([]);
       }
@@ -162,8 +155,9 @@ const ProfilePage: React.FC = () => {
       await updateProfile(values);
       await refreshUser?.();
       message.success('Профиль обновлён');
-    } catch (err: any) {
-      message.error(err.message || 'Ошибка');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка';
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -174,8 +168,9 @@ const ProfilePage: React.FC = () => {
       await requestConfirmation();
       message.info('Код отправлен на почту');
       setOtpModal({ visible: true, action: 'confirm' });
-    } catch (err: any) {
-      message.error(err.message || 'Ошибка отправки кода');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка отправки кода';
+      message.error(errorMessage);
     }
   };
 
@@ -196,8 +191,9 @@ const ProfilePage: React.FC = () => {
       setOtpModal({ visible: false, action: null });
       setOtpValue('');
       await refreshUser?.();
-    } catch (err: any) {
-      message.error(err.message || 'Неверный код');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Неверный код';
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -217,8 +213,9 @@ const ProfilePage: React.FC = () => {
       await changePassword(values);
       passwordForm.resetFields();
       message.success('Пароль изменён');
-    } catch (err: any) {
-      message.error(err.message || 'Ошибка смены пароля');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка смены пароля';
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -230,8 +227,9 @@ const ProfilePage: React.FC = () => {
       await updateSecurityPolicy(values);
       await loadPolicy();
       message.success('Политики обновлены');
-    } catch (err: any) {
-      message.error(err.message || 'Ошибка');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка';
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -255,7 +253,7 @@ const ProfilePage: React.FC = () => {
       // Завершили другую сессию — просто обновляем список
       message.success('Сессия завершена');
       await loadSessions();
-    } catch (err: any) {
+    } catch {
       message.error('Ошибка завершения сессии');
     }
   };
@@ -288,8 +286,9 @@ const ProfilePage: React.FC = () => {
       await logout();
       navigate('/login', { replace: true });
       message.success('Аккаунт удалён');
-    } catch (err: any) {
-      message.error(err.message || 'Ошибка удаления');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка удаления';
+      message.error(errorMessage);
       setLoading(false);
     }
   };

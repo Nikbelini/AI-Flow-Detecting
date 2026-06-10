@@ -45,14 +45,6 @@ interface Route {
   cityId?: number;
 }
 
-interface ForecastState {
-  showForecast: boolean;
-  isForecastOpen: boolean;
-  forecastData: any;
-  autoRefresh: boolean;
-  showMiniChart: boolean;
-}
-
 // Helper функции
 const loadToColor = (load: number) => {
   if (load <= 3) return '#10b981';
@@ -112,14 +104,6 @@ const StopDashboardPage: React.FC = () => {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [routesLoading, setRoutesLoading] = useState(false);
   const [routesError, setRoutesError] = useState<string | null>(null);
-
-  const [forecastState, setForecastState] = useState<ForecastState>({
-    showForecast: false,
-    isForecastOpen: true,
-    forecastData: null,
-    autoRefresh: true,
-    showMiniChart: true,
-  });
 
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
@@ -183,8 +167,14 @@ const StopDashboardPage: React.FC = () => {
     try {
       const response = await apiClient.get<Route[]>(`/routes/by-stop/${stopId}`);
       setRoutes(response.data);
-    } catch (e: any) {
-      setRoutesError(e?.response?.data?.message || e?.message || 'Ошибка загрузки маршрутов');
+    } catch (err: unknown) {
+    let errorMsg = 'Ошибка загрузки маршрутов';
+    if (err instanceof Error) errorMsg = err.message;
+    if (err && typeof err === 'object' && 'response' in err) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      errorMsg = axiosErr.response?.data?.message || errorMsg;
+    }
+    setRoutesError(errorMsg);
     } finally {
       setRoutesLoading(false);
     }

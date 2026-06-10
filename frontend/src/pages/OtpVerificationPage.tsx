@@ -55,9 +55,11 @@ const OtpVerificationPage: React.FC = () => {
             } else {
                 navigate('/hr-department/dashboard', { replace: true });
             }
-        } catch (err: any) {
-            setError(err.message || 'Неверный код подтверждения');
-            message.error('Неверный код или он истёк');
+        } catch (err: unknown) {
+            let errorMsg = 'Неверный код подтверждения';
+            if (err instanceof Error) errorMsg = err.message;
+            setError(errorMsg);
+            message.error(errorMsg);
             form.resetFields(['otp']);
         }
     };
@@ -75,8 +77,10 @@ const OtpVerificationPage: React.FC = () => {
                 const firstInput = document.querySelector('.otp-input') as HTMLInputElement;
                 firstInput?.focus();
             }, 100);
-        } catch (err: any) {
-            message.error(err.message || 'Ошибка отправки кода');
+        } catch (err: unknown) {
+            let errorMsg = 'Ошибка отправки кода';
+            if (err instanceof Error) errorMsg = err.message;
+            message.error(errorMsg);
         } finally {
             setIsResending(false);
         }
@@ -111,7 +115,7 @@ const OtpVerificationPage: React.FC = () => {
             <div className="otp-content">
                 <Card className="otp-card" bordered={false}>
                     <div className="card-accent-bar" />
-                    
+
                     <div className="otp-header">
                         <div className="logo-wrapper">
                             <SafetyOutlined className="logo-icon" />

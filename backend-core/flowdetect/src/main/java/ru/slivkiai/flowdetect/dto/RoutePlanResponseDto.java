@@ -22,6 +22,9 @@ public class RoutePlanResponseDto {
     
     @JsonProperty("total_cost_minutes")
     private Double totalCostMinutes;
+
+    @JsonProperty("routing_score")
+    private Double routingScore;
     
     @JsonProperty("stops")
     private List<Long> stops;

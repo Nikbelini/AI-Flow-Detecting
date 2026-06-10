@@ -8,6 +8,7 @@ import {
 import './RegistrationPage.css';
 import type { RegisterRequest, RegisterResponse } from '../api/types/user';
 import { register } from '../api/endpoints/auth';
+import { AxiosError } from 'axios';
 
 const { Title, Text } = Typography;
 
@@ -31,7 +32,7 @@ const RegistrationPage: React.FC = () => {
             }
 
             setIsSuccess(true);
-            message.success('✅ Аккаунт создан! Теперь войдите в систему');
+            message.success('Аккаунт создан! Теперь войдите в систему');
 
             // Через 2 секунды — редирект на логин с переданным email
             setTimeout(() => {
@@ -41,14 +42,17 @@ const RegistrationPage: React.FC = () => {
                 });
             }, 2000);
 
-        } catch (err: any) {
-            console.error('Registration error:', err);
-
-            // Обработка ошибок от API
-            const errorMsg = err.message || err.response?.data?.message || 'Не удалось создать аккаунт';
+        } catch (err: unknown) {
+            let errorMsg = 'Не удалось создать аккаунт';
+            
+            if (err instanceof AxiosError) {
+                errorMsg = err.response?.data?.message || err.message || errorMsg;
+            } else if (err instanceof Error) {
+                errorMsg = err.message;
+            }
+            
             setError(errorMsg);
             message.error(errorMsg);
-
         } finally {
             setIsSubmitting(false);
         }

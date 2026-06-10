@@ -70,10 +70,11 @@ class RoutePlannerService:
         response: Dict[str, Any] = {
             "status": "SUCCESS",
             "mode": mode,
+            "total_cost_minutes": round(primary.actual_time_minutes, 1),
+            "routing_score": round(primary.total_cost, 2),
             "is_scheduled": time_guard.is_scheduled,
             "scheduled_message": time_guard.user_message,
             "effective_datetime": effective_dt_str,
-            "total_cost_minutes": primary.total_cost,
             "stops": primary.stops,
             "routes": primary.routes,
             "segments": [_segment_to_dict(s) for s in primary.segments],
@@ -81,7 +82,8 @@ class RoutePlannerService:
                 {
                     "label": getattr(a, "label", None) or f"Маршрут {i + 1}",
                     "mode_used": getattr(a, "mode_used", mode),
-                    "total_cost_minutes": a.total_cost,
+                    "total_cost_minutes": round(a.actual_time_minutes, 1),
+                    "routing_score": round(a.total_cost, 2),
                     "stops": a.stops,
                     "routes": a.routes,
                     "segments": [_segment_to_dict(s) for s in a.segments],

@@ -156,6 +156,7 @@ class RouteAlternativeDto(BaseModel):
     label: str
     mode_used: str
     total_cost_minutes: float
+    routing_score: Optional[float] = None
     stops: List[int]
     routes: List[Optional[int]]
     segments: List[RouteSegmentDto]

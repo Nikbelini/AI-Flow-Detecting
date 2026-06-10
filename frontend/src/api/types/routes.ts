@@ -28,6 +28,7 @@ export interface RouteAlternativeRaw {
   label: string;
   mode_used: RouteMode;
   total_cost_minutes: number;
+  routing_score: number;
   stops: number[];
   routes: Array<number | null>;
   segments: RouteSegment[];

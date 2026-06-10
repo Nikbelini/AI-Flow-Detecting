@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { Form, Input, Button, Alert, Card, Typography, message } from 'antd';
-import { 
-  LockOutlined, EyeOutlined, EyeInvisibleOutlined, 
-  ArrowRightOutlined, SafetyOutlined, MailOutlined 
+import {
+  LockOutlined, EyeOutlined, EyeInvisibleOutlined,
+  ArrowRightOutlined, SafetyOutlined, MailOutlined
 } from '@ant-design/icons';
 import './LoginPage.css';
 
@@ -27,21 +27,22 @@ const LoginPage: React.FC = () => {
   const onFinish = async (values: { email: string; password: string }) => {
     setError(null);
     setIsSubmitting(true);
-    
+
     try {
       const response = await login(values.email, values.password);
-      
+
       if (response?.requireOtp) {
         message.info('🔐 Введите код из письма');
         navigate('/auth/verify-otp', { state: { email: values.email } });
         return;
       }
-      
+
       message.success('🎉 Добро пожаловать!');
       navigate('/map', { replace: true });
-    } catch (err: any) {
-      setError(err.message || 'Ошибка входа. Проверьте данные.');
-      message.error(err.message || 'Не удалось войти');
+    } catch (err: unknown) {
+      let errorMsg = 'Ошибка входа. Проверьте данные. Не удалось войти';
+      if (err instanceof Error) errorMsg = err.message;
+      message.error(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -70,11 +71,11 @@ const LoginPage: React.FC = () => {
 
           {/* Ошибка */}
           {error && (
-            <Alert 
-              message={error} 
-              type="error" 
-              showIcon 
-              closable 
+            <Alert
+              message={error}
+              type="error"
+              showIcon
+              closable
               className="login-alert"
               afterClose={() => setError(null)}
             />
@@ -98,9 +99,9 @@ const LoginPage: React.FC = () => {
                 { type: 'email', message: 'Неверный формат' }
               ]}
             >
-              <Input 
-                prefix={<MailOutlined className="input-icon" />} 
-                placeholder="Email" 
+              <Input
+                prefix={<MailOutlined className="input-icon" />}
+                placeholder="Email"
                 className="login-input"
                 autoComplete="email"
               />
@@ -110,12 +111,12 @@ const LoginPage: React.FC = () => {
               name="password"
               rules={[{ required: true, message: 'Введите пароль' }]}
             >
-              <Input.Password 
-                prefix={<LockOutlined className="input-icon" />} 
-                placeholder="Пароль" 
+              <Input.Password
+                prefix={<LockOutlined className="input-icon" />}
+                placeholder="Пароль"
                 className="login-input"
                 autoComplete="current-password"
-                iconRender={(visible) => 
+                iconRender={(visible) =>
                   visible ? <EyeOutlined /> : <EyeInvisibleOutlined />
                 }
               />
@@ -130,10 +131,10 @@ const LoginPage: React.FC = () => {
 
             {/* Кнопка входа — ИСПРАВЛЕНА */}
             <Form.Item className="submit-row">
-              <Button 
-                type="primary" 
-                htmlType="submit" 
-                block 
+              <Button
+                type="primary"
+                htmlType="submit"
+                block
                 loading={isSubmitting}
                 className="login-button"
               >

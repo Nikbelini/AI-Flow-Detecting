@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Card, Table, Button, Input, Select, Modal, 
-  Form, message, Popconfirm, Tag, Space, Tooltip, 
-  Typography, Drawer, Alert } from 'antd';
-import { 
+import {
+  Card, Table, Button, Input, Select, Modal,
+  Form, message, Popconfirm, Tag, Space, Tooltip,
+  Typography, Drawer, Alert
+} from 'antd';
+import {
   UserAddOutlined, SearchOutlined, ReloadOutlined,
   LockOutlined, UnlockOutlined, DeleteOutlined,
   KeyOutlined, SafetyOutlined, EyeOutlined, WarningOutlined
@@ -14,9 +16,10 @@ import {
   adminLockUser, adminUnlockUser, adminChangeRole,
   adminResetPassword, adminGetPolicy, adminUpdatePolicy
 } from '../api/endpoints/admin';
-import type { 
+import type {
   UserGetResponse, PolicyUpdate, UserCreateRequest,
-  UserListResponse } from '../api/types/user';
+  UserListResponse
+} from '../api/types/user';
 import './AdminPanel.css';
 
 const { Title, Text } = Typography;
@@ -31,30 +34,30 @@ const AdminPanel: React.FC = () => {
   const [tableLoading, setTableLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('USER');
-  const [pagination, setPagination] = useState({ 
-    current: 1, 
-    pageSize: 10, 
-    total: 0 
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0
   });
 
   // Модальные окна
   const [createModal, setCreateModal] = useState(false);
-  const [policyDrawer, setPolicyDrawer] = useState<{ 
-    visible: boolean; 
-    userId: number | null 
+  const [policyDrawer, setPolicyDrawer] = useState<{
+    visible: boolean;
+    userId: number | null
   }>({ visible: false, userId: null });
-  const [resetModal, setResetModal] = useState<{ 
-    visible: boolean; 
-    userId: number | null; 
-    email: string 
+  const [resetModal, setResetModal] = useState<{
+    visible: boolean;
+    userId: number | null;
+    email: string
   }>({ visible: false, userId: null, email: '' });
 
   // Формы
   const [createForm] = Form.useForm<UserCreateRequest>();
   const [policyForm] = Form.useForm<PolicyUpdate>();
-  const [resetForm] = Form.useForm<{ 
-    password: string; 
-    confirmPassword: string 
+  const [resetForm] = Form.useForm<{
+    password: string;
+    confirmPassword: string
   }>();
 
   // Проверка прав доступа
@@ -70,19 +73,20 @@ const AdminPanel: React.FC = () => {
     setTableLoading(true);
     try {
       const data: UserListResponse = await adminGetUsers(
-        roleFilter, 
-        search || undefined, 
-        pagination.current - 1, 
+        roleFilter,
+        search || undefined,
+        pagination.current - 1,
         pagination.pageSize
       );
       setUsers(data.content);
-      setPagination(prev => ({ 
-        ...prev, 
-        total: data.totalElements 
+      setPagination(prev => ({
+        ...prev,
+        total: data.totalElements
       }));
-    } catch (err: any) {
-      console.error('Failed to load users:', err);
-      message.error('Ошибка загрузки пользователей');
+    } catch (err: unknown) {
+      let errorMsg = 'Ошибка загрузки пользователей';
+      if (err instanceof Error) errorMsg = err.message;
+      message.error(errorMsg);
     } finally {
       setTableLoading(false);
     }
@@ -109,8 +113,10 @@ const AdminPanel: React.FC = () => {
       setCreateModal(false);
       createForm.resetFields();
       loadUsers();
-    } catch (err: any) {
-      message.error(err.message || 'Ошибка создания');
+    } catch (err: unknown) {
+      let errorMsg = 'Ошибка создания';
+      if (err instanceof Error) errorMsg = err.message;
+      message.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -143,8 +149,10 @@ const AdminPanel: React.FC = () => {
       }
       // Обновляем список сразу после операции
       await loadUsers();
-    } catch (err: any) {
-      message.error(err?.message || 'Ошибка операции');
+    } catch (err: unknown) {
+      let errorMsg = 'Ошибка операции';
+      if (err instanceof Error) errorMsg = err.message;
+      message.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -180,11 +188,12 @@ const AdminPanel: React.FC = () => {
         setResetModal({ visible: false, userId: null, email: '' });
         resetForm.resetFields();
       }
-    } catch (err: any) {
-      if (err.errorFields) {
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'errorFields' in err) {
         message.error('Заполните все поля');
       } else {
-        message.error(err.message || 'Ошибка сброса пароля');
+        const errorMessage = err instanceof Error ? err.message : 'Ошибка сброса пароля';
+        message.error(errorMessage);
       }
     } finally {
       setLoading(false);
@@ -250,7 +259,7 @@ const AdminPanel: React.FC = () => {
       title: 'Пользователь',
       key: 'user',
       width: 220,
-      render: (_: any, record: UserGetResponse) => (
+      render: (_rule: unknown, record: UserGetResponse) => (
         <Space direction="vertical" size={0}>
           <Text strong>{record.fullName || '—'}</Text>
           <Text type="secondary" copyable>{record.email}</Text>
@@ -266,7 +275,7 @@ const AdminPanel: React.FC = () => {
       title: 'Роль',
       key: 'role',
       width: 120,
-      render: (_: any, record: UserGetResponse) => (
+      render: (_rule: unknown, record: UserGetResponse) => (
         <Select
           size="small"
           value={record.role}
@@ -286,13 +295,13 @@ const AdminPanel: React.FC = () => {
       title: 'Статус',
       key: 'status',
       width: 180,
-      render: (_: any, record: UserGetResponse) => (
+      render: (_rule: unknown, record: UserGetResponse) => (
         <Space direction="vertical" size={4}>
           {/* Основной статус */}
-          <Tag 
+          <Tag
             color={
-              record.accountLocked ? 'red' : 
-              record.emailConfirmed ? 'green' : 'orange'
+              record.accountLocked ? 'red' :
+                record.emailConfirmed ? 'green' : 'orange'
             }
             style={{ fontWeight: 500 }}
           >
@@ -304,14 +313,14 @@ const AdminPanel: React.FC = () => {
               <><WarningOutlined /> Не подтверждён</>
             )}
           </Tag>
-          
+
           {/* Информация о временной блокировке */}
           {record.accountLocked && record.lockUntil && (
             <Text type="secondary" style={{ fontSize: 11 }}>
               До: {new Date(record.lockUntil).toLocaleString('ru-RU')}
             </Text>
           )}
-          
+
           {/* 2FA индикатор */}
           {record.twoFactorEnabled && (
             <Tag color="blue" style={{ fontSize: 11 }}>
@@ -326,7 +335,7 @@ const AdminPanel: React.FC = () => {
       key: 'actions',
       width: 240,
       fixed: 'right' as const,
-      render: (_: any, record: UserGetResponse) => (
+      render: (_rule: unknown, record: UserGetResponse) => (
         <Space wrap size={[0, 8]}>
           {/* Блокировка/разблокировка */}
           <Tooltip title={record.accountLocked ? 'Разблокировать' : 'Заблокировать'}>
@@ -340,21 +349,21 @@ const AdminPanel: React.FC = () => {
               loading={loading}
             />
           </Tooltip>
-          
+
           {/* Сброс пароля */}
           <Tooltip title="Сбросить пароль">
             <Button
               size="small"
               icon={<KeyOutlined />}
-              onClick={() => setResetModal({ 
-                visible: true, 
-                userId: record.id, 
-                email: record.email 
+              onClick={() => setResetModal({
+                visible: true,
+                userId: record.id,
+                email: record.email
               })}
               disabled={loading}
             />
           </Tooltip>
-          
+
           {/* Политики */}
           <Tooltip title="Политики безопасности">
             <Button
@@ -364,7 +373,7 @@ const AdminPanel: React.FC = () => {
               disabled={loading}
             />
           </Tooltip>
-          
+
           {/* Удаление */}
           <Popconfirm
             title="Удалить пользователя?"
@@ -390,7 +399,7 @@ const AdminPanel: React.FC = () => {
   return (
     <div className="admin-panel">
       {/* Заголовок */}
-      <Card 
+      <Card
         title={
           <Space align="center">
             <Title level={4} style={{ margin: 0 }}>
@@ -411,9 +420,9 @@ const AdminPanel: React.FC = () => {
               allowClear
               size="middle"
             />
-            <Select 
-              value={roleFilter} 
-              onChange={setRoleFilter} 
+            <Select
+              value={roleFilter}
+              onChange={setRoleFilter}
               style={{ width: 120 }}
               size="middle"
             >
@@ -422,17 +431,17 @@ const AdminPanel: React.FC = () => {
               <Option value="LoGISTIC">LoGISTIC</Option>
               <Option value="OTHER">OTHER</Option>
             </Select>
-            <Button 
-              icon={<ReloadOutlined />} 
-              onClick={loadUsers} 
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={loadUsers}
               loading={tableLoading}
               size="middle"
             >
               Обновить
             </Button>
-            <Button 
-              type="primary" 
-              icon={<UserAddOutlined />} 
+            <Button
+              type="primary"
+              icon={<UserAddOutlined />}
               onClick={() => setCreateModal(true)}
               size="middle"
             >
@@ -449,7 +458,7 @@ const AdminPanel: React.FC = () => {
           loading={tableLoading}
           pagination={{
             ...pagination,
-            onChange: (page, pageSize) => 
+            onChange: (page, pageSize) =>
               setPagination(prev => ({ ...prev, current: page, pageSize })),
             showSizeChanger: true,
             showTotal: (total) => `Всего: ${total}`,
@@ -463,24 +472,24 @@ const AdminPanel: React.FC = () => {
       <Modal
         title="Создать пользователя"
         open={createModal}
-        onCancel={() => { 
-          setCreateModal(false); 
-          createForm.resetFields(); 
+        onCancel={() => {
+          setCreateModal(false);
+          createForm.resetFields();
         }}
         onOk={() => createForm.submit()}
         confirmLoading={loading}
         okText="Создать"
         cancelText="Отмена"
       >
-        <Form 
-          form={createForm} 
-          layout="vertical" 
+        <Form
+          form={createForm}
+          layout="vertical"
           onFinish={handleCreateUser}
           initialValues={{ role: 'USER' }}
         >
-          <Form.Item 
-            name="email" 
-            label="Email" 
+          <Form.Item
+            name="email"
+            label="Email"
             rules={[
               { required: true, message: 'Введите email' },
               { type: 'email', message: 'Неверный формат' }
@@ -488,9 +497,9 @@ const AdminPanel: React.FC = () => {
           >
             <Input placeholder="user@example.com" />
           </Form.Item>
-          <Form.Item 
-            name="password" 
-            label="Пароль" 
+          <Form.Item
+            name="password"
+            label="Пароль"
             rules={[
               { required: true, message: 'Введите пароль' },
               { min: 8, message: 'Минимум 8 символов' }
@@ -499,9 +508,9 @@ const AdminPanel: React.FC = () => {
           >
             <Input.Password placeholder="••••••••" />
           </Form.Item>
-          <Form.Item 
-            name="fullName" 
-            label="Полное имя" 
+          <Form.Item
+            name="fullName"
+            label="Полное имя"
             rules={[{ required: true, message: 'Введите имя' }]}
           >
             <Input placeholder="Иван Иванов" />
@@ -521,9 +530,9 @@ const AdminPanel: React.FC = () => {
       <Modal
         title={`Сброс пароля: ${resetModal.email}`}
         open={resetModal.visible}
-        onCancel={() => { 
-          setResetModal({ visible: false, userId: null, email: '' }); 
-          resetForm.resetFields(); 
+        onCancel={() => {
+          setResetModal({ visible: false, userId: null, email: '' });
+          resetForm.resetFields();
         }}
         onOk={handleResetPassword}
         confirmLoading={loading}
@@ -537,9 +546,9 @@ const AdminPanel: React.FC = () => {
             showIcon
             style={{ marginBottom: 16 }}
           />
-          <Form.Item 
-            name="password" 
-            label="Новый пароль" 
+          <Form.Item
+            name="password"
+            label="Новый пароль"
             rules={[
               { required: true, message: 'Введите пароль' },
               { min: 8, message: 'Минимум 8 символов' }
@@ -547,10 +556,10 @@ const AdminPanel: React.FC = () => {
           >
             <Input.Password placeholder="••••••••" />
           </Form.Item>
-          <Form.Item 
-            name="confirmPassword" 
-            label="Подтвердите пароль" 
-            dependencies={['password']} 
+          <Form.Item
+            name="confirmPassword"
+            label="Подтвердите пароль"
+            dependencies={['password']}
             rules={[
               { required: true, message: 'Подтвердите пароль' },
               ({ getFieldValue }) => ({
@@ -578,9 +587,9 @@ const AdminPanel: React.FC = () => {
         open={policyDrawer.visible}
         onClose={() => setPolicyDrawer({ visible: false, userId: null })}
         extra={
-          <Button 
-            type="primary" 
-            onClick={handleUpdatePolicy} 
+          <Button
+            type="primary"
+            onClick={handleUpdatePolicy}
             loading={loading}
           >
             Сохранить
@@ -595,22 +604,22 @@ const AdminPanel: React.FC = () => {
             showIcon
             style={{ marginBottom: 24 }}
           />
-          <Form.Item 
-            name="passwordExpirationDays" 
+          <Form.Item
+            name="passwordExpirationDays"
             label="Срок действия пароля (дни)"
             tooltip="Через сколько дней потребовать смену пароля"
           >
             <Input type="number" min={1} max={365} />
           </Form.Item>
-          <Form.Item 
-            name="maxFailedAttempts" 
+          <Form.Item
+            name="maxFailedAttempts"
             label="Макс. попыток входа"
             tooltip="После скольких неудачных попыток блокировать аккаунт"
           >
             <Input type="number" min={1} max={10} />
           </Form.Item>
-          <Form.Item 
-            name="lockDurationSeconds" 
+          <Form.Item
+            name="lockDurationSeconds"
             label="Длительность блокировки (секунды)"
             tooltip="На сколько секунд блокировать аккаунт после превышения попыток"
           >

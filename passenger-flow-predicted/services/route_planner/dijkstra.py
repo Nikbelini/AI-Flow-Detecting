@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from services.route_planner.graph_loader import Edge, TransportGraph
-from services.route_planner.weight_function import WALK_ROUTE_ID, compute_edge_weight, RouteWeightsConfig
+from services.route_planner.weight_function import WALK_ROUTE_ID, WALK_SPEED_KMH, compute_edge_weight, RouteWeightsConfig
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ class RouteSegmentData:
 @dataclass
 class RouteResult:
     total_cost: float
+    actual_time_minutes: float
     stops: List[int]
     routes: List[Optional[int]]
     segments: List[RouteSegmentData]
@@ -107,7 +108,7 @@ def dijkstra_route(
                 goal_stop, current_cost, expanded, len(visited),
             )
 
-            return _reconstruct(state, start_state, parent, loads, current_cost)
+            return _reconstruct(state, start_state, parent, loads, current_cost, cfg)
         
         if current_cost > dist.get(state, float("inf")):
             continue
@@ -178,6 +179,7 @@ def _reconstruct(
     parent: Dict[State, Tuple[State, Edge]],
     loads: Dict[int, float],
     total_cost: float,
+    cfg: RouteWeightsConfig,
 ) -> RouteResult:
     """Восстанавливает путь из таблицы parent."""
     states_path: list[State] = []
@@ -211,9 +213,54 @@ def _reconstruct(
             )
         )
 
+    actual_time = _compute_actual_time(segments, loads, cfg)
+
     return RouteResult(
         total_cost=total_cost,
+        actual_time_minutes=actual_time,
         stops=stops,
         routes=routes,
         segments=segments
     )
+
+
+def _compute_actual_time(
+    segments: List[RouteSegmentData],
+    loads: Dict[int, float],
+    cfg: RouteWeightsConfig,
+) -> float:
+    """
+    Считает реальное время маршрута в минутах. Без штрафных множителей режимов — только физика.
+      (время движения по каждому сегменту, ожидание на пересадках, пешеходные переходы)
+    """
+    total = 0.0
+    prev_route_id: Optional[int] = None
+
+    for seg in segments:
+        is_walk = seg.route_id == WALK_ROUTE_ID
+
+        # Физическое время движения/ходьбы
+        if seg.travel_time_min is not None and seg.travel_time_min > 0:
+            t_move = seg.travel_time_min
+        elif seg.dist_km > 0:
+            speed = WALK_SPEED_KMH if is_walk else cfg.speed_kmh
+            t_move = (seg.dist_km / speed) * 60.0
+        else:
+            t_move = 0.0
+
+        total += t_move
+
+        # Ожидание при пересадке (не при входе на первый маршрут)
+        if prev_route_id is not None:
+            is_transfer = seg.route_id != prev_route_id and not is_walk
+            is_entry_after_walk = prev_route_id == WALK_ROUTE_ID and not is_walk
+
+            if is_transfer or is_entry_after_walk:
+                # Реальное ожидание = базовый интервал * нагрузка
+                load = loads.get(seg.from_stop, 0.0)
+                wait = cfg.transfer_fix * (0.5 + 0.5 * load)  # от 50% до 100% интервала
+                total += wait
+
+        prev_route_id = seg.route_id
+
+    return round(total, 1)

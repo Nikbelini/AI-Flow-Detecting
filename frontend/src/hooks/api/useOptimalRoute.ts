@@ -43,6 +43,7 @@ function parseSegments(raw: RawSegment[]): RouteSegment[] {
         typeof routeId !== "number" ||
         typeof dist !== "number"
       ) {
+        console.warn("Invalid segment data:", seg);
         return null;
       }
 
