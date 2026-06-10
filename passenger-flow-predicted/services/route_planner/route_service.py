@@ -47,7 +47,7 @@ class RoutePlannerService:
 
         loads: Dict[int, float] = self.loads_builder.build_loads_for_routing(city_id, effective_dt_str)
 
-        alternatives = find_alternatives(
+        all_routes = find_alternatives(
             graph=graph,
             start_stop=start_stop_id,
             goal_stop=goal_stop_id,
@@ -57,15 +57,16 @@ class RoutePlannerService:
             max_alternatives=5
         )
 
-        if not alternatives:
+        if not all_routes:
             logger.warning("No route found: city=%d, %d→%d", city_id, start_stop_id, goal_stop_id)
             return {"status": "FAILED", "message": "Маршрут не найден"}
 
-        # Обогащаем сегменты мета-данными
-        for alt in alternatives:
-            _enrich_segments(alt.segments, route_meta)
+        # Обогащаем сегменты мета-данными для всех маршрутов
+        for route in all_routes:
+            _enrich_segments(route.segments, route_meta)
 
-        primary = alternatives[0]
+        primary = all_routes[0]
+        rest = all_routes[1:]    # только альтернативы, без primary
 
         response: Dict[str, Any] = {
             "status": "SUCCESS",
@@ -80,21 +81,21 @@ class RoutePlannerService:
             "segments": [_segment_to_dict(s) for s in primary.segments],
             "alternatives": [
                 {
-                    "label": getattr(a, "label", None) or f"Маршрут {i + 1}",
-                    "mode_used": getattr(a, "mode_used", mode),
+                    "label": a.label or f"Маршрут {i + 2}",
+                    "mode_used": a.mode_used,
                     "total_cost_minutes": round(a.actual_time_minutes, 1),
                     "routing_score": round(a.total_cost, 2),
                     "stops": a.stops,
                     "routes": a.routes,
                     "segments": [_segment_to_dict(s) for s in a.segments],
                 }
-                for i, a in enumerate(alternatives)
+                for i, a in enumerate(rest)
             ],
         }
 
         logger.info(
-            "Route built: primary_cost=%.1f min, segments=%d, alternatives=%d",
-            primary.total_cost, len(primary.segments), len(alternatives),
+            "Route built: primary='%s' %.1f min (%d segments), %d alternatives",
+            primary.label, primary.actual_time_minutes, len(primary.segments), len(rest),
         )
 
         return response
