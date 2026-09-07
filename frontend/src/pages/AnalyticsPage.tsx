@@ -1,19 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import MapComponent from './Map/Map';
-import {
-  MapPin, Route, X, Save, Trash2, RefreshCw, Download,
+import { MapPin, Route, X, Save, Trash2, RefreshCw, Download,
   ChevronUp, ChevronDown, AlertCircle, CheckCircle, Bus,
-  Link, Plus, Search, Eye, EyeOff, Zap
-} from 'lucide-react';
+  Link, Plus, Search, Eye, EyeOff, Zap } from 'lucide-react';
 import { useStops } from '../hooks/api/useStops';
 import { useRoutes } from '../hooks/api/useRoutes';
-import type {
-  Stop,
-  Route as ApiRoute,
-  TransportType,
-  RouteCreateRequest,
-  RouteStopRequest
-} from '../api/types';
+import type { Stop, Route as ApiRoute, TransportType, 
+  RouteCreateRequest, RouteStopRequest } from '../api/types';
 import { Input, Select, Button, Tag, Tooltip, Badge, Spin, Empty } from 'antd';
 import './AnalyticsPage.css';
 
@@ -52,9 +45,7 @@ const AnalyticsPage: React.FC = () => {
   const [routes, setRoutes] = useState<ApiRoute[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { loadData(); });
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [stopsData, routesData] = await Promise.all([getStops(), getAllRoutes()]);
@@ -68,7 +59,9 @@ const AnalyticsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getStops, getAllRoutes]);
+
+  useEffect(() => { loadData(); }, []);
 
   const showNotificationFunc = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
     setNotificationMessage(message);

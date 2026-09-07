@@ -179,18 +179,18 @@ services:
     networks:
       - flowdetect-network
 
-  web-client:
-    build:
-      context: ./web-client
-    container_name: web-client
-    ports:
-      - "5174:5174"
-    environment:
-      - NODE_ENV=development
-      - VITE_HOST=0.0.0.0
-      - VITE_API_URL=http://localhost:8080
-    depends_on:
-      - flowdetect-app
+  # web-client:
+  #   build:
+  #     context: ./web-client
+  #   container_name: web-client
+  #   ports:
+  #     - "5174:5174"
+  #   environment:
+  #     - NODE_ENV=development
+  #     - VITE_HOST=0.0.0.0
+  #     - VITE_API_URL=http://localhost:8080
+  #   depends_on:
+  #     - flowdetect-app
 
   frontend:
     build:

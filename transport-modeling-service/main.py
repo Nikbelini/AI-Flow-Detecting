@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
         
         # Подключение к PostgreSQL
         pg_pool = await asyncpg.create_pool(
-            host="localhost",
+            host="postgres",
             port=5432,
             database="stops",
             user="postgres",
